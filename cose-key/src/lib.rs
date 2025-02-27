@@ -197,7 +197,7 @@ pub mod ec_p256 {
             use p256::elliptic_curve::sec1::FromEncodedPoint as _;
 
             let point = p256::EncodedPoint::from_affine_coordinates(x, y, false);
-            Ok(Self::from_encoded_point(&point).into_option().ok_or(CoseKeyError::InvalidP256Key)?)
+            Self::from_encoded_point(&point).into_option().ok_or(CoseKeyError::InvalidP256Key)
         }
     }
 
@@ -251,7 +251,7 @@ pub mod ec_p384 {
             use p384::elliptic_curve::sec1::ToEncodedPoint as _;
             let point = pk.to_encoded_point(false);
             let (x, y) = (point.x().ok_or(Self::Error::InvalidP384Key)?, point.y().ok_or(Self::Error::InvalidP384Key)?);
-            Ok(CoseKey(coset::CoseKeyBuilder::new_ec2_pub_key(iana::EllipticCurve::P_384, x.to_vec(), y.to_vec()).build()))
+            Ok(Self(coset::CoseKeyBuilder::new_ec2_pub_key(iana::EllipticCurve::P_384, x.to_vec(), y.to_vec()).build()))
         }
     }
 
@@ -269,7 +269,7 @@ pub mod ec_p384 {
         fn try_from(vk: &p384::ecdsa::VerifyingKey) -> Result<Self, Self::Error> {
             let point = vk.to_encoded_point(false);
             let (x, y) = (point.x().ok_or(Self::Error::InvalidP384Key)?, point.y().ok_or(Self::Error::InvalidP384Key)?);
-            Ok(CoseKey(
+            Ok(Self(
                 coset::CoseKeyBuilder::new_ec2_pub_key(iana::EllipticCurve::P_384, x.to_vec(), y.to_vec())
                     .algorithm(iana::Algorithm::ES384)
                     .build(),
@@ -327,7 +327,7 @@ pub mod ec_p384 {
             use p384::elliptic_curve::sec1::FromEncodedPoint as _;
 
             let point = p384::EncodedPoint::from_affine_coordinates(x, y, false);
-            Ok(Self::from_encoded_point(&point).into_option().ok_or(CoseKeyError::InvalidP384Key)?)
+            Self::from_encoded_point(&point).into_option().ok_or(CoseKeyError::InvalidP384Key)
         }
     }
 

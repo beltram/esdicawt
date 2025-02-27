@@ -46,8 +46,8 @@ mod tests {
 
     #[test]
     fn should_support_p256_keys() {
-        let key_a = p256::ecdsa::SigningKey::random(&mut rand::thread_rng()).verifying_key().clone();
-        let key_b = p256::ecdsa::SigningKey::random(&mut rand::thread_rng()).verifying_key().clone();
+        let key_a = *p256::ecdsa::SigningKey::random(&mut rand::thread_rng()).verifying_key();
+        let key_b = *p256::ecdsa::SigningKey::random(&mut rand::thread_rng()).verifying_key();
 
         let mut builder = CoseKeySet::builder();
         builder.push(key_a).unwrap();
