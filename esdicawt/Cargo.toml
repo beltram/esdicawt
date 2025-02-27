@@ -12,7 +12,7 @@ der = ["dep:pkcs8"]
 ed25519 = ["cose-key-confirmation/ed25519"]
 p256 = ["cose-key-confirmation/p256"]
 p384 = ["cose-key-confirmation/p384"]
-test-utils = ["dep:ed25519-dalek", "dep:p256", "dep:sha2"]
+test-utils = ["dep:ed25519-dalek", "dep:p256", "dep:sha2", "cose-key-confirmation/ed25519", "cose-key-confirmation/p256", "cose-key-confirmation/p384"]
 
 [dependencies]
 esdicawt-spec = { path = "../esdicawt-spec" }
