@@ -158,11 +158,11 @@ mod tests {
     use super::{test_utils::Ed25519Holder, *};
     use crate::{issuer::claims::CustomTokenClaims, issuer::test_utils::Ed25519IssuerClaims, IssueCwtParams, Issuer};
     use ciborium::cbor;
-    use rand_core::SeedableRng as _;
     use esdicawt_spec::{
         blinded_claims::{Salted, SaltedClaim},
         ClaimName, NoClaims,
     };
+    use rand_core::SeedableRng as _;
 
     #[test]
     fn should_succeed() {

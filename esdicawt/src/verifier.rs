@@ -289,8 +289,8 @@ mod tests {
         CwtPresentationParams, IssueCwtParams, Issuer, Presentation, Verifier, VerifyCwtParams,
     };
     use ciborium::{cbor, Value};
-    use rand_core::SeedableRng as _;
     use esdicawt_spec::{key_binding::KeyBindingTokenTagged, verified::KeyBindingTokenVerified, AnyMap, CustomClaims, CwtAny, MapKey, NoClaims};
+    use rand_core::SeedableRng as _;
 
     #[test]
     fn should_verify_valid_sd_cwt() {

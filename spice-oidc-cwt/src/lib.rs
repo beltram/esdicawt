@@ -1,6 +1,6 @@
 use esdicawt::{
     spec::{issuance::SelectiveDisclosureIssuedTagged, key_binding::KeyBindingTokenTagged, AnyMap, CustomClaims},
-    SdCwtRead, EsdicawtReadError, EsdicawtReadResult,
+    EsdicawtReadError, EsdicawtReadResult, SdCwtRead,
 };
 use esdicawt_spec::{ClaimName, Value};
 use std::{borrow::Cow, collections::HashMap, sync::LazyLock};
