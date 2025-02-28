@@ -1,4 +1,4 @@
-use crate::{key_binding::KeyBindingTokenUnprotected, CustomClaims, MapKey};
+use crate::{CustomClaims, MapKey, key_binding::KeyBindingTokenUnprotected};
 
 impl<E: CustomClaims> From<KeyBindingTokenUnprotected<E>> for coset::Header {
     fn from(kbtu: KeyBindingTokenUnprotected<E>) -> Self {

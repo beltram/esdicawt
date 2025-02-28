@@ -29,7 +29,7 @@ impl CoseKeySetBuilder {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use ciborium::{cbor, Value};
+    use ciborium::{Value, cbor};
 
     #[test]
     fn should_support_ed25519_keys() {

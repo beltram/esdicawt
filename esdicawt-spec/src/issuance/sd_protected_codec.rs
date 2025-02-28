@@ -4,8 +4,8 @@ use serde::ser::SerializeMap;
 
 use super::SelectiveDisclosureProtected;
 use crate::{
-    issuance::SelectiveDisclosureProtectedBuilder, AnyMap, ClaimName, CustomClaims, MapKey, SelectiveDisclosureHashAlg, CWT_CLAIM_ALG, CWT_CLAIM_SD_ALG, CWT_MEDIATYPE,
-    MEDIATYPE_SD_CWT,
+    AnyMap, CWT_CLAIM_ALG, CWT_CLAIM_SD_ALG, CWT_MEDIATYPE, ClaimName, CustomClaims, MEDIATYPE_SD_CWT, MapKey, SelectiveDisclosureHashAlg,
+    issuance::SelectiveDisclosureProtectedBuilder,
 };
 
 impl<E: CustomClaims> serde::Serialize for SelectiveDisclosureProtected<E> {

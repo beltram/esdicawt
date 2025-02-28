@@ -1,22 +1,22 @@
 #![doc = include_str!("../../README.md")]
 
 pub use {
-    cose_key_confirmation::{error::CoseKeyConfirmationError, EncryptedCoseKey, KeyConfirmation},
+    cose_key_confirmation::{EncryptedCoseKey, KeyConfirmation, error::CoseKeyConfirmationError},
     esdicawt_spec as spec,
     holder::{
+        Holder,
         error::{SdCwtHolderError, SdCwtHolderResult},
         params::{CwtPresentationParams, Presentation},
-        Holder,
     },
     issuer::{
-        error::{SdCwtIssuerError, SdCwtIssuerResult},
         IssueCwtParams, Issuer,
+        error::{SdCwtIssuerError, SdCwtIssuerResult},
     },
     read::{EsdicawtReadError, EsdicawtReadResult, SdCwtRead},
     signature::Keypair,
     verifier::{
-        error::{SdCwtVerifierError, SdCwtVerifierResult},
         Verifier, VerifyCwtParams,
+        error::{SdCwtVerifierError, SdCwtVerifierResult},
     },
 };
 

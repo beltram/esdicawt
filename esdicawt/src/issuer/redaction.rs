@@ -1,9 +1,9 @@
 use crate::SdCwtIssuerError;
 use ciborium::Value;
 use esdicawt_spec::{
+    ClaimName, CwtAny, Salt,
     blinded_claims::{SaltedArray, SaltedClaimRef, SaltedElementRef},
     redacted_claims::{RedactedClaimElement, RedactedClaimKeys},
-    ClaimName, CwtAny, Salt,
 };
 use std::ops::DerefMut;
 
@@ -148,8 +148,8 @@ mod tests {
     use super::*;
     use ciborium::cbor;
     use esdicawt_spec::{
-        blinded_claims::{Decoy, SaltedClaim, SaltedElement},
         REDACTED_CLAIM_ELEMENT_TAG,
+        blinded_claims::{Decoy, SaltedClaim, SaltedElement},
     };
     use rand_chacha::rand_core::SeedableRng as _;
     use sha2::Digest as _;

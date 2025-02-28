@@ -3,10 +3,10 @@ use coset::iana::CwtClaimName;
 use esdicawt_spec::issuance::{SdCwtPayload, SelectiveDisclosureIssuedTagged};
 use esdicawt_spec::reexports::coset::iana::EnumI64;
 use esdicawt_spec::{
+    ClaimName, CustomClaims,
     blinded_claims::{Salted, SaltedClaim},
     key_binding::KeyBindingTokenTagged,
     reexports::coset,
-    ClaimName, CustomClaims,
 };
 use std::borrow::Cow;
 
@@ -140,14 +140,14 @@ impl<IssuerProtectedClaims: CustomClaims, IssuerUnprotectedClaims: CustomClaims,
 }
 
 impl<
-        IssuerProtectedClaims: CustomClaims,
-        IssuerUnprotectedClaims: CustomClaims,
-        IssuerPayloadClaims: CustomClaims,
-        KbtProtectedClaims: CustomClaims,
-        KbtUnprotectedClaims: CustomClaims,
-        KbtPayloadClaims: CustomClaims,
-        DisclosedClaims: CustomClaims,
-    > SdCwtRead
+    IssuerProtectedClaims: CustomClaims,
+    IssuerUnprotectedClaims: CustomClaims,
+    IssuerPayloadClaims: CustomClaims,
+    KbtProtectedClaims: CustomClaims,
+    KbtUnprotectedClaims: CustomClaims,
+    KbtPayloadClaims: CustomClaims,
+    DisclosedClaims: CustomClaims,
+> SdCwtRead
     for KeyBindingTokenTagged<IssuerProtectedClaims, IssuerUnprotectedClaims, IssuerPayloadClaims, KbtProtectedClaims, KbtUnprotectedClaims, KbtPayloadClaims, DisclosedClaims>
 {
     type PayloadClaims = IssuerPayloadClaims;
