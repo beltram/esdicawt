@@ -1,6 +1,6 @@
 use esdicawt::{
     EsdicawtReadError, EsdicawtReadResult, SdCwtRead,
-    spec::{AnyMap, CustomClaims, issuance::SelectiveDisclosureIssuedTagged, key_binding::KeyBindingTokenTagged},
+    spec::{AnyMap, CustomClaims, issuance::SdCwtIssuedTagged, key_binding::KbtCwtTagged},
 };
 use esdicawt_spec::{ClaimName, Value};
 use std::{borrow::Cow, collections::HashMap, sync::LazyLock};
@@ -279,43 +279,39 @@ pub trait SpiceOidcSdCwtRead {
 }
 
 impl<IssuerProtectedClaims: CustomClaims, IssuerUnprotectedClaims: CustomClaims, PayloadClaims: CustomClaims, DisclosableClaims: CustomClaims> SpiceOidcSdCwtRead
-    for SelectiveDisclosureIssuedTagged<IssuerProtectedClaims, IssuerUnprotectedClaims, PayloadClaims, DisclosableClaims>
+    for SdCwtIssuedTagged<IssuerProtectedClaims, IssuerUnprotectedClaims, PayloadClaims, DisclosableClaims>
 where
     for<'a> &'a PayloadClaims: Into<&'a SpiceOidcClaims>,
 {
     fn name(&mut self) -> EsdicawtReadResult<Option<Cow<str>>> {
-        self.maybe_std_str_claim(CWT_CLAIM_NAME.into(), |payload| payload.claims.as_ref().and_then(|c| c.into().name.as_deref()))
+        self.maybe_std_str_claim(CWT_CLAIM_NAME.into(), |payload| payload.extra.as_ref().and_then(|c| c.into().name.as_deref()))
     }
 
     fn given_name(&mut self) -> EsdicawtReadResult<Option<Cow<str>>> {
-        self.maybe_std_str_claim(CWT_CLAIM_GIVEN_NAME.into(), |payload| payload.claims.as_ref().and_then(|c| c.into().given_name.as_deref()))
+        self.maybe_std_str_claim(CWT_CLAIM_GIVEN_NAME.into(), |payload| payload.extra.as_ref().and_then(|c| c.into().given_name.as_deref()))
     }
 
     fn family_name(&mut self) -> EsdicawtReadResult<Option<Cow<str>>> {
-        self.maybe_std_str_claim(CWT_CLAIM_FAMILY_NAME.into(), |payload| {
-            payload.claims.as_ref().and_then(|c| c.into().family_name.as_deref())
-        })
+        self.maybe_std_str_claim(CWT_CLAIM_FAMILY_NAME.into(), |payload| payload.extra.as_ref().and_then(|c| c.into().family_name.as_deref()))
     }
 
     fn middle_name(&mut self) -> EsdicawtReadResult<Option<Cow<str>>> {
-        self.maybe_std_str_claim(CWT_CLAIM_MIDDLE_NAME.into(), |payload| {
-            payload.claims.as_ref().and_then(|c| c.into().middle_name.as_deref())
-        })
+        self.maybe_std_str_claim(CWT_CLAIM_MIDDLE_NAME.into(), |payload| payload.extra.as_ref().and_then(|c| c.into().middle_name.as_deref()))
     }
 
     fn nickname(&mut self) -> EsdicawtReadResult<Option<Cow<str>>> {
-        self.maybe_std_str_claim(CWT_CLAIM_NICKNAME.into(), |payload| payload.claims.as_ref().and_then(|c| c.into().nickname.as_deref()))
+        self.maybe_std_str_claim(CWT_CLAIM_NICKNAME.into(), |payload| payload.extra.as_ref().and_then(|c| c.into().nickname.as_deref()))
     }
 
     fn preferred_username(&mut self) -> EsdicawtReadResult<Option<Cow<str>>> {
         self.maybe_std_str_claim(CWT_CLAIM_PREFERRED_USERNAME.into(), |payload| {
-            payload.claims.as_ref().and_then(|c| c.into().preferred_username.as_deref())
+            payload.extra.as_ref().and_then(|c| c.into().preferred_username.as_deref())
         })
     }
 
     fn profile(&mut self) -> EsdicawtReadResult<Option<Url>> {
         self.maybe_std_str_claim(CWT_CLAIM_PROFILE.into(), |payload| {
-            payload.claims.as_ref().and_then(|c| c.into().profile.as_ref()).map(|p| p.as_str())
+            payload.extra.as_ref().and_then(|c| c.into().profile.as_ref()).map(|p| p.as_str())
         })?
         .map(|u| u.as_ref().parse())
         .transpose()
@@ -324,7 +320,7 @@ where
 
     fn picture(&mut self) -> EsdicawtReadResult<Option<Url>> {
         self.maybe_std_str_claim(CWT_CLAIM_PICTURE.into(), |payload| {
-            payload.claims.as_ref().and_then(|c| c.into().picture.as_ref()).map(|p| p.as_str())
+            payload.extra.as_ref().and_then(|c| c.into().picture.as_ref()).map(|p| p.as_str())
         })?
         .map(|u| u.as_ref().parse())
         .transpose()
@@ -333,7 +329,7 @@ where
 
     fn website(&mut self) -> EsdicawtReadResult<Option<Url>> {
         self.maybe_std_str_claim(CWT_CLAIM_WEBSITE.into(), |payload| {
-            payload.claims.as_ref().and_then(|c| c.into().website.as_ref()).map(|p| p.as_str())
+            payload.extra.as_ref().and_then(|c| c.into().website.as_ref()).map(|p| p.as_str())
         })?
         .map(|u| u.as_ref().parse())
         .transpose()
@@ -341,44 +337,44 @@ where
     }
 
     fn email(&mut self) -> EsdicawtReadResult<Option<Cow<str>>> {
-        self.maybe_std_str_claim(CWT_CLAIM_EMAIL.into(), |payload| payload.claims.as_ref().and_then(|c| c.into().email.as_deref()))
+        self.maybe_std_str_claim(CWT_CLAIM_EMAIL.into(), |payload| payload.extra.as_ref().and_then(|c| c.into().email.as_deref()))
     }
 
     fn email_verified(&mut self) -> EsdicawtReadResult<Option<bool>> {
         Ok(self
             .maybe_std_claim(CWT_CLAIM_EMAIL_VERIFIED.into(), |payload| {
-                payload.claims.as_ref().and_then(|c| c.into().email_verified.as_ref())
+                payload.extra.as_ref().and_then(|c| c.into().email_verified.as_ref())
             })?
             .map(|b| Value::deserialized(&b))
             .transpose()?)
     }
 
     fn gender(&mut self) -> EsdicawtReadResult<Option<Cow<str>>> {
-        self.maybe_std_str_claim(CWT_CLAIM_GENDER.into(), |payload| payload.claims.as_ref().and_then(|c| c.into().gender.as_deref()))
+        self.maybe_std_str_claim(CWT_CLAIM_GENDER.into(), |payload| payload.extra.as_ref().and_then(|c| c.into().gender.as_deref()))
     }
 
     fn birthdate(&mut self) -> EsdicawtReadResult<Option<Cow<str>>> {
-        self.maybe_std_str_claim(CWT_CLAIM_BIRTHDATE.into(), |payload| payload.claims.as_ref().and_then(|c| c.into().birthdate.as_deref()))
+        self.maybe_std_str_claim(CWT_CLAIM_BIRTHDATE.into(), |payload| payload.extra.as_ref().and_then(|c| c.into().birthdate.as_deref()))
     }
 
     fn zoneinfo(&mut self) -> EsdicawtReadResult<Option<Cow<str>>> {
-        self.maybe_std_str_claim(CWT_CLAIM_ZONEINFO.into(), |payload| payload.claims.as_ref().and_then(|c| c.into().zoneinfo.as_deref()))
+        self.maybe_std_str_claim(CWT_CLAIM_ZONEINFO.into(), |payload| payload.extra.as_ref().and_then(|c| c.into().zoneinfo.as_deref()))
     }
 
     fn locale(&mut self) -> EsdicawtReadResult<Option<Cow<str>>> {
-        self.maybe_std_str_claim(CWT_CLAIM_LOCALE.into(), |payload| payload.claims.as_ref().and_then(|c| c.into().locale.as_deref()))
+        self.maybe_std_str_claim(CWT_CLAIM_LOCALE.into(), |payload| payload.extra.as_ref().and_then(|c| c.into().locale.as_deref()))
     }
 
     fn phone_number(&mut self) -> EsdicawtReadResult<Option<Cow<str>>> {
         self.maybe_std_str_claim(CWT_CLAIM_PHONE_NUMBER.into(), |payload| {
-            payload.claims.as_ref().and_then(|c| c.into().phone_number.as_deref())
+            payload.extra.as_ref().and_then(|c| c.into().phone_number.as_deref())
         })
     }
 
     fn phone_number_verified(&mut self) -> EsdicawtReadResult<Option<bool>> {
         Ok(self
             .maybe_std_claim(CWT_CLAIM_PHONE_NUMBER_VERIFIED.into(), |payload| {
-                payload.claims.as_ref().and_then(|c| c.into().phone_number_verified.as_ref())
+                payload.extra.as_ref().and_then(|c| c.into().phone_number_verified.as_ref())
             })?
             .map(|b| Value::deserialized(&b))
             .transpose()?)
@@ -386,14 +382,14 @@ where
 
     fn address(&mut self) -> EsdicawtReadResult<Option<OidcAddressClaim>> {
         Ok(self
-            .maybe_std_claim(CWT_CLAIM_ADDRESS.into(), |payload| payload.claims.as_ref().and_then(|c| c.into().address.as_ref()))?
+            .maybe_std_claim(CWT_CLAIM_ADDRESS.into(), |payload| payload.extra.as_ref().and_then(|c| c.into().address.as_ref()))?
             .map(|b| Value::deserialized(&b))
             .transpose()?)
     }
 
     fn updated_at(&mut self) -> EsdicawtReadResult<Option<i64>> {
         Ok(self
-            .maybe_std_claim(CWT_CLAIM_UPDATED_AT.into(), |payload| payload.claims.as_ref().and_then(|c| c.into().updated_at.as_ref()))?
+            .maybe_std_claim(CWT_CLAIM_UPDATED_AT.into(), |payload| payload.extra.as_ref().and_then(|c| c.into().updated_at.as_ref()))?
             .map(|b| Value::deserialized(&b))
             .transpose()?)
     }
@@ -406,44 +402,39 @@ impl<
     KbtProtectedClaims: CustomClaims,
     KbtUnprotectedClaims: CustomClaims,
     KbtPayloadClaims: CustomClaims,
-> SpiceOidcSdCwtRead
-    for KeyBindingTokenTagged<IssuerProtectedClaims, IssuerUnprotectedClaims, PayloadClaims, KbtProtectedClaims, KbtUnprotectedClaims, KbtPayloadClaims, PayloadClaims>
+> SpiceOidcSdCwtRead for KbtCwtTagged<IssuerProtectedClaims, IssuerUnprotectedClaims, PayloadClaims, KbtProtectedClaims, KbtUnprotectedClaims, KbtPayloadClaims, PayloadClaims>
 where
     for<'a> &'a PayloadClaims: Into<&'a SpiceOidcClaims>,
 {
     fn name(&mut self) -> EsdicawtReadResult<Option<Cow<str>>> {
-        self.maybe_std_str_claim(CWT_CLAIM_NAME.into(), |payload| payload.claims.as_ref().and_then(|c| c.into().name.as_deref()))
+        self.maybe_std_str_claim(CWT_CLAIM_NAME.into(), |payload| payload.extra.as_ref().and_then(|c| c.into().name.as_deref()))
     }
 
     fn given_name(&mut self) -> EsdicawtReadResult<Option<Cow<str>>> {
-        self.maybe_std_str_claim(CWT_CLAIM_GIVEN_NAME.into(), |payload| payload.claims.as_ref().and_then(|c| c.into().given_name.as_deref()))
+        self.maybe_std_str_claim(CWT_CLAIM_GIVEN_NAME.into(), |payload| payload.extra.as_ref().and_then(|c| c.into().given_name.as_deref()))
     }
 
     fn family_name(&mut self) -> EsdicawtReadResult<Option<Cow<str>>> {
-        self.maybe_std_str_claim(CWT_CLAIM_FAMILY_NAME.into(), |payload| {
-            payload.claims.as_ref().and_then(|c| c.into().family_name.as_deref())
-        })
+        self.maybe_std_str_claim(CWT_CLAIM_FAMILY_NAME.into(), |payload| payload.extra.as_ref().and_then(|c| c.into().family_name.as_deref()))
     }
 
     fn middle_name(&mut self) -> EsdicawtReadResult<Option<Cow<str>>> {
-        self.maybe_std_str_claim(CWT_CLAIM_MIDDLE_NAME.into(), |payload| {
-            payload.claims.as_ref().and_then(|c| c.into().middle_name.as_deref())
-        })
+        self.maybe_std_str_claim(CWT_CLAIM_MIDDLE_NAME.into(), |payload| payload.extra.as_ref().and_then(|c| c.into().middle_name.as_deref()))
     }
 
     fn nickname(&mut self) -> EsdicawtReadResult<Option<Cow<str>>> {
-        self.maybe_std_str_claim(CWT_CLAIM_NICKNAME.into(), |payload| payload.claims.as_ref().and_then(|c| c.into().nickname.as_deref()))
+        self.maybe_std_str_claim(CWT_CLAIM_NICKNAME.into(), |payload| payload.extra.as_ref().and_then(|c| c.into().nickname.as_deref()))
     }
 
     fn preferred_username(&mut self) -> EsdicawtReadResult<Option<Cow<str>>> {
         self.maybe_std_str_claim(CWT_CLAIM_PREFERRED_USERNAME.into(), |payload| {
-            payload.claims.as_ref().and_then(|c| c.into().preferred_username.as_deref())
+            payload.extra.as_ref().and_then(|c| c.into().preferred_username.as_deref())
         })
     }
 
     fn profile(&mut self) -> EsdicawtReadResult<Option<Url>> {
         self.maybe_std_str_claim(CWT_CLAIM_PROFILE.into(), |payload| {
-            payload.claims.as_ref().and_then(|c| c.into().profile.as_ref()).map(|p| p.as_str())
+            payload.extra.as_ref().and_then(|c| c.into().profile.as_ref()).map(|p| p.as_str())
         })?
         .map(|u| u.as_ref().parse())
         .transpose()
@@ -452,7 +443,7 @@ where
 
     fn picture(&mut self) -> EsdicawtReadResult<Option<Url>> {
         self.maybe_std_str_claim(CWT_CLAIM_PICTURE.into(), |payload| {
-            payload.claims.as_ref().and_then(|c| c.into().picture.as_ref()).map(|p| p.as_str())
+            payload.extra.as_ref().and_then(|c| c.into().picture.as_ref()).map(|p| p.as_str())
         })?
         .map(|u| u.as_ref().parse())
         .transpose()
@@ -461,7 +452,7 @@ where
 
     fn website(&mut self) -> EsdicawtReadResult<Option<Url>> {
         self.maybe_std_str_claim(CWT_CLAIM_WEBSITE.into(), |payload| {
-            payload.claims.as_ref().and_then(|c| c.into().website.as_ref()).map(|p| p.as_str())
+            payload.extra.as_ref().and_then(|c| c.into().website.as_ref()).map(|p| p.as_str())
         })?
         .map(|u| u.as_ref().parse())
         .transpose()
@@ -469,44 +460,44 @@ where
     }
 
     fn email(&mut self) -> EsdicawtReadResult<Option<Cow<str>>> {
-        self.maybe_std_str_claim(CWT_CLAIM_EMAIL.into(), |payload| payload.claims.as_ref().and_then(|c| c.into().email.as_deref()))
+        self.maybe_std_str_claim(CWT_CLAIM_EMAIL.into(), |payload| payload.extra.as_ref().and_then(|c| c.into().email.as_deref()))
     }
 
     fn email_verified(&mut self) -> EsdicawtReadResult<Option<bool>> {
         Ok(self
             .maybe_std_claim(CWT_CLAIM_EMAIL_VERIFIED.into(), |payload| {
-                payload.claims.as_ref().and_then(|c| c.into().email_verified.as_ref())
+                payload.extra.as_ref().and_then(|c| c.into().email_verified.as_ref())
             })?
             .map(|b| Value::deserialized(&b))
             .transpose()?)
     }
 
     fn gender(&mut self) -> EsdicawtReadResult<Option<Cow<str>>> {
-        self.maybe_std_str_claim(CWT_CLAIM_GENDER.into(), |payload| payload.claims.as_ref().and_then(|c| c.into().gender.as_deref()))
+        self.maybe_std_str_claim(CWT_CLAIM_GENDER.into(), |payload| payload.extra.as_ref().and_then(|c| c.into().gender.as_deref()))
     }
 
     fn birthdate(&mut self) -> EsdicawtReadResult<Option<Cow<str>>> {
-        self.maybe_std_str_claim(CWT_CLAIM_BIRTHDATE.into(), |payload| payload.claims.as_ref().and_then(|c| c.into().birthdate.as_deref()))
+        self.maybe_std_str_claim(CWT_CLAIM_BIRTHDATE.into(), |payload| payload.extra.as_ref().and_then(|c| c.into().birthdate.as_deref()))
     }
 
     fn zoneinfo(&mut self) -> EsdicawtReadResult<Option<Cow<str>>> {
-        self.maybe_std_str_claim(CWT_CLAIM_ZONEINFO.into(), |payload| payload.claims.as_ref().and_then(|c| c.into().zoneinfo.as_deref()))
+        self.maybe_std_str_claim(CWT_CLAIM_ZONEINFO.into(), |payload| payload.extra.as_ref().and_then(|c| c.into().zoneinfo.as_deref()))
     }
 
     fn locale(&mut self) -> EsdicawtReadResult<Option<Cow<str>>> {
-        self.maybe_std_str_claim(CWT_CLAIM_LOCALE.into(), |payload| payload.claims.as_ref().and_then(|c| c.into().locale.as_deref()))
+        self.maybe_std_str_claim(CWT_CLAIM_LOCALE.into(), |payload| payload.extra.as_ref().and_then(|c| c.into().locale.as_deref()))
     }
 
     fn phone_number(&mut self) -> EsdicawtReadResult<Option<Cow<str>>> {
         self.maybe_std_str_claim(CWT_CLAIM_PHONE_NUMBER.into(), |payload| {
-            payload.claims.as_ref().and_then(|c| c.into().phone_number.as_deref())
+            payload.extra.as_ref().and_then(|c| c.into().phone_number.as_deref())
         })
     }
 
     fn phone_number_verified(&mut self) -> EsdicawtReadResult<Option<bool>> {
         Ok(self
             .maybe_std_claim(CWT_CLAIM_PHONE_NUMBER_VERIFIED.into(), |payload| {
-                payload.claims.as_ref().and_then(|c| c.into().phone_number_verified.as_ref())
+                payload.extra.as_ref().and_then(|c| c.into().phone_number_verified.as_ref())
             })?
             .map(|b| Value::deserialized(&b))
             .transpose()?)
@@ -514,14 +505,14 @@ where
 
     fn address(&mut self) -> EsdicawtReadResult<Option<OidcAddressClaim>> {
         Ok(self
-            .maybe_std_claim(CWT_CLAIM_ADDRESS.into(), |payload| payload.claims.as_ref().and_then(|c| c.into().address.as_ref()))?
+            .maybe_std_claim(CWT_CLAIM_ADDRESS.into(), |payload| payload.extra.as_ref().and_then(|c| c.into().address.as_ref()))?
             .map(|b| Value::deserialized(&b))
             .transpose()?)
     }
 
     fn updated_at(&mut self) -> EsdicawtReadResult<Option<i64>> {
         Ok(self
-            .maybe_std_claim(CWT_CLAIM_UPDATED_AT.into(), |payload| payload.claims.as_ref().and_then(|c| c.into().updated_at.as_ref()))?
+            .maybe_std_claim(CWT_CLAIM_UPDATED_AT.into(), |payload| payload.extra.as_ref().and_then(|c| c.into().updated_at.as_ref()))?
             .map(|b| Value::deserialized(&b))
             .transpose()?)
     }
@@ -534,7 +525,7 @@ mod tests {
     use super::{ed25519::*, *};
     use esdicawt::{
         Holder, Issuer, Presentation,
-        spec::{CwtAny, issuance::SelectiveDisclosureIssuedTagged},
+        spec::{CwtAny, issuance::SdCwtIssuedTagged},
     };
     use esdicawt_spec::NoClaims;
     wasm_bindgen_test::wasm_bindgen_test_configure!(run_in_browser);
@@ -594,7 +585,7 @@ mod tests {
         claims: SpiceOidcClaims,
         holder_pk: &ed25519_dalek::VerifyingKey,
         subject: &str,
-    ) -> SelectiveDisclosureIssuedTagged<NoClaims, NoClaims, SpiceOidcClaims, SpiceOidcClaims> {
+    ) -> SdCwtIssuedTagged<NoClaims, NoClaims, SpiceOidcClaims, SpiceOidcClaims> {
         issuer
             .issue_cwt(
                 &mut rand::thread_rng(),
@@ -642,7 +633,7 @@ mod ed25519 {
     use crate::SpiceOidcClaims;
     use esdicawt::{
         Holder, Issuer,
-        spec::{NoClaims, SelectiveDisclosureHashAlg, reexports::coset},
+        spec::{NoClaims, SdHashAlg, reexports::coset},
     };
 
     pub struct Ed25519Issuer {
@@ -672,8 +663,8 @@ mod ed25519 {
             coset::iana::Algorithm::EdDSA
         }
 
-        fn hash_algorithm(&self) -> SelectiveDisclosureHashAlg {
-            SelectiveDisclosureHashAlg::Sha256
+        fn hash_algorithm(&self) -> SdHashAlg {
+            SdHashAlg::Sha256
         }
 
         fn serialize_signature(&self, signature: &ed25519_dalek::Signature) -> Result<Vec<u8>, Self::Error> {
@@ -714,8 +705,8 @@ mod ed25519 {
             coset::iana::Algorithm::EdDSA
         }
 
-        fn hash_algorithm(&self) -> SelectiveDisclosureHashAlg {
-            SelectiveDisclosureHashAlg::Sha256
+        fn hash_algorithm(&self) -> SdHashAlg {
+            SdHashAlg::Sha256
         }
 
         fn serialize_signature(&self, signature: &ed25519_dalek::Signature) -> Result<Vec<u8>, Self::Error> {

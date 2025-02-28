@@ -1,11 +1,11 @@
-use super::KeyBindingTokenPayload;
+use super::KbtPayload;
 use crate::{
     AnyMap, CWT_CLAIM_AUDIENCE, CWT_CLAIM_CLIENT_NONCE, CWT_CLAIM_EXPIRES_AT, CWT_CLAIM_ISSUED_AT, CWT_CLAIM_NOT_BEFORE, ClaimName, CustomClaims, KbtStandardClaim, MapKey,
-    key_binding::KeyBindingTokenPayloadBuilder,
+    key_binding::KbtPayloadBuilder,
 };
 use serde::ser::SerializeMap;
 
-impl<E: CustomClaims> serde::Serialize for KeyBindingTokenPayload<E> {
+impl<E: CustomClaims> serde::Serialize for KbtPayload<E> {
     fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
         let mut map = serializer.serialize_map(None)?;
 
@@ -20,11 +20,11 @@ impl<E: CustomClaims> serde::Serialize for KeyBindingTokenPayload<E> {
 
         map.serialize_entry(&CWT_CLAIM_ISSUED_AT, &self.issued_at)?;
 
-        if let Some(cnonce) = &self.client_nonce {
+        if let Some(cnonce) = &self.cnonce {
             map.serialize_entry(&CWT_CLAIM_CLIENT_NONCE, cnonce)?;
         }
 
-        if let Some(extra) = &self.claims {
+        if let Some(extra) = &self.extra {
             let extra_map: AnyMap = extra.clone().into();
 
             for (k, v) in extra_map {
@@ -36,12 +36,12 @@ impl<E: CustomClaims> serde::Serialize for KeyBindingTokenPayload<E> {
     }
 }
 
-impl<'de, E: CustomClaims> serde::Deserialize<'de> for KeyBindingTokenPayload<E> {
+impl<'de, E: CustomClaims> serde::Deserialize<'de> for KbtPayload<E> {
     fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
         struct SDPayloadVisitor<E: CustomClaims>(std::marker::PhantomData<E>);
 
         impl<'de, E: CustomClaims> serde::de::Visitor<'de> for SDPayloadVisitor<E> {
-            type Value = KeyBindingTokenPayload<E>;
+            type Value = KbtPayload<E>;
 
             fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
                 write!(formatter, "a kbt-payload")
@@ -55,7 +55,7 @@ impl<'de, E: CustomClaims> serde::Deserialize<'de> for KeyBindingTokenPayload<E>
                 use serde::de::Error as _;
 
                 let mut extra = AnyMap::default();
-                let mut sd_builder = KeyBindingTokenPayloadBuilder::<E>::default();
+                let mut sd_builder = KbtPayloadBuilder::<E>::default();
 
                 while let Some((k, v)) = map.next_entry::<MapKey, Value>()? {
                     match k {
@@ -82,7 +82,7 @@ impl<'de, E: CustomClaims> serde::Deserialize<'de> for KeyBindingTokenPayload<E>
                                     }
                                     KbtStandardClaim::ClientNonceClaim => {
                                         let cnonce: Vec<u8> = v.deserialized().map_err(|value| A::Error::custom(format!("cnonce is not bstr: {value:?}")))?;
-                                        sd_builder.client_nonce(cnonce);
+                                        sd_builder.cnonce(cnonce);
                                     }
                                 }
                             } else {
@@ -97,7 +97,7 @@ impl<'de, E: CustomClaims> serde::Deserialize<'de> for KeyBindingTokenPayload<E>
 
                 if !extra.is_empty() {
                     let custom_keys: E = extra.try_into().map_err(|_err| A::Error::custom("Cannot deserialize custom keys".to_string()))?;
-                    sd_builder.claims(custom_keys);
+                    sd_builder.extra(custom_keys);
                 }
 
                 sd_builder.build().map_err(|err| A::Error::custom(format!("{err}")))

@@ -1,11 +1,11 @@
-use crate::{CustomClaims, MapKey, key_binding::KeyBindingTokenUnprotected};
+use crate::{CustomClaims, MapKey, key_binding::KbtUnprotected};
 
-impl<E: CustomClaims> From<KeyBindingTokenUnprotected<E>> for coset::Header {
-    fn from(kbtu: KeyBindingTokenUnprotected<E>) -> Self {
+impl<E: CustomClaims> From<KbtUnprotected<E>> for coset::Header {
+    fn from(kbtu: KbtUnprotected<E>) -> Self {
         let mut builder = coset::HeaderBuilder::new();
 
         // map extra claims
-        if let Some(claims) = kbtu.claims.map(Into::into) {
+        if let Some(claims) = kbtu.extra.map(Into::into) {
             for (k, v) in claims {
                 builder = match k {
                     MapKey::Integer(i) => builder.value(i, v),

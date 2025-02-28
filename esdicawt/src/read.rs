@@ -3,8 +3,8 @@ use coset::iana::CwtClaimName;
 use esdicawt_spec::{
     ClaimName, CustomClaims,
     blinded_claims::{Salted, SaltedClaim},
-    issuance::{SdCwtPayload, SelectiveDisclosureIssuedTagged},
-    key_binding::KeyBindingTokenTagged,
+    issuance::{SdCwtIssuedTagged, SdInnerPayload},
+    key_binding::KbtCwtTagged,
     reexports::{coset, coset::iana::EnumI64},
 };
 use std::borrow::Cow;
@@ -41,16 +41,16 @@ pub trait SdCwtRead {
     fn maybe_std_claim<'a, T: serde::Serialize + 'a>(
         &'a mut self,
         key: ClaimName,
-        extractor: impl FnOnce(&'a SdCwtPayload<Self::PayloadClaims>) -> Option<&'a T>,
+        extractor: impl FnOnce(&'a SdInnerPayload<Self::PayloadClaims>) -> Option<&'a T>,
     ) -> EsdicawtReadResult<Option<Value>>;
 
     fn maybe_std_str_claim<'a>(
         &'a mut self,
         key: ClaimName,
-        extractor: impl FnOnce(&'a SdCwtPayload<Self::PayloadClaims>) -> Option<&'a str>,
+        extractor: impl FnOnce(&'a SdInnerPayload<Self::PayloadClaims>) -> Option<&'a str>,
     ) -> EsdicawtReadResult<Option<Cow<'a, str>>>;
 
-    fn maybe_std_int_claim<'a>(&'a mut self, key: ClaimName, extractor: impl FnOnce(&'a SdCwtPayload<Self::PayloadClaims>) -> Option<i64>) -> EsdicawtReadResult<Option<i64>>;
+    fn maybe_std_int_claim<'a>(&'a mut self, key: ClaimName, extractor: impl FnOnce(&'a SdInnerPayload<Self::PayloadClaims>) -> Option<i64>) -> EsdicawtReadResult<Option<i64>>;
 }
 
 pub type EsdicawtReadResult<T> = Result<T, EsdicawtReadError>;
@@ -68,14 +68,14 @@ pub enum EsdicawtReadError {
 }
 
 impl<IssuerProtectedClaims: CustomClaims, IssuerUnprotectedClaims: CustomClaims, IssuerPayloadClaims: CustomClaims, DisclosableClaims: CustomClaims> SdCwtRead
-    for SelectiveDisclosureIssuedTagged<IssuerProtectedClaims, IssuerUnprotectedClaims, IssuerPayloadClaims, DisclosableClaims>
+    for SdCwtIssuedTagged<IssuerProtectedClaims, IssuerUnprotectedClaims, IssuerPayloadClaims, DisclosableClaims>
 {
     type PayloadClaims = IssuerPayloadClaims;
 
     fn maybe_std_claim<'a, T: serde::Serialize + 'a>(
         &'a mut self,
         key: ClaimName,
-        extractor: impl FnOnce(&'a SdCwtPayload<Self::PayloadClaims>) -> Option<&'a T>,
+        extractor: impl FnOnce(&'a SdInnerPayload<Self::PayloadClaims>) -> Option<&'a T>,
     ) -> EsdicawtReadResult<Option<Value>> {
         let payload = self.0.payload.to_value()?;
         let unredacted = extractor(&payload.inner);
@@ -96,7 +96,7 @@ impl<IssuerProtectedClaims: CustomClaims, IssuerUnprotectedClaims: CustomClaims,
     fn maybe_std_str_claim<'a>(
         &'a mut self,
         key: ClaimName,
-        extractor: impl FnOnce(&'a SdCwtPayload<Self::PayloadClaims>) -> Option<&'a str>,
+        extractor: impl FnOnce(&'a SdInnerPayload<Self::PayloadClaims>) -> Option<&'a str>,
     ) -> EsdicawtReadResult<Option<Cow<'a, str>>> {
         let payload = self.0.payload.to_value()?;
         let unredacted = extractor(&payload.inner).map(Cow::Borrowed);
@@ -116,7 +116,7 @@ impl<IssuerProtectedClaims: CustomClaims, IssuerUnprotectedClaims: CustomClaims,
         }
     }
 
-    fn maybe_std_int_claim<'a>(&'a mut self, key: ClaimName, extractor: impl FnOnce(&'a SdCwtPayload<Self::PayloadClaims>) -> Option<i64>) -> EsdicawtReadResult<Option<i64>> {
+    fn maybe_std_int_claim<'a>(&'a mut self, key: ClaimName, extractor: impl FnOnce(&'a SdInnerPayload<Self::PayloadClaims>) -> Option<i64>) -> EsdicawtReadResult<Option<i64>> {
         let payload = self.0.payload.to_value()?;
         let unredacted = extractor(&payload.inner);
 
@@ -146,18 +146,17 @@ impl<
     KbtUnprotectedClaims: CustomClaims,
     KbtPayloadClaims: CustomClaims,
     DisclosedClaims: CustomClaims,
-> SdCwtRead
-    for KeyBindingTokenTagged<IssuerProtectedClaims, IssuerUnprotectedClaims, IssuerPayloadClaims, KbtProtectedClaims, KbtUnprotectedClaims, KbtPayloadClaims, DisclosedClaims>
+> SdCwtRead for KbtCwtTagged<IssuerProtectedClaims, IssuerUnprotectedClaims, IssuerPayloadClaims, KbtProtectedClaims, KbtUnprotectedClaims, KbtPayloadClaims, DisclosedClaims>
 {
     type PayloadClaims = IssuerPayloadClaims;
 
     fn maybe_std_claim<'a, T: serde::Serialize + 'a>(
         &'a mut self,
         key: ClaimName,
-        extractor: impl FnOnce(&'a SdCwtPayload<Self::PayloadClaims>) -> Option<&'a T>,
+        extractor: impl FnOnce(&'a SdInnerPayload<Self::PayloadClaims>) -> Option<&'a T>,
     ) -> EsdicawtReadResult<Option<Value>> {
         let protected = self.0.protected.to_value_mut()?;
-        let sd_cwt = protected.issuer_sd_cwt.to_value_mut()?;
+        let sd_cwt = protected.kcwt.to_value_mut()?;
         let sd_cwt_payload = sd_cwt.0.payload.to_value_mut()?;
         let unredacted = extractor(&sd_cwt_payload.inner);
         let unredacted = unredacted.as_ref().map(Value::serialized).transpose()?;
@@ -177,10 +176,10 @@ impl<
     fn maybe_std_str_claim<'a>(
         &'a mut self,
         key: ClaimName,
-        extractor: impl FnOnce(&'a SdCwtPayload<Self::PayloadClaims>) -> Option<&'a str>,
+        extractor: impl FnOnce(&'a SdInnerPayload<Self::PayloadClaims>) -> Option<&'a str>,
     ) -> EsdicawtReadResult<Option<Cow<'a, str>>> {
         let protected = self.0.protected.to_value_mut()?;
-        let sd_cwt = protected.issuer_sd_cwt.to_value_mut()?;
+        let sd_cwt = protected.kcwt.to_value_mut()?;
         let sd_cwt_payload = sd_cwt.0.payload.to_value_mut()?;
         let unredacted = extractor(&sd_cwt_payload.inner).map(Cow::Borrowed);
 
@@ -199,9 +198,9 @@ impl<
         }
     }
 
-    fn maybe_std_int_claim<'a>(&'a mut self, key: ClaimName, extractor: impl FnOnce(&'a SdCwtPayload<Self::PayloadClaims>) -> Option<i64>) -> EsdicawtReadResult<Option<i64>> {
+    fn maybe_std_int_claim<'a>(&'a mut self, key: ClaimName, extractor: impl FnOnce(&'a SdInnerPayload<Self::PayloadClaims>) -> Option<i64>) -> EsdicawtReadResult<Option<i64>> {
         let protected = self.0.protected.to_value_mut()?;
-        let sd_cwt = protected.issuer_sd_cwt.to_value_mut()?;
+        let sd_cwt = protected.kcwt.to_value_mut()?;
         let sd_cwt_payload = sd_cwt.0.payload.to_value_mut()?;
         let unredacted = extractor(&sd_cwt_payload.inner);
 

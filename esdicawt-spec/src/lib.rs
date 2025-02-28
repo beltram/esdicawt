@@ -51,15 +51,15 @@ pub enum EsdicawtSpecError {
     #[error(transparent)]
     InvalidCwtIntKey(#[from] std::num::TryFromIntError),
     #[error(transparent)]
-    SdPayloadBuilderError(#[from] SelectiveDisclosurePayloadBuilderError),
+    SdPayloadBuilderError(#[from] issuance::SdPayloadBuilderError),
     #[error(transparent)]
-    SdInnerPayloadBuilderError(#[from] SdCwtPayloadBuilderError),
+    SdInnerPayloadBuilderError(#[from] issuance::SdInnerPayloadBuilderError),
     #[error(transparent)]
-    SdProtectedBuilderError(#[from] SelectiveDisclosureProtectedBuilderError),
+    SdProtectedBuilderError(#[from] issuance::SdProtectedBuilderError),
     #[error(transparent)]
-    KbtPayloadBuilderError(#[from] KeyBindingTokenPayloadBuilderError),
+    KbtPayloadBuilderError(#[from] key_binding::KbtPayloadBuilderError),
     #[error(transparent)]
-    KbtProtectedBuilderError(#[from] KeyBindingTokenProtectedBuilderError),
+    KbtProtectedBuilderError(#[from] key_binding::KbtProtectedBuilderError),
     #[error(transparent)]
     CborDeserializationError(#[from] ciborium::de::Error<std::io::Error>),
     #[error(transparent)]
@@ -70,14 +70,11 @@ pub enum EsdicawtSpecError {
 
 pub type EsdicawtSpecResult<T> = Result<T, EsdicawtSpecError>;
 
-use crate::issuance::SdCwtPayloadBuilderError;
 pub use ciborium::{Value, cbor};
-use issuance::{SelectiveDisclosurePayloadBuilderError, SelectiveDisclosureProtectedBuilderError};
-use key_binding::{KeyBindingTokenPayloadBuilderError, KeyBindingTokenProtectedBuilderError};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, serde_repr::Serialize_repr, serde_repr::Deserialize_repr)]
 #[repr(i64)]
-pub enum SelectiveDisclosureHashAlg {
+pub enum SdHashAlg {
     Sha256 = coset::iana::Algorithm::SHA_256 as i64,
     Sha384 = coset::iana::Algorithm::SHA_384 as i64,
     Sha512 = coset::iana::Algorithm::SHA_512 as i64,

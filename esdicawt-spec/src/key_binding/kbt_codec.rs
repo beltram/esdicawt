@@ -1,7 +1,7 @@
 use ciborium::Value;
 use serde::ser::SerializeSeq;
 
-use super::{KeyBindingToken, KeyBindingTokenBuilder};
+use super::{KbtCwt, KbtCwtBuilder};
 use crate::CustomClaims;
 
 impl<
@@ -12,7 +12,7 @@ impl<
     UnprotectedClaims: CustomClaims,
     PayloadClaims: CustomClaims,
     DisclosedClaims: CustomClaims,
-> serde::Serialize for KeyBindingToken<IssuerProtectedClaims, IssuerUnprotectedClaims, IssuerPayloadClaims, ProtectedClaims, UnprotectedClaims, PayloadClaims, DisclosedClaims>
+> serde::Serialize for KbtCwt<IssuerProtectedClaims, IssuerUnprotectedClaims, IssuerPayloadClaims, ProtectedClaims, UnprotectedClaims, PayloadClaims, DisclosedClaims>
 {
     fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
         let mut seq = serializer.serialize_seq(Some(4))?;
@@ -33,8 +33,7 @@ impl<
     UnprotectedClaims: CustomClaims,
     PayloadClaims: CustomClaims,
     DisclosedClaims: CustomClaims,
-> serde::Deserialize<'de>
-    for KeyBindingToken<IssuerProtectedClaims, IssuerUnprotectedClaims, IssuerPayloadClaims, ProtectedClaims, UnprotectedClaims, PayloadClaims, DisclosedClaims>
+> serde::Deserialize<'de> for KbtCwt<IssuerProtectedClaims, IssuerUnprotectedClaims, IssuerPayloadClaims, ProtectedClaims, UnprotectedClaims, PayloadClaims, DisclosedClaims>
 {
     fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
         struct KbtVisitor<
@@ -69,7 +68,7 @@ impl<
         > serde::de::Visitor<'de>
             for KbtVisitor<IssuerProtectedClaims, IssuerUnprotectedClaims, IssuerPayloadClaims, ProtectedClaims, UnprotectedClaims, PayloadClaims, DisclosedClaims>
         {
-            type Value = KeyBindingToken<IssuerProtectedClaims, IssuerUnprotectedClaims, IssuerPayloadClaims, ProtectedClaims, UnprotectedClaims, PayloadClaims, DisclosedClaims>;
+            type Value = KbtCwt<IssuerProtectedClaims, IssuerUnprotectedClaims, IssuerPayloadClaims, ProtectedClaims, UnprotectedClaims, PayloadClaims, DisclosedClaims>;
 
             fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
                 write!(formatter, "a kbt payload")
@@ -81,7 +80,7 @@ impl<
             {
                 use serde::de::Error as _;
 
-                let mut kbt_builder = KeyBindingTokenBuilder::default();
+                let mut kbt_builder = KbtCwtBuilder::default();
                 let mut index = 0u8;
                 while let Some(element) = seq.next_element::<Value>()? {
                     match index {
