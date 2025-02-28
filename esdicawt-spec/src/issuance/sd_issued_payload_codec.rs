@@ -1,11 +1,11 @@
 use ciborium::Value;
 use serde::ser::SerializeSeq;
 
-use super::SelectiveDisclosureIssued;
-use crate::{CustomClaims, issuance::SelectiveDisclosureIssuedBuilder};
+use super::SdCwtIssued;
+use crate::{CustomClaims, issuance::SdCwtIssuedBuilder};
 
 impl<ProtectedClaims: CustomClaims, UnprotectedClaims: CustomClaims, PayloadClaims: CustomClaims, DisclosableClaims: CustomClaims> serde::Serialize
-    for SelectiveDisclosureIssued<ProtectedClaims, UnprotectedClaims, PayloadClaims, DisclosableClaims>
+    for SdCwtIssued<ProtectedClaims, UnprotectedClaims, PayloadClaims, DisclosableClaims>
 {
     fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
         let mut seq = serializer.serialize_seq(Some(4))?;
@@ -18,7 +18,7 @@ impl<ProtectedClaims: CustomClaims, UnprotectedClaims: CustomClaims, PayloadClai
 }
 
 impl<'de, ProtectedClaims: CustomClaims, UnprotectedClaims: CustomClaims, PayloadClaims: CustomClaims, DisclosableClaims: CustomClaims> serde::Deserialize<'de>
-    for SelectiveDisclosureIssued<ProtectedClaims, UnprotectedClaims, PayloadClaims, DisclosableClaims>
+    for SdCwtIssued<ProtectedClaims, UnprotectedClaims, PayloadClaims, DisclosableClaims>
 {
     fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
         struct SdIssuedVisitor<ProtectedClaims: CustomClaims, UnprotectedClaims: CustomClaims, PayloadClaims: CustomClaims, DisclosableClaims: CustomClaims>(
@@ -28,7 +28,7 @@ impl<'de, ProtectedClaims: CustomClaims, UnprotectedClaims: CustomClaims, Payloa
         impl<'de, ProtectedClaims: CustomClaims, UnprotectedClaims: CustomClaims, PayloadClaims: CustomClaims, DisclosableClaims: CustomClaims> serde::de::Visitor<'de>
             for SdIssuedVisitor<ProtectedClaims, UnprotectedClaims, PayloadClaims, DisclosableClaims>
         {
-            type Value = SelectiveDisclosureIssued<ProtectedClaims, UnprotectedClaims, PayloadClaims, DisclosableClaims>;
+            type Value = SdCwtIssued<ProtectedClaims, UnprotectedClaims, PayloadClaims, DisclosableClaims>;
 
             fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
                 write!(formatter, "a sd-issued payload")
@@ -40,7 +40,7 @@ impl<'de, ProtectedClaims: CustomClaims, UnprotectedClaims: CustomClaims, Payloa
             {
                 use serde::de::Error as _;
 
-                let mut issued_builder = SelectiveDisclosureIssuedBuilder::default();
+                let mut issued_builder = SdCwtIssuedBuilder::default();
                 let mut index = 0u8;
                 while let Some(element) = seq.next_element::<Value>()? {
                     match index {

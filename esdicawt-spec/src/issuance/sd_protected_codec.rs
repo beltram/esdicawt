@@ -2,16 +2,13 @@ use ciborium::Value;
 use coset::AsCborValue;
 use serde::ser::SerializeMap;
 
-use super::SelectiveDisclosureProtected;
-use crate::{
-    AnyMap, CWT_CLAIM_ALG, CWT_CLAIM_SD_ALG, CWT_MEDIATYPE, ClaimName, CustomClaims, MEDIATYPE_SD_CWT, MapKey, SelectiveDisclosureHashAlg,
-    issuance::SelectiveDisclosureProtectedBuilder,
-};
+use super::SdProtected;
+use crate::{AnyMap, CWT_CLAIM_ALG, CWT_CLAIM_SD_ALG, CWT_MEDIATYPE, ClaimName, CustomClaims, MEDIATYPE_SD_CWT, MapKey, SdHashAlg, issuance::SdProtectedBuilder};
 
-impl<E: CustomClaims> serde::Serialize for SelectiveDisclosureProtected<E> {
+impl<E: CustomClaims> serde::Serialize for SdProtected<E> {
     fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
         use serde::ser::Error as _;
-        let mut extra: Option<AnyMap> = self.claims.clone().map(|extra| extra.into());
+        let mut extra: Option<AnyMap> = self.extra.clone().map(|extra| extra.into());
         let extra_len = extra.as_ref().map(|extra| extra.len()).unwrap_or_default();
         let mut map = serializer.serialize_map(Some(3 + extra_len))?;
         map.serialize_entry(&CWT_MEDIATYPE, MEDIATYPE_SD_CWT)?;
@@ -31,11 +28,11 @@ impl<E: CustomClaims> serde::Serialize for SelectiveDisclosureProtected<E> {
     }
 }
 
-impl<'de, E: CustomClaims> serde::Deserialize<'de> for SelectiveDisclosureProtected<E> {
+impl<'de, E: CustomClaims> serde::Deserialize<'de> for SdProtected<E> {
     fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
         struct SdProtectedVisitor<E>(std::marker::PhantomData<E>);
         impl<'de, E: CustomClaims> serde::de::Visitor<'de> for SdProtectedVisitor<E> {
-            type Value = SelectiveDisclosureProtected<E>;
+            type Value = SdProtected<E>;
 
             fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
                 write!(formatter, "a sd-protected header")
@@ -47,7 +44,7 @@ impl<'de, E: CustomClaims> serde::Deserialize<'de> for SelectiveDisclosureProtec
             {
                 use serde::de::Error as _;
                 let mut found_mediatype = false;
-                let mut builder = SelectiveDisclosureProtectedBuilder::<E>::default();
+                let mut builder = SdProtectedBuilder::<E>::default();
                 let mut extra = AnyMap::default();
                 while let Some((k, v)) = map.next_entry::<MapKey, Value>()? {
                     match k {
@@ -61,7 +58,7 @@ impl<'de, E: CustomClaims> serde::Deserialize<'de> for SelectiveDisclosureProtec
                             }
                             CWT_CLAIM_SD_ALG => {
                                 builder.sd_alg(
-                                    v.deserialized::<SelectiveDisclosureHashAlg>()
+                                    v.deserialized::<SdHashAlg>()
                                         .map_err(|value| A::Error::custom(format!("sd_alg is not a correct enum value: {value:?}")))?,
                                 );
                             }
@@ -81,7 +78,7 @@ impl<'de, E: CustomClaims> serde::Deserialize<'de> for SelectiveDisclosureProtec
 
                 if !extra.is_empty() {
                     let custom_keys: E = extra.try_into().map_err(|_err| A::Error::custom("Cannot deserialize custom keys".to_string()))?;
-                    builder.claims(custom_keys);
+                    builder.extra(custom_keys);
                 }
 
                 builder.build().map_err(|e| A::Error::custom(format!("Cannot build sd-protected: {e}")))
@@ -92,10 +89,10 @@ impl<'de, E: CustomClaims> serde::Deserialize<'de> for SelectiveDisclosureProtec
     }
 }
 
-impl<E: CustomClaims> TryFrom<SelectiveDisclosureProtected<E>> for coset::Header {
+impl<E: CustomClaims> TryFrom<SdProtected<E>> for coset::Header {
     type Error = Box<dyn std::error::Error>;
 
-    fn try_from(sdp: SelectiveDisclosureProtected<E>) -> Result<Self, Self::Error> {
+    fn try_from(sdp: SdProtected<E>) -> Result<Self, Self::Error> {
         let mut builder = coset::HeaderBuilder::new();
 
         // map alg
@@ -109,7 +106,7 @@ impl<E: CustomClaims> TryFrom<SelectiveDisclosureProtected<E>> for coset::Header
         builder = builder.algorithm(alg);
 
         // map extra claims
-        if let Some(claims) = sdp.claims.map(Into::into) {
+        if let Some(claims) = sdp.extra.map(Into::into) {
             for (k, v) in claims {
                 builder = match k {
                     MapKey::Integer(i) => builder.value(i, v),
