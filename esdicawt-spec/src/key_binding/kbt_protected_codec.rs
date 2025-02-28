@@ -5,7 +5,7 @@ use serde::ser::SerializeMap;
 use super::KeyBindingTokenProtected;
 use crate::inlined_cbor::InlinedCbor;
 use crate::issuance::SelectiveDisclosureIssuedTagged;
-use crate::{key_binding::KeyBindingTokenProtectedBuilder, AnyMap, ClaimName, CustomClaims, MapKey, COSE_HEADER_KCWT, CWT_CLAIM_ALG, CWT_MEDIATYPE, MEDIATYPE_KB_CWT};
+use crate::{AnyMap, COSE_HEADER_KCWT, CWT_CLAIM_ALG, CWT_MEDIATYPE, ClaimName, CustomClaims, MEDIATYPE_KB_CWT, MapKey, key_binding::KeyBindingTokenProtectedBuilder};
 
 impl<IssuerProtectedClaims: CustomClaims, IssuerUnprotectedClaims: CustomClaims, IssuerPayloadClaims: CustomClaims, E: CustomClaims, DisclosedClaims: CustomClaims> serde::Serialize
     for KeyBindingTokenProtected<IssuerProtectedClaims, IssuerUnprotectedClaims, IssuerPayloadClaims, E, DisclosedClaims>
@@ -39,14 +39,8 @@ impl<'de, IssuerProtectedClaims: CustomClaims, IssuerUnprotectedClaims: CustomCl
         struct KbtProtectedVisitor<IssuerProtectedClaims, IssuerUnprotectedClaims, IssuerPayloadClaims, E, DisclosedClaims>(
             std::marker::PhantomData<(IssuerProtectedClaims, IssuerUnprotectedClaims, IssuerPayloadClaims, E, DisclosedClaims)>,
         );
-        impl<
-                'de,
-                IssuerProtectedClaims: CustomClaims,
-                IssuerUnprotectedClaims: CustomClaims,
-                IssuerPayloadClaims: CustomClaims,
-                E: CustomClaims,
-                DisclosedClaims: CustomClaims,
-            > serde::de::Visitor<'de> for KbtProtectedVisitor<IssuerProtectedClaims, IssuerUnprotectedClaims, IssuerPayloadClaims, E, DisclosedClaims>
+        impl<'de, IssuerProtectedClaims: CustomClaims, IssuerUnprotectedClaims: CustomClaims, IssuerPayloadClaims: CustomClaims, E: CustomClaims, DisclosedClaims: CustomClaims>
+            serde::de::Visitor<'de> for KbtProtectedVisitor<IssuerProtectedClaims, IssuerUnprotectedClaims, IssuerPayloadClaims, E, DisclosedClaims>
         {
             type Value = KeyBindingTokenProtected<IssuerProtectedClaims, IssuerUnprotectedClaims, IssuerPayloadClaims, E, DisclosedClaims>;
 

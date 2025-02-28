@@ -5,15 +5,14 @@ use super::{KeyBindingToken, KeyBindingTokenBuilder};
 use crate::CustomClaims;
 
 impl<
-        IssuerProtectedClaims: CustomClaims,
-        IssuerUnprotectedClaims: CustomClaims,
-        IssuerPayloadClaims: CustomClaims,
-        ProtectedClaims: CustomClaims,
-        UnprotectedClaims: CustomClaims,
-        PayloadClaims: CustomClaims,
-        DisclosedClaims: CustomClaims,
-    > serde::Serialize
-    for KeyBindingToken<IssuerProtectedClaims, IssuerUnprotectedClaims, IssuerPayloadClaims, ProtectedClaims, UnprotectedClaims, PayloadClaims, DisclosedClaims>
+    IssuerProtectedClaims: CustomClaims,
+    IssuerUnprotectedClaims: CustomClaims,
+    IssuerPayloadClaims: CustomClaims,
+    ProtectedClaims: CustomClaims,
+    UnprotectedClaims: CustomClaims,
+    PayloadClaims: CustomClaims,
+    DisclosedClaims: CustomClaims,
+> serde::Serialize for KeyBindingToken<IssuerProtectedClaims, IssuerUnprotectedClaims, IssuerPayloadClaims, ProtectedClaims, UnprotectedClaims, PayloadClaims, DisclosedClaims>
 {
     fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
         let mut seq = serializer.serialize_seq(Some(4))?;
@@ -26,15 +25,15 @@ impl<
 }
 
 impl<
-        'de,
-        IssuerProtectedClaims: CustomClaims,
-        IssuerUnprotectedClaims: CustomClaims,
-        IssuerPayloadClaims: CustomClaims,
-        ProtectedClaims: CustomClaims,
-        UnprotectedClaims: CustomClaims,
-        PayloadClaims: CustomClaims,
-        DisclosedClaims: CustomClaims,
-    > serde::Deserialize<'de>
+    'de,
+    IssuerProtectedClaims: CustomClaims,
+    IssuerUnprotectedClaims: CustomClaims,
+    IssuerPayloadClaims: CustomClaims,
+    ProtectedClaims: CustomClaims,
+    UnprotectedClaims: CustomClaims,
+    PayloadClaims: CustomClaims,
+    DisclosedClaims: CustomClaims,
+> serde::Deserialize<'de>
     for KeyBindingToken<IssuerProtectedClaims, IssuerUnprotectedClaims, IssuerPayloadClaims, ProtectedClaims, UnprotectedClaims, PayloadClaims, DisclosedClaims>
 {
     fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
@@ -59,15 +58,15 @@ impl<
         );
 
         impl<
-                'de,
-                IssuerProtectedClaims: CustomClaims,
-                IssuerUnprotectedClaims: CustomClaims,
-                IssuerPayloadClaims: CustomClaims,
-                ProtectedClaims: CustomClaims,
-                UnprotectedClaims: CustomClaims,
-                PayloadClaims: CustomClaims,
-                DisclosedClaims: CustomClaims,
-            > serde::de::Visitor<'de>
+            'de,
+            IssuerProtectedClaims: CustomClaims,
+            IssuerUnprotectedClaims: CustomClaims,
+            IssuerPayloadClaims: CustomClaims,
+            ProtectedClaims: CustomClaims,
+            UnprotectedClaims: CustomClaims,
+            PayloadClaims: CustomClaims,
+            DisclosedClaims: CustomClaims,
+        > serde::de::Visitor<'de>
             for KbtVisitor<IssuerProtectedClaims, IssuerUnprotectedClaims, IssuerPayloadClaims, ProtectedClaims, UnprotectedClaims, PayloadClaims, DisclosedClaims>
         {
             type Value = KeyBindingToken<IssuerProtectedClaims, IssuerUnprotectedClaims, IssuerPayloadClaims, ProtectedClaims, UnprotectedClaims, PayloadClaims, DisclosedClaims>;

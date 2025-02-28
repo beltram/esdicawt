@@ -1,7 +1,7 @@
 use crate::alg::Algorithm;
 use crate::blinded_claims::SaltedArray;
 use crate::issuance::SelectiveDisclosurePayload;
-use crate::{blinded_claims::Salted, inlined_cbor::InlinedCbor, issuance::SelectiveDisclosureIssuedTagged, CustomClaims, EsdicawtSpecResult};
+use crate::{CustomClaims, EsdicawtSpecResult, blinded_claims::Salted, inlined_cbor::InlinedCbor, issuance::SelectiveDisclosureIssuedTagged};
 
 mod kbt_codec;
 mod kbt_payload_codec;
@@ -67,14 +67,14 @@ pub struct KeyBindingToken<
 }
 
 impl<
-        IssuerProtectedClaims: CustomClaims,
-        IssuerUnprotectedClaims: CustomClaims,
-        IssuerPayloadClaims: CustomClaims,
-        ProtectedClaims: CustomClaims,
-        UnprotectedClaims: CustomClaims,
-        PayloadClaims: CustomClaims,
-        DisclosedClaims: CustomClaims,
-    > KeyBindingToken<IssuerProtectedClaims, IssuerUnprotectedClaims, IssuerPayloadClaims, ProtectedClaims, UnprotectedClaims, PayloadClaims, DisclosedClaims>
+    IssuerProtectedClaims: CustomClaims,
+    IssuerUnprotectedClaims: CustomClaims,
+    IssuerPayloadClaims: CustomClaims,
+    ProtectedClaims: CustomClaims,
+    UnprotectedClaims: CustomClaims,
+    PayloadClaims: CustomClaims,
+    DisclosedClaims: CustomClaims,
+> KeyBindingToken<IssuerProtectedClaims, IssuerUnprotectedClaims, IssuerPayloadClaims, ProtectedClaims, UnprotectedClaims, PayloadClaims, DisclosedClaims>
 {
     pub fn sd_cwt_payload(&mut self) -> EsdicawtSpecResult<&SelectiveDisclosurePayload<IssuerPayloadClaims>> {
         let protected = self.protected.to_value_mut()?;
@@ -97,14 +97,14 @@ pub type KeyBindingTokenTagged<IssuerProtectedClaims, IssuerUnprotectedClaims, I
     >;
 
 impl<
-        IssuerProtectedClaims: CustomClaims,
-        IssuerUnprotectedClaims: CustomClaims,
-        IssuerPayloadClaims: CustomClaims,
-        ProtectedClaims: CustomClaims,
-        UnprotectedClaims: CustomClaims,
-        PayloadClaims: CustomClaims,
-        DisclosedClaims: CustomClaims,
-    > KeyBindingToken<IssuerProtectedClaims, IssuerUnprotectedClaims, IssuerPayloadClaims, ProtectedClaims, UnprotectedClaims, PayloadClaims, DisclosedClaims>
+    IssuerProtectedClaims: CustomClaims,
+    IssuerUnprotectedClaims: CustomClaims,
+    IssuerPayloadClaims: CustomClaims,
+    ProtectedClaims: CustomClaims,
+    UnprotectedClaims: CustomClaims,
+    PayloadClaims: CustomClaims,
+    DisclosedClaims: CustomClaims,
+> KeyBindingToken<IssuerProtectedClaims, IssuerUnprotectedClaims, IssuerPayloadClaims, ProtectedClaims, UnprotectedClaims, PayloadClaims, DisclosedClaims>
 {
     /// Iterates through all the disclosed claims in this SD-KBT
     pub fn walk_disclosed_claims(&mut self) -> EsdicawtSpecResult<impl Iterator<Item = EsdicawtSpecResult<Salted<ciborium::Value>>> + '_> {
