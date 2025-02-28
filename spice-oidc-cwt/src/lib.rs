@@ -531,62 +531,16 @@ where
 mod tests {
     use std::time::Duration;
 
-    use super::ed25519::*;
-    use super::*;
+    use super::{ed25519::*, *};
     use esdicawt::{
         Holder, Issuer, Presentation,
         spec::{CwtAny, issuance::SelectiveDisclosureIssuedTagged},
     };
     use esdicawt_spec::NoClaims;
-
-    fn issue_oidc_claim(
-        issuer: &Ed25519Issuer,
-        claims: SpiceOidcClaims,
-        holder_pk: &ed25519_dalek::VerifyingKey,
-        subject: &str,
-    ) -> SelectiveDisclosureIssuedTagged<NoClaims, NoClaims, SpiceOidcClaims, SpiceOidcClaims> {
-        issuer
-            .issue_cwt(
-                &mut rand::thread_rng(),
-                esdicawt::IssueCwtParams {
-                    protected_claims: None,
-                    unprotected_claims: None,
-                    payload_claims: None,
-                    disclosable_claims: claims,
-                    subject,
-                    identifier: "",
-                    expiry: Duration::from_secs(90),
-                    leeway: Duration::from_secs(1),
-                    key_location: "",
-                    holder_confirmation_key: holder_pk.try_into().unwrap(),
-                },
-            )
-            .unwrap()
-    }
-
-    fn get_alice() -> SpiceOidcClaims {
-        SpiceOidcClaims {
-            name: Some("Alice".into()),
-            given_name: Some("Alice Smith".into()),
-            family_name: Some("Smith".into()),
-            nickname: Some("alice".into()),
-            preferred_username: Some("alice".into()),
-            ..Default::default()
-        }
-    }
-
-    fn _get_bob() -> SpiceOidcClaims {
-        SpiceOidcClaims {
-            name: Some("Bob".into()),
-            given_name: Some("Bob Martin".into()),
-            family_name: Some("Martin".into()),
-            nickname: Some("bob".into()),
-            preferred_username: Some("bob".into()),
-            ..Default::default()
-        }
-    }
+    wasm_bindgen_test::wasm_bindgen_test_configure!(run_in_browser);
 
     #[test]
+    #[wasm_bindgen_test::wasm_bindgen_test]
     fn can_issue_and_present_oidc_claim_token() {
         let issuer = Ed25519Issuer::new(ed25519_dalek::SigningKey::generate(&mut rand::thread_rng()));
         let alice_holder = Ed25519Holder::new(ed25519_dalek::SigningKey::generate(&mut rand::thread_rng()));
@@ -633,6 +587,53 @@ mod tests {
         assert_eq!(family_name, "Smith".to_string());
         assert_eq!(nickname, "alice".to_string());
         assert_eq!(preferred_username, "alice".to_string());
+    }
+
+    fn issue_oidc_claim(
+        issuer: &Ed25519Issuer,
+        claims: SpiceOidcClaims,
+        holder_pk: &ed25519_dalek::VerifyingKey,
+        subject: &str,
+    ) -> SelectiveDisclosureIssuedTagged<NoClaims, NoClaims, SpiceOidcClaims, SpiceOidcClaims> {
+        issuer
+            .issue_cwt(
+                &mut rand::thread_rng(),
+                esdicawt::IssueCwtParams {
+                    protected_claims: None,
+                    unprotected_claims: None,
+                    payload_claims: None,
+                    disclosable_claims: claims,
+                    subject,
+                    identifier: "",
+                    expiry: Duration::from_secs(90),
+                    leeway: Duration::from_secs(1),
+                    key_location: "",
+                    holder_confirmation_key: holder_pk.try_into().unwrap(),
+                },
+            )
+            .unwrap()
+    }
+
+    fn get_alice() -> SpiceOidcClaims {
+        SpiceOidcClaims {
+            name: Some("Alice".into()),
+            given_name: Some("Alice Smith".into()),
+            family_name: Some("Smith".into()),
+            nickname: Some("alice".into()),
+            preferred_username: Some("alice".into()),
+            ..Default::default()
+        }
+    }
+
+    fn _get_bob() -> SpiceOidcClaims {
+        SpiceOidcClaims {
+            name: Some("Bob".into()),
+            given_name: Some("Bob Martin".into()),
+            family_name: Some("Martin".into()),
+            nickname: Some("bob".into()),
+            preferred_username: Some("bob".into()),
+            ..Default::default()
+        }
     }
 }
 

@@ -3,9 +3,10 @@ use coset::AsCborValue;
 use serde::ser::SerializeMap;
 
 use super::KeyBindingTokenProtected;
-use crate::inlined_cbor::InlinedCbor;
-use crate::issuance::SelectiveDisclosureIssuedTagged;
-use crate::{AnyMap, COSE_HEADER_KCWT, CWT_CLAIM_ALG, CWT_MEDIATYPE, ClaimName, CustomClaims, MEDIATYPE_KB_CWT, MapKey, key_binding::KeyBindingTokenProtectedBuilder};
+use crate::{
+    AnyMap, COSE_HEADER_KCWT, CWT_CLAIM_ALG, CWT_MEDIATYPE, ClaimName, CustomClaims, MEDIATYPE_KB_CWT, MapKey, inlined_cbor::InlinedCbor,
+    issuance::SelectiveDisclosureIssuedTagged, key_binding::KeyBindingTokenProtectedBuilder,
+};
 
 impl<IssuerProtectedClaims: CustomClaims, IssuerUnprotectedClaims: CustomClaims, IssuerPayloadClaims: CustomClaims, E: CustomClaims, DisclosedClaims: CustomClaims> serde::Serialize
     for KeyBindingTokenProtected<IssuerProtectedClaims, IssuerUnprotectedClaims, IssuerPayloadClaims, E, DisclosedClaims>

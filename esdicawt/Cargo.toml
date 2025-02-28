@@ -20,6 +20,7 @@ cose-key-confirmation.workspace = true
 signature = { workspace = true, features = ["std", "digest"] }
 digest.workspace = true
 rand_core = { workspace = true, features = ["std"] }
+getrandom = { workspace = true, features = ["js"] }
 ciborium.workspace = true
 thiserror.workspace = true
 serde.workspace = true
@@ -38,10 +39,10 @@ js-sys = "0.3"
 esdicawt = { workspace = true, features = ["pem", "der", "test-utils"] }
 serde = { workspace = true, features = ["derive"] }
 cose-key-confirmation = { workspace = true, features = ["ed25519", "p256", "p384"] }
-
 rand_chacha.workspace = true
 sha2.workspace = true
 thiserror.workspace = true
+wasm-bindgen-test.workspace = true
 
 [lints]
 workspace = true

@@ -30,6 +30,7 @@ cose-key-confirmation = { workspace = true, features = ["thumbprint", "p256"] }
 hex.workspace = true
 esdicawt-spec.workspace = true
 sha2.workspace = true
+wasm-bindgen-test.workspace = true
 
 [lints]
 workspace = true

@@ -4,3 +4,6 @@ max_width = 180
 newline_style = "Unix"
 merge_derives = true
 edition = "2024"
+
+# nightly only
+#imports_granularity = "Crate"

@@ -1,12 +1,11 @@
 use ciborium::Value;
 use coset::iana::CwtClaimName;
-use esdicawt_spec::issuance::{SdCwtPayload, SelectiveDisclosureIssuedTagged};
-use esdicawt_spec::reexports::coset::iana::EnumI64;
 use esdicawt_spec::{
     ClaimName, CustomClaims,
     blinded_claims::{Salted, SaltedClaim},
+    issuance::{SdCwtPayload, SelectiveDisclosureIssuedTagged},
     key_binding::KeyBindingTokenTagged,
-    reexports::coset,
+    reexports::{coset, coset::iana::EnumI64},
 };
 use std::borrow::Cow;
 

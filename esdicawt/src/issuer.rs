@@ -7,13 +7,11 @@ use crate::{
 };
 use ciborium::Value;
 use cose_key_confirmation::KeyConfirmation;
-use esdicawt_spec::issuance::SdCwtPayloadBuilder;
 use esdicawt_spec::{
     AnyMap, COSE_SD_CLAIMS, CWT_CLAIM_SD_ALG, CWT_MEDIATYPE, ClaimName, CustomClaims, CwtAny, EsdicawtSpecError, MEDIATYPE_SD_CWT, SelectiveDisclosureHashAlg,
-    issuance::{SelectiveDisclosureIssuedTagged, SelectiveDisclosurePayloadBuilder},
-    reexports::{
-        coset::TaggedCborSerializable,
-        coset::{self},
+    issuance::{SdCwtPayloadBuilder, SelectiveDisclosureIssuedTagged, SelectiveDisclosurePayloadBuilder},
+    reexports::coset::{
+        TaggedCborSerializable, {self},
     },
 };
 use signature::{Keypair, Signer};
@@ -197,18 +195,20 @@ pub struct IssueCwtParams<'a, ProtectedClaims: CustomClaims, UnprotectedClaims: 
 }
 
 #[cfg(test)]
-pub mod tests {
+mod tests {
     use super::{claims::CustomTokenClaims, test_utils::Ed25519IssuerClaims};
     use crate::{
         Issuer,
-        spec::{blinded_claims::SaltedClaim, blinded_claims::SaltedElement},
+        spec::blinded_claims::{SaltedClaim, SaltedElement},
     };
     use ciborium::{Value, cbor};
     use digest::Digest as _;
     use esdicawt_spec::{AnyMap, ClaimName, CustomClaims, CwtAny, MapKey, NoClaims, blinded_claims::Salted, issuance::SelectiveDisclosureIssuedTagged};
     use rand_core::SeedableRng;
+    wasm_bindgen_test::wasm_bindgen_test_configure!(run_in_browser);
 
     #[test]
+    #[wasm_bindgen_test::wasm_bindgen_test]
     fn should_generate_sd_cwt() {
         let disclosable_claims = CustomTokenClaims { name: "Alice Smith".into() };
         let mut cwt = issue(disclosable_claims);
@@ -239,6 +239,7 @@ pub mod tests {
     }
 
     #[test]
+    #[wasm_bindgen_test::wasm_bindgen_test]
     fn should_issue_complex_types() {
         let verify_issuance = |value: Result<Value, ciborium::value::Error>, expected: (Option<ClaimName>, Result<Value, ciborium::value::Error>)| {
             let value = value.unwrap();
