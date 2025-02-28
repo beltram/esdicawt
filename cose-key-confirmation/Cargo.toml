@@ -1,8 +1,8 @@
 [package]
 name = "cose-key-confirmation"
-edition = "2021"
+edition.workspace = true
 version.workspace = true
-description.workspace = true
+description = "CoseKey Prof of Possession (used in KeyConfirmation)"
 authors.workspace = true
 
 [features]
@@ -13,7 +13,7 @@ p384 = ["dep:p384", "cose-key/p384"]
 thumbprint = ["dep:cose-key-thumbprint", "dep:sha2"]
 
 [dependencies]
-cose-key = { path = "../cose-key" }
+cose-key.workspace = true
 serde.workspace = true
 serde_bytes.workspace = true
 thiserror.workspace = true
@@ -22,13 +22,13 @@ ciborium.workspace = true
 ed25519-dalek = { workspace = true, optional = true }
 p256 = { workspace = true, optional = true }
 p384 = { workspace = true, optional = true }
-cose-key-thumbprint = { path = "../cose-key-thumbprint", optional = true }
+cose-key-thumbprint = { workspace = true, optional = true }
 sha2 = { workspace = true, optional = true }
 
 [dev-dependencies]
-cose-key-confirmation = { path = ".", features = ["thumbprint", "p256"] }
+cose-key-confirmation = { workspace = true, features = ["thumbprint", "p256"] }
 hex.workspace = true
-esdicawt-spec = { path = "../esdicawt-spec" }
+esdicawt-spec.workspace = true
 sha2.workspace = true
 
 [lints]

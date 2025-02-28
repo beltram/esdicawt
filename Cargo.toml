@@ -5,35 +5,52 @@ resolver = "2"
 [workspace.package]
 version = "0.1.0"
 edition = "2021"
-description = "SD-CWT"
 authors = []
 
 [workspace.lints.rust]
 unsafe_code = "forbid"
 
 [workspace.dependencies]
+# own crates
+esdicawt = { path = "esdicawt" }
+esdicawt-spec = { path = "esdicawt-spec" }
+cose-key = { path = "cose-key" }
+cose-key-confirmation = { path = "cose-key-confirmation" }
+cose-key-set = { path = "cose-key-set" }
+cose-key-thumbprint = { path = "cose-key-thumbprint" }
+
+# CBOR
 coset = "0.3"
 ciborium = "0.2"
 dcbor = "0.16"
 
+# crypto
 signature = "2.2"
 ed25519-dalek = "2.1"
 p256 = "0.13"
 p384 = "0.13"
-
 rand_chacha = "0.3"
 rand = "0.8"
 subtle = "2.6"
-
 digest = "0.10"
 sha2 = "0.10"
+pkcs8 = "0.10"
+rand_core = "0.6"
 
+# codec
 serde = "1.0"
 serde_tuple = "1.0"
 serde_bytes = "0.11"
 thiserror = "2.0"
-url = "2.5"
 hex = "0.4"
+serde_json = "1.0"
+serde_repr = "0.1"
+
+# misc
+url = "2.5"
+time = "0.3"
+tailcall = "1.0"
+derive_builder = "0.20"
 
 [workspace.lints.clippy]
 # Enforced Groups
