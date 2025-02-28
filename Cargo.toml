@@ -55,6 +55,12 @@ tailcall = "1.0"
 derive_builder = "0.20"
 wasm-bindgen-test = "0.3"
 
+[patch.crates-io.ciborium]
+git = "https://github.com/beltram/ciborium"
+#branch = "simple-value"
+rev = "ce44d46b"
+#path = "../ciborium/ciborium"
+
 [workspace.lints.clippy]
 # Enforced Groups
 style = { level = "warn", priority = -1 }

@@ -218,15 +218,9 @@ impl SaltedArray {
     }
 
     /// Adds the item to the array and return a reference to it to hash it later
-    pub fn push<T: CwtAny>(&mut self, salted: impl Into<Salted<T>>) -> Result<&Value, ciborium::value::Error> {
-        self.0.push(Value::serialized(&salted.into())?);
-        // SAFETY: we just inserted the item in the array so '.last()' cannot fail
-        Ok(self.0.last().unwrap())
-    }
-
-    /// Adds the item to the array and return a reference to it to hash it later
     pub fn push_ref<'a, T: CwtAny + 'a>(&'a mut self, salted: impl Into<SaltedRef<'a, T>>) -> Result<&'a Value, ciborium::value::Error> {
-        self.0.push(Value::serialized(&salted.into())?);
+        let salted = Value::serialized(&salted.into())?;
+        self.0.push(salted);
         // SAFETY: we just inserted the item in the array so '.last()' cannot fail
         Ok(self.0.last().unwrap())
     }

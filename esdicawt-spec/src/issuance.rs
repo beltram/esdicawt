@@ -34,10 +34,10 @@ pub struct SdUnprotected<Extra: CustomClaims> {
 #[builder(pattern = "mutable", setter(into, strip_option))]
 #[builder(derive(Debug))]
 pub struct SdPayload<Extra: CustomClaims> {
-    pub inner: SdInnerPayload<Extra>,
     pub cnf: cose_key_confirmation::KeyConfirmation,
     #[builder(default)]
     pub redacted_claim_keys: Option<RedactedClaimKeys>,
+    pub inner: SdInnerPayload<Extra>,
 }
 
 #[derive(Debug, Clone, PartialEq, derive_builder::Builder)]

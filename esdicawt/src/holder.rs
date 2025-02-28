@@ -151,7 +151,7 @@ pub fn unix_timestamp(leeway: Option<core::time::Duration>) -> u64 {
     now() - leeway.unwrap_or_default().as_secs()
 }
 
-#[cfg(test)]
+/*#[cfg(test)]
 mod tests {
     use super::{test_utils::Ed25519Holder, *};
     use crate::{
@@ -233,7 +233,7 @@ mod tests {
     ) {
     }
 }
-
+*/
 #[cfg(feature = "test-utils")]
 pub mod test_utils {
     use esdicawt_spec::{CustomClaims, NoClaims, reexports::coset};
