@@ -23,7 +23,6 @@ pub const REDACTED_CLAIM_ELEMENT_TAG: u64 = 60;
 pub const CWT_CLAIM_ALG: i64 = 1;
 pub const CWT_CLAIM_SD_ALG: i64 = 12;
 pub const CWT_CLAIM_ISSUER_SD_CWT: i64 = 11;
-pub const CWT_CLAIM_REDACTED_KEYS: i64 = -65536;
 pub const CWT_CLAIM_REDACTED_ELEMENT: i64 = 41;
 pub const CWT_CLAIM_VCT: i64 = 42;
 pub const CWT_CLAIM_ISSUER: i64 = coset::iana::CwtClaimName::Iss as i64;
@@ -34,6 +33,10 @@ pub const CWT_CLAIM_NOT_BEFORE: i64 = coset::iana::CwtClaimName::Nbf as i64;
 pub const CWT_CLAIM_ISSUED_AT: i64 = coset::iana::CwtClaimName::Iat as i64;
 pub const CWT_CLAIM_KEY_CONFIRMATION_MAP: i64 = coset::iana::CwtClaimName::Cnf as i64;
 pub const CWT_CLAIM_CLIENT_NONCE: i64 = coset::iana::CwtClaimName::CNonce as i64;
+
+// FIXME: this is not in the draft yet
+// Use as a SimpleType. It works thanks to an unmerged fork of ciborium
+pub const CWT_LABEL_REDACTED_KEYS: u8 = 59;
 
 // TODO: register it in coset IANA registry
 pub const COSE_HEADER_KCWT: i64 = 13;
@@ -46,8 +49,6 @@ pub const MEDIATYPE_KB_CWT: &str = "application/kb+cwt";
 pub enum EsdicawtSpecError {
     #[error("The following claim is unknown: {0}")]
     UnknownStandardClaim(i64),
-    #[error("Only String, integers (or tagged variants of those 2) are allowed in the root of a CWT payload")]
-    InvalidCwtKeyType,
     #[error(transparent)]
     InvalidCwtIntKey(#[from] std::num::TryFromIntError),
     #[error(transparent)]
@@ -96,7 +97,6 @@ pub enum SelectiveDisclosureStandardClaim {
     NotBeforeClaim = CWT_CLAIM_NOT_BEFORE,
     IssuedAtClaim = CWT_CLAIM_ISSUED_AT,
     KeyConfirmationClaim = CWT_CLAIM_KEY_CONFIRMATION_MAP,
-    RedactedValuesClaim = CWT_CLAIM_REDACTED_KEYS,
 }
 
 impl TryFrom<i64> for SelectiveDisclosureStandardClaim {
@@ -110,7 +110,6 @@ impl TryFrom<i64> for SelectiveDisclosureStandardClaim {
             CWT_CLAIM_NOT_BEFORE => Self::NotBeforeClaim,
             CWT_CLAIM_ISSUED_AT => Self::IssuedAtClaim,
             CWT_CLAIM_KEY_CONFIRMATION_MAP => Self::KeyConfirmationClaim,
-            CWT_CLAIM_REDACTED_KEYS => Self::RedactedValuesClaim,
             value => return Err(EsdicawtSpecError::UnknownStandardClaim(value)),
         })
     }
@@ -141,13 +140,46 @@ impl TryFrom<i64> for KbtStandardClaim {
     }
 }
 
-#[derive(Debug, Clone, Hash, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
-#[serde(untagged)]
+#[derive(Debug, Clone, Hash, PartialEq, Eq)]
 pub enum ClaimName {
     Integer(i64),
     Text(String),
     TaggedInteger(u64, i64),
     TaggedText(u64, String),
+    SimpleValue(u8),
+}
+
+impl serde::Serialize for ClaimName {
+    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        let value = match self {
+            Self::Integer(i) => (*i).into(),
+            Self::Text(s) => s.as_str().into(),
+            Self::TaggedInteger(t, i) => Value::Tag(*t, Box::new((*i).into())),
+            Self::TaggedText(t, s) => Value::Tag(*t, Box::new(s.as_str().into())),
+            Self::SimpleValue(st) => Value::Simple(*st),
+        };
+        Value::serialize(&value, serializer)
+    }
+}
+
+impl<'de> serde::Deserialize<'de> for ClaimName {
+    fn deserialize<D: serde::de::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        use serde::de::Error as _;
+
+        // Only rely on this if the claim key is in the top-level CWT payload. If the Mapping is nested, no such key restriction apply
+        let value = <Value as serde::Deserialize>::deserialize(deserializer)?;
+        Ok(match value {
+            Value::Simple(i) => Self::SimpleValue(i),
+            Value::Integer(i) => Self::Integer(i.try_into().map_err(D::Error::custom)?),
+            Value::Text(s) => Self::Text(s),
+            Value::Tag(tag, v) => match *v {
+                Value::Integer(i) => Self::TaggedInteger(tag, i.try_into().map_err(D::Error::custom)?),
+                Value::Text(s) => Self::TaggedText(tag, s),
+                _ => return Err(D::Error::custom("Only String, integers in tags at the root of a CWT payload")),
+            },
+            _ => return Err(D::Error::custom("Only String, integers are allowed in the root of a CWT payload")),
+        })
+    }
 }
 
 impl From<i64> for ClaimName {
@@ -159,36 +191,6 @@ impl From<i64> for ClaimName {
 impl From<&str> for ClaimName {
     fn from(value: &str) -> Self {
         Self::Text(value.into())
-    }
-}
-
-/// Only rely on this if the claim key is in the top-level CWT payload. If the Mapping is nested, no
-/// such key restriction apply
-impl TryFrom<Value> for ClaimName {
-    type Error = EsdicawtSpecError;
-
-    fn try_from(v: Value) -> Result<Self, Self::Error> {
-        Ok(match v {
-            Value::Integer(i) => Self::Integer(i.try_into()?),
-            Value::Text(s) => Self::Text(s),
-            Value::Tag(tag, v) => match *v {
-                Value::Integer(i) => Self::TaggedInteger(tag, i.try_into()?),
-                Value::Text(s) => Self::TaggedText(tag, s),
-                _ => return Err(Self::Error::InvalidCwtKeyType),
-            },
-            _ => return Err(Self::Error::InvalidCwtKeyType),
-        })
-    }
-}
-
-impl From<ClaimName> for Value {
-    fn from(name: ClaimName) -> Self {
-        match name {
-            ClaimName::Integer(i) => Self::Integer(i.into()),
-            ClaimName::Text(s) => Self::Text(s),
-            ClaimName::TaggedText(tag, s) => Self::Tag(tag, Box::new(s.into())),
-            ClaimName::TaggedInteger(tag, i) => Self::Tag(tag, Box::new(i.into())),
-        }
     }
 }
 
