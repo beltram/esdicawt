@@ -18,6 +18,7 @@ p256 = { workspace = true, optional = true }
 p384 = { workspace = true, optional = true }
 subtle.workspace = true
 serde_bytes.workspace = true
+getrandom = { workspace = true, features = ["js"] }
 
 [dev-dependencies]
 ciborium.workspace = true
@@ -27,6 +28,7 @@ p256.workspace = true
 p384.workspace = true
 rand.workspace = true
 cose-key = { workspace = true, features = ["p256", "p384", "ed25519"] }
+wasm-bindgen-test.workspace = true
 
 [features]
 default = []

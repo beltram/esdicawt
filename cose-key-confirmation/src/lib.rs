@@ -35,8 +35,7 @@ impl KeyConfirmation {
 
 impl serde::Serialize for KeyConfirmation {
     fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
-        use serde::ser::Error as _;
-        use serde::ser::SerializeMap as _;
+        use serde::ser::{Error as _, SerializeMap as _};
 
         let mut map = serializer.serialize_map(Some(1))?;
         // see https://www.iana.org/assignments/cwt/cwt.xhtml#confirmation-methods
@@ -229,9 +228,11 @@ mod tests {
     use cose_key_thumbprint::CoseKeyThumbprint;
     use coset::iana;
     use esdicawt_spec::CwtAny as _;
+    wasm_bindgen_test::wasm_bindgen_test_configure!(run_in_browser);
 
     // see https://www.rfc-editor.org/rfc/rfc8747#name-representation-of-an-asymme
     #[test]
+    #[wasm_bindgen_test::wasm_bindgen_test]
     fn should_support_cose_key() {
         let (cose_key, x, y) = {
             let x = hex::decode("d7cc072de2205bdc1537a543d53c60a6acb62eccd890c7fa27c9e354089bbe13").unwrap();
@@ -261,6 +262,7 @@ mod tests {
 
     // see https://datatracker.ietf.org/doc/html/rfc9679#section-5.6-4
     #[test]
+    #[wasm_bindgen_test::wasm_bindgen_test]
     fn should_support_thumbprint() {
         let (cose_key, expected_thumbprint) = {
             let x = hex::decode("65eda5a12577c2bae829437fe338701a10aaa375e1bb5b5de108de439c08551d").unwrap();

@@ -52,6 +52,32 @@ jobs:
       - run: cargo test --all-features
       - run: cargo test --doc
 
+
+  wasm-test:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        crate_paths: ["cose-key", "cose-key-confirmation", "cose-key-set", "cose-key-thumbprint", "esdicawt", "esdicawt-spec", "spice-oidc-cwt"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions-rust-lang/setup-rust-toolchain@v1
+        with:
+            target: wasm32-unknown-unknown
+            rustflags: ''
+      - uses: browser-actions/setup-chrome@latest
+        id: setup-chrome
+        with:
+            chrome-version: stable
+      - run: |
+            echo "CHROME_PATH=${{ steps.setup-chrome.outputs.chrome-path }}" >> $GITHUB_ENV
+      - name: Install wasm-pack
+        uses: taiki-e/install-action@v2
+        with:
+            tool: wasm-pack
+      - name: Run tests (wasm)
+        run: wasm-pack test --headless --chrome ./${{ matrix.crate_paths }}
+
+
   hack:
     runs-on: ubuntu-latest
     steps:

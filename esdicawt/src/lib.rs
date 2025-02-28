@@ -1,23 +1,21 @@
 #![doc = include_str!("../../README.md")]
 
-pub use {
-    cose_key_confirmation::{EncryptedCoseKey, KeyConfirmation, error::CoseKeyConfirmationError},
-    esdicawt_spec as spec,
-    holder::{
-        Holder,
-        error::{SdCwtHolderError, SdCwtHolderResult},
-        params::{CwtPresentationParams, Presentation},
-    },
-    issuer::{
-        IssueCwtParams, Issuer,
-        error::{SdCwtIssuerError, SdCwtIssuerResult},
-    },
-    read::{EsdicawtReadError, EsdicawtReadResult, SdCwtRead},
-    signature::Keypair,
-    verifier::{
-        Verifier, VerifyCwtParams,
-        error::{SdCwtVerifierError, SdCwtVerifierResult},
-    },
+pub use cose_key_confirmation::{EncryptedCoseKey, KeyConfirmation, error::CoseKeyConfirmationError};
+pub use esdicawt_spec as spec;
+pub use holder::{
+    Holder,
+    error::{SdCwtHolderError, SdCwtHolderResult},
+    params::{CwtPresentationParams, Presentation},
+};
+pub use issuer::{
+    IssueCwtParams, Issuer,
+    error::{SdCwtIssuerError, SdCwtIssuerResult},
+};
+pub use read::{EsdicawtReadError, EsdicawtReadResult, SdCwtRead};
+pub use signature::Keypair;
+pub use verifier::{
+    Verifier, VerifyCwtParams,
+    error::{SdCwtVerifierError, SdCwtVerifierResult},
 };
 
 mod holder;
@@ -27,8 +25,7 @@ mod verifier;
 
 #[cfg(feature = "test-utils")]
 pub mod test_utils {
-    pub use crate::holder::test_utils::*;
-    pub use crate::issuer::test_utils::*;
+    pub use crate::{holder::test_utils::*, issuer::test_utils::*};
 }
 
 #[cfg(all(target_arch = "wasm32", target_os = "unknown"))]

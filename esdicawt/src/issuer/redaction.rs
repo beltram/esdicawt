@@ -153,9 +153,11 @@ mod tests {
     };
     use rand_chacha::rand_core::SeedableRng as _;
     use sha2::Digest as _;
+    wasm_bindgen_test::wasm_bindgen_test_configure!(run_in_browser);
 
     #[test]
     #[allow(clippy::cognitive_complexity)]
+    #[wasm_bindgen_test::wasm_bindgen_test]
     fn should_redact_primitive_claim_in_mapping() {
         let payload = cbor!({
             "a" => 1,
@@ -205,6 +207,7 @@ mod tests {
     }
 
     #[test]
+    #[wasm_bindgen_test::wasm_bindgen_test]
     fn should_redact_array() {
         let payload = cbor!({ 1 => ["a", "b"] });
         let (payload, [d1, d2, d3]) = _redact(payload);
@@ -234,6 +237,7 @@ mod tests {
     }
 
     #[test]
+    #[wasm_bindgen_test::wasm_bindgen_test]
     fn should_redact_array_nested() {
         let payload = cbor!({ 1 => [["a", "b"]] });
         let (payload, [d1, d2, d3, d4]) = _redact(payload);
@@ -267,6 +271,7 @@ mod tests {
     }
 
     #[test]
+    #[wasm_bindgen_test::wasm_bindgen_test]
     fn should_redact_nested_mapping() {
         let payload = cbor!({ 0 => { 1 => "a" } });
         let (payload, [d1, d0]) = _redact(payload);
@@ -294,6 +299,7 @@ mod tests {
     }
 
     #[test]
+    #[wasm_bindgen_test::wasm_bindgen_test]
     fn should_redact_mapping_nested_in_array() {
         let payload = cbor!({ 0 => [{ 1 => 2 }] });
         let (payload, [d2, d1, d0]) = _redact(payload);

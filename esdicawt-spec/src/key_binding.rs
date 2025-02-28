@@ -1,7 +1,10 @@
-use crate::alg::Algorithm;
-use crate::blinded_claims::SaltedArray;
-use crate::issuance::SelectiveDisclosurePayload;
-use crate::{CustomClaims, EsdicawtSpecResult, blinded_claims::Salted, inlined_cbor::InlinedCbor, issuance::SelectiveDisclosureIssuedTagged};
+use crate::{
+    CustomClaims, EsdicawtSpecResult,
+    alg::Algorithm,
+    blinded_claims::{Salted, SaltedArray},
+    inlined_cbor::InlinedCbor,
+    issuance::{SelectiveDisclosureIssuedTagged, SelectiveDisclosurePayload},
+};
 
 mod kbt_codec;
 mod kbt_payload_codec;
