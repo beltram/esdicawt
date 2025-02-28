@@ -18,6 +18,7 @@ cose-key = { path = "cose-key" }
 cose-key-confirmation = { path = "cose-key-confirmation" }
 cose-key-set = { path = "cose-key-set" }
 cose-key-thumbprint = { path = "cose-key-thumbprint" }
+spice-oidc-cwt = { path = "spice-oidc-cwt" }
 
 # CBOR
 coset = "0.3"
