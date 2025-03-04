@@ -75,13 +75,13 @@ pub trait Holder {
         params: CwtPresentationParams<Self::KbtProtectedClaims, Self::KbtUnprotectedClaims, Self::KbtPayloadClaims>,
     ) -> Result<
         KbtCwtTagged<
+            Self::DisclosedClaims,
             Self::IssuerProtectedClaims,
             Self::IssuerUnprotectedClaims,
             Self::IssuerPayloadClaims,
             Self::KbtProtectedClaims,
             Self::KbtUnprotectedClaims,
             Self::KbtPayloadClaims,
-            Self::DisclosedClaims,
         >,
         SdCwtHolderError<Self::Error>,
     > {
@@ -105,7 +105,7 @@ pub trait Holder {
 
         // --- protected ---
         let alg = coset::Algorithm::Assigned(self.cwt_algorithm());
-        let protected = KbtProtected::<Self::IssuerProtectedClaims, Self::IssuerUnprotectedClaims, Self::IssuerPayloadClaims, Self::KbtProtectedClaims, Self::DisclosedClaims> {
+        let protected = KbtProtected::<Self::DisclosedClaims, Self::IssuerProtectedClaims, Self::IssuerUnprotectedClaims, Self::IssuerPayloadClaims, Self::KbtProtectedClaims> {
             alg: alg.into(),
             kcwt: sd_cwt_issued.into(),
             extra: params.extra_kbt_protected,

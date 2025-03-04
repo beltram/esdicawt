@@ -72,8 +72,8 @@ pub trait Issuer {
     fn issue_cwt(
         &self,
         csprng: &mut dyn rand_core::CryptoRngCore,
-        params: IssueCwtParams<'_, Self::ProtectedClaims, Self::UnprotectedClaims, Self::PayloadClaims, Self::DisclosableClaims>,
-    ) -> Result<SdCwtIssuedTagged<Self::ProtectedClaims, Self::UnprotectedClaims, Self::PayloadClaims, Self::DisclosableClaims>, SdCwtIssuerError<Self::Error>> {
+        params: IssueCwtParams<'_, Self::DisclosableClaims, Self::ProtectedClaims, Self::UnprotectedClaims, Self::PayloadClaims>,
+    ) -> Result<SdCwtIssuedTagged<Self::DisclosableClaims, Self::ProtectedClaims, Self::UnprotectedClaims, Self::PayloadClaims>, SdCwtIssuerError<Self::Error>> {
         let alg = self.cwt_algorithm();
         let issuer = params.identifier;
         let key_location = params.key_location;
@@ -175,7 +175,7 @@ pub trait Issuer {
     }
 }
 
-pub struct IssueCwtParams<'a, ProtectedClaims: CustomClaims, UnprotectedClaims: CustomClaims, PayloadClaims: CustomClaims, DisclosableClaims: CustomClaims> {
+pub struct IssueCwtParams<'a, DisclosableClaims: CustomClaims, ProtectedClaims: CustomClaims, UnprotectedClaims: CustomClaims, PayloadClaims: CustomClaims> {
     /// Extra claims in the protected header of the sd-cwt
     pub protected_claims: Option<ProtectedClaims>,
     /// Extra claims in the unprotected header of the sd-cwt
@@ -196,9 +196,15 @@ pub struct IssueCwtParams<'a, ProtectedClaims: CustomClaims, UnprotectedClaims: 
 
 #[cfg(test)]
 mod tests {
-    use super::{claims::CustomTokenClaims, test_utils::Ed25519IssuerClaims};
-    use crate::{Issuer, spec::blinded_claims::SaltedClaim};
-    use ciborium::cbor;
+    use super::{AnyMap, claims::CustomTokenClaims, test_utils::Ed25519IssuerClaims};
+    use crate::{
+        Issuer,
+        spec::{
+            MapKey,
+            blinded_claims::{SaltedClaim, SaltedElement},
+        },
+    };
+    use ciborium::{Value, cbor};
     use digest::Digest as _;
     use esdicawt_spec::{ClaimName, CustomClaims, CwtAny, NoClaims, blinded_claims::Salted, issuance::SdCwtIssuedTagged};
     use rand_core::SeedableRng;
@@ -236,7 +242,7 @@ mod tests {
         assert_eq!(digest, rck_name.to_vec());
     }
 
-    /*#[test]
+    #[test]
     #[wasm_bindgen_test::wasm_bindgen_test]
     fn should_issue_complex_types() {
         let verify_issuance = |value: Result<Value, ciborium::value::Error>, expected: (Option<ClaimName>, Result<Value, ciborium::value::Error>)| {
@@ -277,9 +283,9 @@ mod tests {
 
         // array in mapping
         verify_issuance(cbor!({ "a" => [0] }), (None, cbor!(0)));
-    }*/
+    }
 
-    fn issue<D: CustomClaims>(disclosable_claims: D) -> SdCwtIssuedTagged<NoClaims, NoClaims, NoClaims, D> {
+    fn issue<D: CustomClaims>(disclosable_claims: D) -> SdCwtIssuedTagged<D, NoClaims, NoClaims, NoClaims> {
         let mut csprng = rand_chacha::ChaCha20Rng::from_entropy();
 
         let holder_signing_key = ed25519_dalek::SigningKey::generate(&mut csprng);
