@@ -276,7 +276,7 @@ pub struct VerifyCwtParams {
     pub leeway: i64,
 }
 
-/*#[cfg(test)]
+#[cfg(test)]
 mod tests {
     use crate::{
         CwtPresentationParams, IssueCwtParams, Issuer, Presentation, Verifier, VerifyCwtParams,
@@ -286,7 +286,7 @@ mod tests {
         verifier::test_utils::HybridVerifier,
     };
     use ciborium::{Value, cbor};
-    use esdicawt_spec::{AnyMap, CustomClaims, CwtAny, MapKey, NoClaims, key_binding::KbtCwtTagged, verified::KbtCwtVerified};
+    use esdicawt_spec::{AnyMap, ClaimName, CustomClaims, CwtAny, MapKey, NoClaims, key_binding::KbtCwtTagged, verified::KbtCwtVerified};
     use rand_core::SeedableRng as _;
     wasm_bindgen_test::wasm_bindgen_test_configure!(run_in_browser);
 
@@ -309,7 +309,8 @@ mod tests {
             disclosable_claims.insert(MapKey::Text("___claim".into()), value.clone());
             let verified = verify(disclosable_claims);
 
-            let claim = verified.claimset.get(&cbor!("___claim").unwrap().try_into().unwrap()).unwrap();
+            let label = ClaimName::Text("___claim".to_string());
+            let claim = verified.claimset.get(&label).unwrap();
             assert_eq!(claim, &value);
         };
 
@@ -411,7 +412,7 @@ mod tests {
         >,
     ) {
     }
-}*/
+}
 
 #[cfg(feature = "test-utils")]
 pub mod test_utils {
