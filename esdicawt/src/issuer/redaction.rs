@@ -142,18 +142,17 @@ where
     E: std::error::Error + Send + Sync,
 {
     let mut salt = Salt::empty();
-    // TODO: reseed the rng here, see https://ietf-wg-spice.github.io/draft-ietf-spice-sd-cwt/draft-ietf-spice-sd-cwt.html#section-15.6
     csprng.try_fill_bytes(&mut *salt)?;
     Ok(salt)
 }
 
-/*#[cfg(test)]
+#[cfg(test)]
 mod tests {
     use super::*;
     use ciborium::cbor;
     use esdicawt_spec::{
-        blinded_claims::{Decoy, SaltedClaim, SaltedElement},
         REDACTED_CLAIM_ELEMENT_TAG,
+        blinded_claims::{Decoy, SaltedClaim, SaltedElement},
     };
     use rand_chacha::rand_core::SeedableRng as _;
     use sha2::Digest as _;
@@ -385,4 +384,4 @@ mod tests {
             write!(f, "{self:?}")
         }
     }
-}*/
+}
