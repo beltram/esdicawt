@@ -5,7 +5,7 @@ use crate::{AnyMap, COSE_SD_CLAIMS, CustomClaims, MapKey};
 
 use super::SdUnprotected;
 
-impl<E: CustomClaims> serde::Serialize for SdUnprotected<E> {
+impl<Extra: CustomClaims> serde::Serialize for SdUnprotected<Extra> {
     fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
         let mut extra: Option<AnyMap> = self.extra.clone().map(|extra| extra.into());
         let extra_len = extra.as_ref().map(|extra| extra.len()).unwrap_or_default();
@@ -21,12 +21,12 @@ impl<E: CustomClaims> serde::Serialize for SdUnprotected<E> {
     }
 }
 
-impl<'de, E: CustomClaims> serde::Deserialize<'de> for SdUnprotected<E> {
+impl<'de, Extra: CustomClaims> serde::Deserialize<'de> for SdUnprotected<Extra> {
     fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-        struct UnprotectedIssuedVisitor<E: CustomClaims>(std::marker::PhantomData<E>);
+        struct UnprotectedIssuedVisitor<Extra: CustomClaims>(std::marker::PhantomData<Extra>);
 
-        impl<'de, E: CustomClaims> serde::de::Visitor<'de> for UnprotectedIssuedVisitor<E> {
-            type Value = SdUnprotected<E>;
+        impl<'de, Extra: CustomClaims> serde::de::Visitor<'de> for UnprotectedIssuedVisitor<Extra> {
+            type Value = SdUnprotected<Extra>;
 
             fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
                 write!(formatter, "an unprotected-issued header")
@@ -62,6 +62,6 @@ impl<'de, E: CustomClaims> serde::Deserialize<'de> for SdUnprotected<E> {
             }
         }
 
-        deserializer.deserialize_map(UnprotectedIssuedVisitor::<E>(Default::default()))
+        deserializer.deserialize_map(UnprotectedIssuedVisitor::<Extra>(Default::default()))
     }
 }
