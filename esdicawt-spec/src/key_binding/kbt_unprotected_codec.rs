@@ -1,7 +1,7 @@
 use crate::{CustomClaims, MapKey, key_binding::KbtUnprotected};
 
-impl<E: CustomClaims> From<KbtUnprotected<E>> for coset::Header {
-    fn from(kbtu: KbtUnprotected<E>) -> Self {
+impl<Extra: CustomClaims> From<KbtUnprotected<Extra>> for coset::Header {
+    fn from(kbtu: KbtUnprotected<Extra>) -> Self {
         let mut builder = coset::HeaderBuilder::new();
 
         // map extra claims

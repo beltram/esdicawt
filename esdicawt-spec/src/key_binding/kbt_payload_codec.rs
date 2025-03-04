@@ -5,7 +5,7 @@ use crate::{
 };
 use serde::ser::SerializeMap;
 
-impl<E: CustomClaims> serde::Serialize for KbtPayload<E> {
+impl<Extra: CustomClaims> serde::Serialize for KbtPayload<Extra> {
     fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
         let mut map = serializer.serialize_map(None)?;
 
@@ -36,12 +36,12 @@ impl<E: CustomClaims> serde::Serialize for KbtPayload<E> {
     }
 }
 
-impl<'de, E: CustomClaims> serde::Deserialize<'de> for KbtPayload<E> {
+impl<'de, Extra: CustomClaims> serde::Deserialize<'de> for KbtPayload<Extra> {
     fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-        struct SDPayloadVisitor<E: CustomClaims>(std::marker::PhantomData<E>);
+        struct SDPayloadVisitor<Extra: CustomClaims>(std::marker::PhantomData<Extra>);
 
-        impl<'de, E: CustomClaims> serde::de::Visitor<'de> for SDPayloadVisitor<E> {
-            type Value = KbtPayload<E>;
+        impl<'de, Extra: CustomClaims> serde::de::Visitor<'de> for SDPayloadVisitor<Extra> {
+            type Value = KbtPayload<Extra>;
 
             fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
                 write!(formatter, "a kbt-payload")
@@ -55,7 +55,7 @@ impl<'de, E: CustomClaims> serde::Deserialize<'de> for KbtPayload<E> {
                 use serde::de::Error as _;
 
                 let mut extra = AnyMap::default();
-                let mut sd_builder = KbtPayloadBuilder::<E>::default();
+                let mut sd_builder = KbtPayloadBuilder::<Extra>::default();
 
                 while let Some((k, v)) = map.next_entry::<MapKey, Value>()? {
                     match k {
@@ -96,7 +96,7 @@ impl<'de, E: CustomClaims> serde::Deserialize<'de> for KbtPayload<E> {
                 }
 
                 if !extra.is_empty() {
-                    let custom_keys: E = extra.try_into().map_err(|_err| A::Error::custom("Cannot deserialize custom keys".to_string()))?;
+                    let custom_keys: Extra = extra.try_into().map_err(|_err| A::Error::custom("Cannot deserialize custom keys".to_string()))?;
                     sd_builder.extra(custom_keys);
                 }
 
