@@ -67,8 +67,8 @@ pub enum EsdicawtReadError {
     CustomError(#[from] Box<dyn std::error::Error + Send + Sync>),
 }
 
-impl<IssuerProtectedClaims: CustomClaims, IssuerUnprotectedClaims: CustomClaims, IssuerPayloadClaims: CustomClaims, DisclosableClaims: CustomClaims> SdCwtRead
-    for SdCwtIssuedTagged<IssuerProtectedClaims, IssuerUnprotectedClaims, IssuerPayloadClaims, DisclosableClaims>
+impl<DisclosableClaims: CustomClaims, IssuerProtectedClaims: CustomClaims, IssuerUnprotectedClaims: CustomClaims, IssuerPayloadClaims: CustomClaims> SdCwtRead
+    for SdCwtIssuedTagged<DisclosableClaims, IssuerProtectedClaims, IssuerUnprotectedClaims, IssuerPayloadClaims>
 {
     type PayloadClaims = IssuerPayloadClaims;
 
@@ -139,14 +139,14 @@ impl<IssuerProtectedClaims: CustomClaims, IssuerUnprotectedClaims: CustomClaims,
 }
 
 impl<
+    DisclosedClaims: CustomClaims,
     IssuerProtectedClaims: CustomClaims,
     IssuerUnprotectedClaims: CustomClaims,
     IssuerPayloadClaims: CustomClaims,
     KbtProtectedClaims: CustomClaims,
     KbtUnprotectedClaims: CustomClaims,
     KbtPayloadClaims: CustomClaims,
-    DisclosedClaims: CustomClaims,
-> SdCwtRead for KbtCwtTagged<IssuerProtectedClaims, IssuerUnprotectedClaims, IssuerPayloadClaims, KbtProtectedClaims, KbtUnprotectedClaims, KbtPayloadClaims, DisclosedClaims>
+> SdCwtRead for KbtCwtTagged<DisclosedClaims, IssuerProtectedClaims, IssuerUnprotectedClaims, IssuerPayloadClaims, KbtProtectedClaims, KbtUnprotectedClaims, KbtPayloadClaims>
 {
     type PayloadClaims = IssuerPayloadClaims;
 
