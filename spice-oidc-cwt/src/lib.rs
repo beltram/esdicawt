@@ -2,7 +2,7 @@ use esdicawt::{
     EsdicawtReadError, EsdicawtReadResult, SdCwtRead,
     spec::{AnyMap, CustomClaims, issuance::SdCwtIssuedTagged, key_binding::KbtCwtTagged},
 };
-use esdicawt_spec::{ClaimName, Value};
+use esdicawt_spec::{ClaimName, Select, Value};
 use std::{borrow::Cow, collections::HashMap, sync::LazyLock};
 use url::Url;
 
@@ -278,8 +278,8 @@ pub trait SpiceOidcSdCwtRead {
     fn updated_at(&mut self) -> EsdicawtReadResult<Option<i64>>;
 }
 
-impl<DisclosableClaims: CustomClaims, IssuerProtectedClaims: CustomClaims, IssuerUnprotectedClaims: CustomClaims, PayloadClaims: CustomClaims> SpiceOidcSdCwtRead
-    for SdCwtIssuedTagged<DisclosableClaims, IssuerProtectedClaims, IssuerUnprotectedClaims, PayloadClaims>
+impl<IssuerProtectedClaims: CustomClaims, IssuerUnprotectedClaims: CustomClaims, PayloadClaims: Select> SpiceOidcSdCwtRead
+    for SdCwtIssuedTagged<IssuerProtectedClaims, IssuerUnprotectedClaims, PayloadClaims>
 where
     for<'a> &'a PayloadClaims: Into<&'a SpiceOidcClaims>,
 {
@@ -396,15 +396,13 @@ where
 }
 
 impl<
-    DisclosedClaims: CustomClaims,
     IssuerProtectedClaims: CustomClaims,
     IssuerUnprotectedClaims: CustomClaims,
-    IssuerPayloadClaims: CustomClaims,
+    IssuerPayloadClaims: Select,
     KbtProtectedClaims: CustomClaims,
     KbtUnprotectedClaims: CustomClaims,
     KbtPayloadClaims: CustomClaims,
-> SpiceOidcSdCwtRead
-    for KbtCwtTagged<DisclosedClaims, IssuerProtectedClaims, IssuerUnprotectedClaims, IssuerPayloadClaims, KbtProtectedClaims, KbtUnprotectedClaims, KbtPayloadClaims>
+> SpiceOidcSdCwtRead for KbtCwtTagged<IssuerProtectedClaims, IssuerUnprotectedClaims, IssuerPayloadClaims, KbtProtectedClaims, KbtUnprotectedClaims, KbtPayloadClaims>
 where
     for<'a> &'a IssuerPayloadClaims: Into<&'a SpiceOidcClaims>,
 {
@@ -529,7 +527,7 @@ mod tests {
         Holder, Issuer, Presentation,
         spec::{CwtAny, issuance::SdCwtIssuedTagged},
     };
-    use esdicawt_spec::NoClaims;
+    use esdicawt_spec::{EsdicawtSpecError, NoClaims};
     wasm_bindgen_test::wasm_bindgen_test_configure!(run_in_browser);
 
     #[test]
@@ -587,15 +585,14 @@ mod tests {
         claims: SpiceOidcClaims,
         holder_pk: &ed25519_dalek::VerifyingKey,
         subject: &str,
-    ) -> SdCwtIssuedTagged<SpiceOidcClaims, NoClaims, NoClaims, SpiceOidcClaims> {
+    ) -> SdCwtIssuedTagged<NoClaims, NoClaims, SpiceOidcClaims> {
         issuer
             .issue_cwt(
                 &mut rand::thread_rng(),
                 esdicawt::IssueCwtParams {
                     protected_claims: None,
                     unprotected_claims: None,
-                    payload_claims: None,
-                    disclosable_claims: claims,
+                    payload_claims: Some(claims),
                     subject,
                     identifier: "",
                     expiry: Duration::from_secs(90),
@@ -628,6 +625,10 @@ mod tests {
             ..Default::default()
         }
     }
+
+    impl Select for SpiceOidcClaims {
+        type Error = EsdicawtSpecError;
+    }
 }
 
 #[cfg(test)]
@@ -637,13 +638,14 @@ mod ed25519 {
         Holder, Issuer,
         spec::{NoClaims, SdHashAlg, reexports::coset},
     };
+    use esdicawt_spec::EsdicawtSpecError;
 
     pub struct Ed25519Issuer {
         signing_key: ed25519_dalek::SigningKey,
     }
 
     impl Issuer for Ed25519Issuer {
-        type Error = std::convert::Infallible;
+        type Error = EsdicawtSpecError;
         type Signer = ed25519_dalek::SigningKey;
         type Hasher = sha2::Sha256;
         type Signature = ed25519_dalek::Signature;
@@ -651,7 +653,6 @@ mod ed25519 {
         type ProtectedClaims = NoClaims;
         type UnprotectedClaims = NoClaims;
         type PayloadClaims = SpiceOidcClaims;
-        type DisclosableClaims = SpiceOidcClaims;
 
         fn new(signing_key: Self::Signer) -> Self {
             Self { signing_key }
@@ -693,7 +694,6 @@ mod ed25519 {
         type KbtUnprotectedClaims = NoClaims;
         type KbtProtectedClaims = NoClaims;
         type KbtPayloadClaims = NoClaims;
-        type DisclosedClaims = SpiceOidcClaims;
 
         fn new(signing_key: Self::Signer) -> Self {
             Self { signing_key }
