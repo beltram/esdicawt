@@ -1,51 +1,35 @@
 use crate::SdCwtIssuerError;
 use ciborium::Value;
 use esdicawt_spec::{
-    ClaimName, CwtAny, Salt,
+    ClaimName, CwtAny, Salt, TO_BE_REDACTED_TAG,
     blinded_claims::{SaltedArray, SaltedClaimRef, SaltedElementRef},
     redacted_claims::{RedactedClaimElement, RedactedClaimKeys},
 };
 use std::ops::DerefMut;
 
 /// Redacts the claims in this Value by recursively traversing, depth-first the ClaimSet
-pub fn redact<E, Hasher>(csprng: &mut dyn rand_core::CryptoRngCore, mut disclosable_claims: &mut Value) -> Result<SaltedArray, SdCwtIssuerError<E>>
+pub fn redact<E, Hasher>(csprng: &mut dyn rand_core::CryptoRngCore, disclosable_claims: &mut Value) -> Result<SaltedArray, SdCwtIssuerError<E>>
 where
     E: std::error::Error + Send + Sync,
     Hasher: digest::Digest,
 {
     let mut sd_claims = SaltedArray::default();
-    disclosable_claims.redact::<E, Hasher>(csprng, &mut sd_claims, None, true)?;
+    redact_value::<E, Hasher>(disclosable_claims, csprng, &mut sd_claims, None)?;
     Ok(sd_claims)
 }
 
-trait Redact {
-    fn redact<E, Hasher>(
-        &mut self,
-        csprng: &mut dyn rand_core::CryptoRngCore,
-        sd_claims: &mut SaltedArray,
-        mapping_ctx: Option<(&ClaimName, &mut RedactedClaimKeys)>,
-        root: bool,
-    ) -> Result<(), SdCwtIssuerError<E>>
-    where
-        E: std::error::Error + Send + Sync,
-        Hasher: digest::Digest;
-}
-
-impl Redact for &mut Value {
-    // wrapping "_redact" is required for fallible recursion
-    fn redact<E, Hasher>(
-        &mut self,
-        csprng: &mut dyn rand_core::CryptoRngCore,
-        sd_claims: &mut SaltedArray,
-        mapping_ctx: Option<(&ClaimName, &mut RedactedClaimKeys)>,
-        root: bool,
-    ) -> Result<(), SdCwtIssuerError<E>>
-    where
-        E: std::error::Error + Send + Sync,
-        Hasher: digest::Digest,
-    {
-        _redact::<E, Hasher>(self, csprng, sd_claims, mapping_ctx, root)
-    }
+// wrapping "_redact" is required for fallible recursion
+fn redact_value<E, Hasher>(
+    value: &mut Value,
+    csprng: &mut dyn rand_core::CryptoRngCore,
+    sd_claims: &mut SaltedArray,
+    parent_ctx: Option<(&ClaimName, &mut RedactedClaimKeys)>,
+) -> Result<(), SdCwtIssuerError<E>>
+where
+    E: std::error::Error + Send + Sync,
+    Hasher: digest::Digest,
+{
+    _redact::<E, Hasher>(value, csprng, sd_claims, parent_ctx)
 }
 
 #[tailcall::tailcall]
@@ -53,8 +37,7 @@ fn _redact<E, Hasher>(
     mut value: &mut Value,
     csprng: &mut dyn rand_core::CryptoRngCore,
     sd_claims: &mut SaltedArray,
-    mapping_ctx: Option<(&ClaimName, &mut RedactedClaimKeys)>,
-    root: bool,
+    parent_ctx: Option<(&ClaimName, &mut RedactedClaimKeys)>,
 ) -> Result<(), SdCwtIssuerError<E>>
 where
     E: std::error::Error + Send + Sync,
@@ -62,78 +45,108 @@ where
 {
     let digest = |v: &Value| Result::<_, SdCwtIssuerError<E>>::Ok(Hasher::digest(&v.to_cbor_bytes()?));
     match value.deref_mut() {
-        value @ Value::Array(_) => {
-            // SAFETY: we already verified it's an array
-            let array = value.as_array_mut().unwrap();
-
-            for mut element in array.iter_mut() {
-                element.redact::<E, Hasher>(csprng, sd_claims, None, false)?;
-            }
-            // redact the array itself
-            let salt = &new_salt(csprng)?;
-            if let Some((claim, rcks)) = mapping_ctx {
-                let salted_claim = sd_claims.push_ref(SaltedClaimRef { salt, claim, value })?;
-                rcks.push(&digest(salted_claim)?[..]);
-            } else {
-                let salted_element = sd_claims.push_ref(SaltedElementRef { salt, value })?;
-                let digest = digest(salted_element)?;
-                let rce = RedactedClaimElement::from(&digest[..]);
-                *value = Value::serialized(&rce)?;
-            }
-        }
-        value @ Value::Map(_) => {
-            // SAFETY: we already verified it's a mapping
-            let mapping = value.as_map_mut().unwrap();
-
+        Value::Map(mapping) => {
             let mut rcks = RedactedClaimKeys::with_capacity(mapping.len());
-            for (label, mut claim_value) in mapping.drain(..) {
-                let label = Value::deserialized::<ClaimName>(&label)?;
-                // let claim = claim.try_into().map_err(|_| SdCwtIssuerError::CwtError("FIXME: once we support depths"))?;
-                (&mut claim_value).redact::<E, Hasher>(csprng, sd_claims, Some((&label, &mut rcks)), false)?;
+            let mut redacted = vec![];
+            for (i, (label, claim_value)) in mapping.iter_mut().enumerate() {
+                if let Value::Tag(TO_BE_REDACTED_TAG, _) = label {
+                    redacted.push(i);
+                };
+                let label = Value::deserialized::<ClaimName>(label)?;
+                redact_value::<E, Hasher>(claim_value, csprng, sd_claims, Some((&label, &mut rcks)))?;
             }
 
+            // removal indexes need to be sorted in decreasing order
+            redacted.sort();
+            redacted.reverse();
+
+            for r in redacted {
+                mapping.remove(r);
+            }
             if !rcks.is_empty() {
                 mapping.push(rcks.into_map_entry()?);
             }
 
-            match (mapping_ctx, root) {
-                (None, true) => {} // no parent so nothing to do
-                // we are already in a Mapping so we'll nest this Mapping in his parent
-                (Some((claim, rcks)), _) => {
-                    let salt = &new_salt(csprng)?;
-                    let disclosure = SaltedClaimRef { salt, claim, value };
-                    let salted_claim = sd_claims.push_ref(disclosure)?;
-                    rcks.push(&digest(salted_claim)?[..]);
-                }
-                _ => {
-                    // we are in an array so we replace the element with this redacted mapping
-                    let salt = &new_salt(csprng)?;
-                    let salted_claim = sd_claims.push_ref(SaltedElementRef { salt, value })?;
-                    let digest = digest(salted_claim)?;
-                    let rce = RedactedClaimElement::from(&digest[..]);
-                    *value = Value::serialized(&rce)?;
-                }
-            }
-        }
-        // primitive type...
-        value => match mapping_ctx {
-            // ... in a Mapping. So we insert it in the disclosures and push the digest to it's parent 'redacted_claim_keys'
-            Some((claim, rcks)) => {
+            // if we are ourselves in a mapping then redact the mapping itself
+            let parent_ctx = parent_ctx.map(|(l, rcks)| (l.untag(), rcks));
+            if let Some((Some(parent_label), rcks)) = parent_ctx {
                 let salt = &new_salt(csprng)?;
-                let salted_claim = sd_claims.push_ref(SaltedClaimRef { salt, claim, value })?;
+                let salted_claim = sd_claims.push_ref(SaltedClaimRef {
+                    salt,
+                    claim: &parent_label,
+                    value,
+                })?;
                 rcks.push(&digest(salted_claim)?[..]);
             }
-            // ... in an Array. So we insert it in the disclosures and replace the element with its digest in the array
-            None => {
+        }
+        Value::Array(array) => {
+            for element in array.iter_mut() {
+                redact_value::<E, Hasher>(element, csprng, sd_claims, None)?;
+            }
+
+            // if we are in a mapping then redact the array itself
+            let parent_ctx = parent_ctx.map(|(l, rcks)| (l.untag(), rcks));
+            if let Some((Some(parent_label), rcks)) = parent_ctx {
                 let salt = &new_salt(csprng)?;
-                let salted_element = sd_claims.push_ref(SaltedElementRef { salt, value })?;
+                let disclosure = SaltedClaimRef {
+                    salt,
+                    claim: &parent_label,
+                    value,
+                };
+                let salted_claim = sd_claims.push_ref(disclosure)?;
+                rcks.push(&digest(salted_claim)?[..]);
+            }
+        }
+        Value::Tag(tag, original_value) if *tag == TO_BE_REDACTED_TAG && (original_value.is_map() || original_value.is_array()) => {
+            let in_array = parent_ctx.is_none();
+
+            redact_value::<E, Hasher>(original_value, csprng, sd_claims, parent_ctx)?;
+
+            // if we are in an array then redact in place
+            if in_array {
+                let salt = &new_salt(csprng)?;
+                let salted_element = sd_claims.push_ref(SaltedElementRef { salt, value: original_value })?;
                 let digest = digest(salted_element)?;
                 let rce = RedactedClaimElement::from(&digest[..]);
                 *value = Value::serialized(&rce)?;
             }
-        },
-    }
+        }
+        value => {
+            match parent_ctx {
+                Some((parent_label, rcks)) => {
+                    // ... in a Mapping. So we insert it in the disclosures and push the digest to it's parent 'redacted_claim_keys'
 
+                    // unwrap tagged values
+                    let value = match value {
+                        Value::Tag(tag, value) if *tag == TO_BE_REDACTED_TAG => value,
+                        value => value,
+                    };
+
+                    if let Some(parent_label) = parent_label.untag() {
+                        let salt = &new_salt(csprng)?;
+                        let disclosure = SaltedClaimRef {
+                            salt,
+                            claim: &parent_label,
+                            value,
+                        };
+                        let salted_claim = sd_claims.push_ref(disclosure)?;
+                        rcks.push(&digest(salted_claim)?[..]);
+                    }
+                }
+                None => {
+                    if let Value::Tag(TO_BE_REDACTED_TAG, original_value) = value {
+                        // ... in an Array. So we insert it in the disclosures and replace the element with its digest in the array
+                        let salt = &new_salt(csprng)?;
+                        let disclosure = SaltedElementRef { salt, value: original_value };
+                        let salted_element = sd_claims.push_ref(disclosure)?;
+                        let digest = digest(salted_element)?;
+                        let rce = RedactedClaimElement::from(&digest[..]);
+                        *value = Value::serialized(&rce)?;
+                    }
+                }
+            }
+        }
+    }
     Ok(())
 }
 
@@ -149,6 +162,7 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::spec::sd;
     use ciborium::cbor;
     use esdicawt_spec::{
         REDACTED_CLAIM_ELEMENT_TAG,
@@ -156,19 +170,20 @@ mod tests {
     };
     use rand_chacha::rand_core::SeedableRng as _;
     use sha2::Digest as _;
+
     wasm_bindgen_test::wasm_bindgen_test_configure!(run_in_browser);
 
     #[test]
     #[allow(clippy::cognitive_complexity)]
     #[wasm_bindgen_test::wasm_bindgen_test]
     fn should_redact_primitive_claim_in_mapping() {
-        let payload = cbor!({
-            "a" => 1,
-            2 => "b",
-            3 => null,
-            4 => false,
-            5 => 14.3,
-        });
+        let payload = Value::Map(vec![
+            (sd(Value::Text("a".into())), Value::Integer(1.into())),
+            (sd(Value::Integer(2.into())), Value::Text("b".into())),
+            (sd(Value::Integer(3.into())), Value::Null),
+            (sd(Value::Integer(4.into())), Value::Bool(false)),
+            (sd(Value::Integer(5.into())), Value::Float(14.3)),
+        ]);
         let (payload, [d1, d2, d3, d4, d5]) = _redact(payload);
 
         // --- altered payload ---
@@ -212,7 +227,10 @@ mod tests {
     #[test]
     #[wasm_bindgen_test::wasm_bindgen_test]
     fn should_redact_array() {
-        let payload = cbor!({ 1 => ["a", "b"] });
+        let payload = Value::Map(vec![(
+            sd(Value::Integer(1.into())),
+            Value::Array(vec![sd(Value::Text("a".into())), sd(Value::Text("b".into()))]),
+        )]);
         let (payload, [d1, d2, d3]) = _redact(payload);
 
         // --- altered payload ---
@@ -242,7 +260,10 @@ mod tests {
     #[test]
     #[wasm_bindgen_test::wasm_bindgen_test]
     fn should_redact_array_nested() {
-        let payload = cbor!({ 1 => [["a", "b"]] });
+        let payload = Value::Map(vec![(
+            sd(Value::Integer(1.into())),
+            Value::Array(vec![sd(Value::Array(vec![sd(Value::Text("a".into())), sd(Value::Text("b".into()))]))]),
+        )]);
         let (payload, [d1, d2, d3, d4]) = _redact(payload);
 
         // --- altered payload ---
@@ -276,7 +297,10 @@ mod tests {
     #[test]
     #[wasm_bindgen_test::wasm_bindgen_test]
     fn should_redact_nested_mapping() {
-        let payload = cbor!({ 0 => { 1 => "a" } });
+        let payload = Value::Map(vec![(
+            sd(Value::Integer(0.into())),
+            Value::Map(vec![(sd(Value::Integer(1.into())), Value::Text("a".into()))]),
+        )]);
         let (payload, [d1, d0]) = _redact(payload);
 
         // --- depth 0 ---
@@ -304,7 +328,10 @@ mod tests {
     #[test]
     #[wasm_bindgen_test::wasm_bindgen_test]
     fn should_redact_mapping_nested_in_array() {
-        let payload = cbor!({ 0 => [{ 1 => 2 }] });
+        let payload = Value::Map(vec![(
+            sd(Value::Integer(0.into())),
+            Value::Array(vec![sd(Value::Map(vec![(sd(Value::Integer(1.into())), Value::Integer(2.into()))]))]),
+        )]);
         let (payload, [d2, d1, d0]) = _redact(payload);
 
         // --- depth 0 ---
@@ -334,12 +361,11 @@ mod tests {
         assert_eq!(Value::serialized(&mapping12).unwrap(), element_digest(&d1));
     }
 
-    fn _redact<const N: usize>(payload: Result<Value, ciborium::value::Error>) -> (Value, [Value; N]) {
+    fn _redact<const N: usize>(mut payload: Value) -> (Value, [Value; N]) {
         let mut rng = rand_chacha::ChaCha20Rng::from_entropy();
-        let mut payload = payload.unwrap();
         let mut sd_claims = SaltedArray::default();
 
-        (&mut payload).redact::<Error, sha2::Sha256>(&mut rng, &mut sd_claims, None, true).unwrap();
+        redact_value::<Error, sha2::Sha256>(&mut payload, &mut rng, &mut sd_claims, None).unwrap();
 
         for d in &sd_claims.0 {
             if let Ok(d) = d.deserialized::<SaltedClaim<Value>>() {

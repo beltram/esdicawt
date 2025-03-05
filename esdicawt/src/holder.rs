@@ -1,6 +1,6 @@
 use crate::{CwtPresentationParams, Presentation, SdCwtHolderError, now};
 use esdicawt_spec::{
-    CustomClaims, CwtAny, SdHashAlg,
+    CustomClaims, CwtAny, SdHashAlg, Select,
     blinded_claims::SaltedArray,
     issuance::SdCwtIssuedTagged,
     key_binding::{KbtCwtTagged, KbtPayload, KbtProtected, KbtUnprotected},
@@ -26,11 +26,10 @@ pub trait Holder {
 
     type IssuerProtectedClaims: CustomClaims;
     type IssuerUnprotectedClaims: CustomClaims;
-    type IssuerPayloadClaims: CustomClaims;
+    type IssuerPayloadClaims: Select;
     type KbtProtectedClaims: CustomClaims;
     type KbtUnprotectedClaims: CustomClaims;
     type KbtPayloadClaims: CustomClaims;
-    type DisclosedClaims: CustomClaims;
 
     fn cwt_algorithm(&self) -> coset::iana::Algorithm;
     fn hash_algorithm(&self) -> SdHashAlg;
@@ -75,7 +74,6 @@ pub trait Holder {
         params: CwtPresentationParams<Self::KbtProtectedClaims, Self::KbtUnprotectedClaims, Self::KbtPayloadClaims>,
     ) -> Result<
         KbtCwtTagged<
-            Self::DisclosedClaims,
             Self::IssuerProtectedClaims,
             Self::IssuerUnprotectedClaims,
             Self::IssuerPayloadClaims,
@@ -105,7 +103,7 @@ pub trait Holder {
 
         // --- protected ---
         let alg = coset::Algorithm::Assigned(self.cwt_algorithm());
-        let protected = KbtProtected::<Self::DisclosedClaims, Self::IssuerProtectedClaims, Self::IssuerUnprotectedClaims, Self::IssuerPayloadClaims, Self::KbtProtectedClaims> {
+        let protected = KbtProtected::<Self::IssuerProtectedClaims, Self::IssuerUnprotectedClaims, Self::IssuerPayloadClaims, Self::KbtProtectedClaims> {
             alg: alg.into(),
             kcwt: sd_cwt_issued.into(),
             extra: params.extra_kbt_protected,
@@ -164,6 +162,7 @@ mod tests {
         blinded_claims::{Salted, SaltedClaim},
     };
     use rand_core::SeedableRng as _;
+
     wasm_bindgen_test::wasm_bindgen_test_configure!(run_in_browser);
 
     #[test]
@@ -175,12 +174,11 @@ mod tests {
         let issuer_signing_key = ed25519_dalek::SigningKey::generate(&mut csprng);
         let issuer = Ed25519IssuerClaims::<CustomTokenClaims>::new(issuer_signing_key);
 
-        let disclosable_claims = CustomTokenClaims { name: "Alice Smith".into() };
+        let disclosable_claims = CustomTokenClaims { name: Some("Alice Smith".into()) };
         let issue_params = IssueCwtParams {
             protected_claims: None,
             unprotected_claims: None,
-            payload_claims: None,
-            disclosable_claims,
+            payload_claims: Some(disclosable_claims),
             subject: "mimi://example.com/u/alice.smith",
             identifier: "mimi://example.com/i/acme.io",
             key_location: "https://auth.acme.io/issuer.cwk",
@@ -224,7 +222,6 @@ mod tests {
                     KbtProtectedClaims = NoClaims,
                     KbtUnprotectedClaims = NoClaims,
                     KbtPayloadClaims = NoClaims,
-                    DisclosedClaims = NoClaims,
                     Error = std::convert::Infallible,
                     Signer = ed25519_dalek::SigningKey,
                     Signature = ed25519_dalek::Signature,
@@ -236,7 +233,7 @@ mod tests {
 
 #[cfg(feature = "test-utils")]
 pub mod test_utils {
-    use esdicawt_spec::{CustomClaims, NoClaims, reexports::coset};
+    use esdicawt_spec::{CustomClaims, NoClaims, Select, reexports::coset};
 
     #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
     pub struct Ed25519Holder<DisclosedClaims: CustomClaims> {
@@ -244,7 +241,7 @@ pub mod test_utils {
         pub _marker: core::marker::PhantomData<DisclosedClaims>,
     }
 
-    impl<DisclosedClaims: CustomClaims> super::Holder for Ed25519Holder<DisclosedClaims>
+    impl<T: Select> super::Holder for Ed25519Holder<T>
     where
         ed25519_dalek::SigningKey: signature::Signer<ed25519_dalek::Signature>,
     {
@@ -254,11 +251,10 @@ pub mod test_utils {
 
         type IssuerProtectedClaims = NoClaims;
         type IssuerUnprotectedClaims = NoClaims;
-        type IssuerPayloadClaims = DisclosedClaims;
+        type IssuerPayloadClaims = T;
         type KbtProtectedClaims = NoClaims;
         type KbtUnprotectedClaims = NoClaims;
         type KbtPayloadClaims = NoClaims;
-        type DisclosedClaims = DisclosedClaims;
 
         fn new(signing_key: Self::Signer) -> Self {
             Self {

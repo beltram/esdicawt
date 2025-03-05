@@ -8,7 +8,7 @@ use crate::{
 use ciborium::Value;
 use cose_key_confirmation::KeyConfirmation;
 use esdicawt_spec::{
-    AnyMap, COSE_SD_CLAIMS, CWT_CLAIM_SD_ALG, CWT_MEDIATYPE, ClaimName, CustomClaims, CwtAny, EsdicawtSpecError, MEDIATYPE_SD_CWT, SdHashAlg,
+    AnyMap, COSE_SD_CLAIMS, CWT_CLAIM_SD_ALG, CWT_MEDIATYPE, ClaimName, CustomClaims, CwtAny, EsdicawtSpecError, MEDIATYPE_SD_CWT, SdHashAlg, Select,
     issuance::{SdCwtIssuedTagged, SdInnerPayloadBuilder, SdPayloadBuilder},
     reexports::coset::{
         TaggedCborSerializable, {self},
@@ -17,15 +17,14 @@ use esdicawt_spec::{
 use signature::{Keypair, Signer};
 
 pub trait Issuer {
-    type Error: std::error::Error + Send + Sync;
+    type Error: std::error::Error + Send + Sync + From<ciborium::value::Error>;
     type Hasher: digest::Digest;
 
     type Signature;
 
     type ProtectedClaims: CustomClaims;
     type UnprotectedClaims: CustomClaims;
-    type PayloadClaims: CustomClaims;
-    type DisclosableClaims: CustomClaims;
+    type PayloadClaims: Select<Error = Self::Error>;
 
     #[cfg(not(any(feature = "pem", feature = "der")))]
     type Signer: Signer<Self::Signature> + Keypair;
@@ -62,6 +61,7 @@ pub trait Issuer {
     fn signer(&self) -> &Self::Signer;
 
     fn cwt_algorithm(&self) -> coset::iana::Algorithm;
+
     fn hash_algorithm(&self) -> SdHashAlg;
 
     fn serialize_signature(&self, signature: &Self::Signature) -> Result<Vec<u8>, Self::Error>;
@@ -72,8 +72,8 @@ pub trait Issuer {
     fn issue_cwt(
         &self,
         csprng: &mut dyn rand_core::CryptoRngCore,
-        params: IssueCwtParams<'_, Self::DisclosableClaims, Self::ProtectedClaims, Self::UnprotectedClaims, Self::PayloadClaims>,
-    ) -> Result<SdCwtIssuedTagged<Self::DisclosableClaims, Self::ProtectedClaims, Self::UnprotectedClaims, Self::PayloadClaims>, SdCwtIssuerError<Self::Error>> {
+        params: IssueCwtParams<'_, Self::ProtectedClaims, Self::UnprotectedClaims, Self::PayloadClaims>,
+    ) -> Result<SdCwtIssuedTagged<Self::ProtectedClaims, Self::UnprotectedClaims, Self::PayloadClaims>, SdCwtIssuerError<Self::Error>> {
         let alg = self.cwt_algorithm();
         let issuer = params.identifier;
         let key_location = params.key_location;
@@ -97,68 +97,63 @@ pub trait Issuer {
 
         let protected = protected_builder.build();
 
-        let mut disclosable_claims = Value::serialized(&params.disclosable_claims)?;
-        let sd_claims = redact::<Self::Error, Self::Hasher>(csprng, &mut disclosable_claims)?;
+        let mut payload_claims = params.payload_claims.map(|c| c.select()).transpose().map_err(SdCwtIssuerError::CustomError)?;
 
-        let mut unprotected_builder = coset::HeaderBuilder::new().value(COSE_SD_CLAIMS, sd_claims.to_cbor_bytes()?.into());
+        let mut unprotected_builder = coset::HeaderBuilder::new();
 
-        if let Some(unprotected_claims) = params.unprotected_claims {
-            let unprotected_extra_claims: AnyMap = unprotected_claims.into();
-            for (k, v) in unprotected_extra_claims {
-                unprotected_builder = match k {
-                    ClaimName::Integer(identifier) => unprotected_builder.value(identifier, v),
-                    ClaimName::Text(named_claim) => unprotected_builder.text_value(named_claim, v),
-                    _ => unprotected_builder,
-                };
-            }
-        }
+        let payload = if let Some(sd) = payload_claims.as_mut() {
+            let sd_claims = redact::<Self::Error, Self::Hasher>(csprng, &mut sd.0)?;
 
-        let unprotected = unprotected_builder.build();
+            unprotected_builder = unprotected_builder.value(COSE_SD_CLAIMS, sd_claims.to_cbor_bytes()?.into());
 
-        let now = now();
-        let nbf = now - params.leeway.as_secs();
-        let iat = now;
-        let expiry = now + params.expiry.as_secs();
-
-        let mut inner_payload_builder = SdInnerPayloadBuilder::default();
-        inner_payload_builder
-            .issuer(issuer)
-            .subject(params.subject)
-            .expiration(expiry as i64)
-            .not_before(nbf as i64)
-            .issued_at(iat as i64);
-
-        if let Some(payload_claims) = params.payload_claims {
-            inner_payload_builder.extra(payload_claims);
-        }
-
-        let inner = inner_payload_builder.build().map_err(EsdicawtSpecError::from)?;
-
-        let payload = SdPayloadBuilder::default()
-            .inner(inner)
-            .cnf(params.holder_confirmation_key)
-            .build()
-            .map_err(EsdicawtSpecError::from)?;
-        let mut payload = Value::serialized(&payload).map_err(EsdicawtSpecError::from)?;
-
-        // merging redacted claims with the rest of the payload
-        if !sd_claims.is_empty() {
-            // if there is any disclosure
-            let payload = payload.as_map_mut().ok_or_else(|| ciborium::value::Error::Custom("CWT payload must be a Mapping".into()))?;
-
-            let disclosable_claims = disclosable_claims
-                .into_map()
-                .map_err(|_| ciborium::value::Error::Custom("CWT payload must be a Mapping".into()))?;
-
-            for (k, v) in disclosable_claims {
-                // disclosable claims supersede regular ones
-                let existing = payload.iter_mut().find(|(pk, _)| pk == &k);
-                match existing {
-                    Some((_, pv)) => *pv = v,
-                    None => payload.push((k, v)),
+            if let Some(unprotected_claims) = params.unprotected_claims {
+                let unprotected_extra_claims: AnyMap = unprotected_claims.into();
+                for (k, v) in unprotected_extra_claims {
+                    unprotected_builder = match k {
+                        ClaimName::Integer(identifier) => unprotected_builder.value(identifier, v),
+                        ClaimName::Text(named_claim) => unprotected_builder.text_value(named_claim, v),
+                        _ => unprotected_builder,
+                    };
                 }
             }
-        }
+
+            let now = now();
+            let nbf = now - params.leeway.as_secs();
+            let iat = now;
+            let expiry = now + params.expiry.as_secs();
+
+            let mut inner_payload_builder = SdInnerPayloadBuilder::default();
+            inner_payload_builder
+                .issuer(issuer)
+                .subject(params.subject)
+                .expiration(expiry as i64)
+                .not_before(nbf as i64)
+                .issued_at(iat as i64);
+
+            // remove 'redacted_claim_keys' which is not part of 'Self::PayloadClaims'
+            let rcks = sd.take_rcks()?;
+
+            // take the unredacted claims and shove it in the payload
+            let public_claims = sd.0.deserialized::<Self::PayloadClaims>()?;
+            inner_payload_builder.extra(public_claims);
+
+            let inner = inner_payload_builder.build().map_err(EsdicawtSpecError::from)?;
+
+            let mut payload_builder = SdPayloadBuilder::default();
+            payload_builder.inner(inner).cnf(params.holder_confirmation_key);
+
+            if let Some(rcks) = rcks {
+                payload_builder.redacted_claim_keys(rcks);
+            }
+
+            let payload = payload_builder.build().map_err(EsdicawtSpecError::from)?;
+
+            Value::serialized(&payload).map_err(EsdicawtSpecError::from)?
+        } else {
+            Value::Bytes(vec![])
+        };
+
+        let unprotected = unprotected_builder.build();
 
         let sign1 = coset::CoseSign1Builder::new()
             .protected(protected)
@@ -175,15 +170,13 @@ pub trait Issuer {
     }
 }
 
-pub struct IssueCwtParams<'a, DisclosableClaims: CustomClaims, ProtectedClaims: CustomClaims, UnprotectedClaims: CustomClaims, PayloadClaims: CustomClaims> {
+pub struct IssueCwtParams<'a, ProtectedClaims: CustomClaims, UnprotectedClaims: CustomClaims, PayloadClaims: Select> {
     /// Extra claims in the protected header of the sd-cwt
     pub protected_claims: Option<ProtectedClaims>,
     /// Extra claims in the unprotected header of the sd-cwt
     pub unprotected_claims: Option<UnprotectedClaims>,
-    /// Extra claims in the payload of the sd-cwt
+    /// CBOR value with tagged claims to disclose
     pub payload_claims: Option<PayloadClaims>,
-    /// Claims to redact
-    pub disclosable_claims: DisclosableClaims,
     pub subject: &'a str,
     /// Used to be inserted in the Issuer claim
     pub identifier: &'a str,
@@ -201,12 +194,13 @@ mod tests {
         Issuer,
         spec::{
             MapKey,
-            blinded_claims::{SaltedClaim, SaltedElement},
+            blinded_claims::{Salted, SaltedClaim, SaltedElement},
+            sd,
         },
     };
     use ciborium::{Value, cbor};
     use digest::Digest as _;
-    use esdicawt_spec::{ClaimName, CustomClaims, CwtAny, NoClaims, blinded_claims::Salted, issuance::SdCwtIssuedTagged};
+    use esdicawt_spec::{ClaimName, CwtAny, EsdicawtSpecError, NoClaims, Select, SelectiveDisclosure, issuance::SdCwtIssuedTagged};
     use rand_core::SeedableRng;
 
     wasm_bindgen_test::wasm_bindgen_test_configure!(run_in_browser);
@@ -214,7 +208,7 @@ mod tests {
     #[test]
     #[wasm_bindgen_test::wasm_bindgen_test]
     fn should_generate_sd_cwt() {
-        let disclosable_claims = CustomTokenClaims { name: "Alice Smith".into() };
+        let disclosable_claims = CustomTokenClaims { name: Some("Alice Smith".into()) };
         let mut sd_cwt = issue(disclosable_claims);
 
         let cwt_cbor = sd_cwt.to_cbor_bytes().unwrap();
@@ -245,8 +239,7 @@ mod tests {
     #[test]
     #[wasm_bindgen_test::wasm_bindgen_test]
     fn should_issue_complex_types() {
-        let verify_issuance = |value: Result<Value, ciborium::value::Error>, expected: (Option<ClaimName>, Result<Value, ciborium::value::Error>)| {
-            let value = value.unwrap();
+        let verify_issuance = |value: Value, expected: (Option<ClaimName>, Result<Value, ciborium::value::Error>)| {
             let mut disclosable_claims = AnyMap::new();
             disclosable_claims.insert(MapKey::Text("___claim".into()), value);
             let mut sd_cwt = issue(disclosable_claims);
@@ -258,34 +251,116 @@ mod tests {
             let found = disclosable_claims.iter().any(|d| match d {
                 Salted::Claim(SaltedClaim { name, value, .. }) => value == &expected_value && Some(name) == expected_name.as_ref(),
                 Salted::Element(SaltedElement { value, .. }) => value == &expected_value,
-                Salted::Decoy(_) => false,
+                _ => false,
             });
             assert!(found);
         };
 
         // simple string
-        verify_issuance(cbor!("a"), (Some(ClaimName::Text("___claim".into())), cbor!("a")));
+        verify_issuance(cbor!("a").unwrap(), (Some(ClaimName::Text("___claim".into())), cbor!("a")));
 
         // simple mapping
-        verify_issuance(cbor!({ "a" => "b" }), (Some(ClaimName::Text("a".into())), cbor!("b")));
+        verify_issuance(cbor!({ "a" => "b" }).unwrap(), (Some(ClaimName::Text("a".into())), cbor!("b")));
 
         // simple array
-        verify_issuance(cbor!([0]), (None, cbor!(0)));
+        verify_issuance(cbor!([0]).unwrap(), (None, cbor!(0)));
 
         // nested mapping
-        verify_issuance(cbor!({ "a" => "b" }), (Some(ClaimName::Text("a".into())), cbor!("b")));
+        verify_issuance(cbor!({ "a" => "b" }).unwrap(), (Some(ClaimName::Text("a".into())), cbor!("b")));
 
         // nested array
-        verify_issuance(cbor!([[0]]), (None, cbor!(0)));
+        verify_issuance(cbor!([[0]]).unwrap(), (None, cbor!(0)));
 
         // mapping in array
-        verify_issuance(cbor!([{ "a" => "b" }]), (Some(ClaimName::Text("a".into())), cbor!("b")));
+        verify_issuance(cbor!([{ "a" => "b" }]).unwrap(), (Some(ClaimName::Text("a".into())), cbor!("b")));
 
         // array in mapping
-        verify_issuance(cbor!({ "a" => [0] }), (None, cbor!(0)));
+        verify_issuance(cbor!({ "a" => [0] }).unwrap(), (None, cbor!(0)));
     }
 
-    fn issue<D: CustomClaims>(disclosable_claims: D) -> SdCwtIssuedTagged<D, NoClaims, NoClaims, NoClaims> {
+    #[test]
+    #[wasm_bindgen_test::wasm_bindgen_test]
+    fn should_selectively_disclose() {
+        let model = Model {
+            name: Some("Alice Smith".to_string()),
+            age: Some(42),
+        };
+        let mut sd_cwt = issue(model);
+
+        let mut payload = sd_cwt.0.payload.clone();
+        let payload = payload.to_value().unwrap().clone();
+        let model = payload.inner.extra.unwrap();
+
+        // name has been redacted but not age
+        assert!(model.age.is_some());
+        assert!(model.name.is_none());
+
+        let disclosable_claims = sd_cwt.0.disclosures().unwrap().iter().map(|d| d.unwrap()).collect::<Vec<_>>();
+        assert_eq!(disclosable_claims.len(), 1);
+        let d0 = disclosable_claims.first().unwrap();
+        let Salted::Claim(SaltedClaim { name, value, .. }) = d0 else { unreachable!() };
+
+        // verify content of disclosure
+        assert_eq!(name, &ClaimName::Text("name".into()));
+        assert_eq!(value, &cbor!("Alice Smith").unwrap());
+    }
+
+    #[test]
+    #[wasm_bindgen_test::wasm_bindgen_test]
+    #[ignore] // TODO:
+    fn should_work_when_no_disclosure() {
+        /*let model = Model {
+            name: Some("Alice".to_string()),
+            age: Some(42),
+        };
+        let sd_cwt = issue(model);*/
+        todo!()
+    }
+
+    #[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
+    pub struct Model {
+        pub name: Option<String>,
+        pub age: Option<u32>,
+    }
+
+    impl From<Model> for AnyMap {
+        fn from(val: Model) -> Self {
+            let mut map = Self::with_capacity(2);
+            if let Some(name) = val.name {
+                map.insert(ClaimName::Text("name".into()), Value::Text(name));
+            }
+            if let Some(age) = val.age {
+                map.insert(ClaimName::Text("age".into()), age.into());
+            }
+            map
+        }
+    }
+
+    impl TryFrom<AnyMap> for Model {
+        type Error = std::convert::Infallible;
+        fn try_from(mut value: AnyMap) -> Result<Self, Self::Error> {
+            let name = value.remove(&ClaimName::Text("name".into())).map(|name| name.into_text().unwrap());
+            let age = value.remove(&ClaimName::Text("age".into())).map(|name| name.into_integer().unwrap().try_into().unwrap());
+            Ok(Self { name, age })
+        }
+    }
+
+    impl Select for Model {
+        type Error = EsdicawtSpecError;
+
+        fn select(self) -> Result<SelectiveDisclosure, <Self as Select>::Error> {
+            let mut map = Vec::with_capacity(2);
+            if let Some(name) = self.name {
+                map.push((sd(Value::Text("name".into())), Value::Text(name)));
+            }
+            if let Some(age) = self.age {
+                map.push((Value::Text("age".into()), age.into()));
+            }
+            Ok(Value::Map(map).into())
+        }
+    }
+
+    fn issue<T: Select<Error = EsdicawtSpecError>>(disclosable_claims: T) -> SdCwtIssuedTagged<NoClaims, NoClaims, T> {
         let mut csprng = rand_chacha::ChaCha20Rng::from_entropy();
 
         let holder_signing_key = ed25519_dalek::SigningKey::generate(&mut csprng);
@@ -298,8 +373,7 @@ mod tests {
                 crate::IssueCwtParams {
                     protected_claims: None,
                     unprotected_claims: None,
-                    payload_claims: None,
-                    disclosable_claims,
+                    payload_claims: Some(disclosable_claims),
                     subject: "mimi://example.com/alice.smith",
                     identifier: "mimi://example.com/i/acme.io",
                     expiry: core::time::Duration::from_secs(90),
@@ -318,10 +392,9 @@ mod tests {
                     Signature = ed25519_dalek::Signature,
                     ProtectedClaims = NoClaims,
                     UnprotectedClaims = NoClaims,
-                    PayloadClaims = NoClaims,
+                    PayloadClaims = CustomTokenClaims,
                     Signer = ed25519_dalek::SigningKey,
                     Hasher = sha2::Sha256,
-                    DisclosableClaims = CustomTokenClaims,
                     Error = std::convert::Infallible,
                 >,
         >,
@@ -331,27 +404,41 @@ mod tests {
 
 #[cfg(any(test, feature = "test-utils"))]
 pub mod claims {
-    use esdicawt_spec::{AnyMap, ClaimName};
+    use ciborium::Value;
+    use esdicawt_spec::{AnyMap, ClaimName, EsdicawtSpecError, Select, SelectiveDisclosure, sd};
 
     #[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
     pub struct CustomTokenClaims {
-        pub name: String,
+        pub name: Option<String>,
     }
 
     impl From<CustomTokenClaims> for AnyMap {
         fn from(val: CustomTokenClaims) -> Self {
-            Self::from([(ClaimName::Text("name".into()), val.name.into())])
+            let mut map = Self::with_capacity(1);
+            if let Some(name) = val.name {
+                map.insert(ClaimName::Text("name".into()), Value::Text(name));
+            }
+            map
         }
     }
 
     impl TryFrom<AnyMap> for CustomTokenClaims {
         type Error = std::convert::Infallible;
         fn try_from(mut value: AnyMap) -> Result<Self, Self::Error> {
-            let name = value
-                .remove(&ClaimName::Text("name".into()))
-                .map(|name| name.into_text().unwrap())
-                .unwrap_or_else(|| "UNKNOWN".to_string());
+            let name = value.remove(&ClaimName::Text("name".into())).map(|name| name.into_text().unwrap());
             Ok(Self { name })
+        }
+    }
+
+    impl Select for CustomTokenClaims {
+        type Error = EsdicawtSpecError;
+
+        fn select(self) -> Result<SelectiveDisclosure, <Self as Select>::Error> {
+            let mut map = Vec::with_capacity(1);
+            if let Some(name) = self.name {
+                map.push((sd(Value::Text("name".into())), Value::Text(name)));
+            }
+            Ok(Value::Map(map).into())
         }
     }
 }
@@ -359,23 +446,22 @@ pub mod claims {
 #[cfg(feature = "test-utils")]
 pub mod test_utils {
     use super::*;
-    use esdicawt_spec::NoClaims;
+    use esdicawt_spec::{NoClaims, Select};
 
-    pub struct Ed25519IssuerClaims<Disclosable: CustomClaims> {
+    pub struct Ed25519IssuerClaims<T: Select<Error = EsdicawtSpecError>> {
         signing_key: ed25519_dalek::SigningKey,
-        _marker: core::marker::PhantomData<Disclosable>,
+        _marker: core::marker::PhantomData<T>,
     }
 
-    impl<Disclosable: CustomClaims> Issuer for Ed25519IssuerClaims<Disclosable> {
-        type Error = std::convert::Infallible;
+    impl<T: Select<Error = EsdicawtSpecError>> Issuer for Ed25519IssuerClaims<T> {
+        type Error = EsdicawtSpecError;
         type Signer = ed25519_dalek::SigningKey;
         type Hasher = sha2::Sha256;
         type Signature = ed25519_dalek::Signature;
 
         type ProtectedClaims = NoClaims;
         type UnprotectedClaims = NoClaims;
-        type PayloadClaims = NoClaims;
-        type DisclosableClaims = Disclosable;
+        type PayloadClaims = T;
 
         fn new(signing_key: Self::Signer) -> Self {
             Self {
@@ -405,21 +491,20 @@ pub mod test_utils {
         }
     }
 
-    pub struct P256IssuerClaims<Disclosable: CustomClaims> {
+    pub struct P256IssuerClaims<T: Select<Error = EsdicawtSpecError>> {
         signing_key: p256::ecdsa::SigningKey,
-        _marker: core::marker::PhantomData<Disclosable>,
+        _marker: core::marker::PhantomData<T>,
     }
 
-    impl<Disclosable: CustomClaims> Issuer for P256IssuerClaims<Disclosable> {
-        type Error = std::convert::Infallible;
+    impl<T: Select<Error = EsdicawtSpecError>> Issuer for P256IssuerClaims<T> {
+        type Error = EsdicawtSpecError;
         type Signer = p256::ecdsa::SigningKey;
         type Hasher = sha2::Sha256;
         type Signature = p256::ecdsa::Signature;
 
         type ProtectedClaims = NoClaims;
         type UnprotectedClaims = NoClaims;
-        type PayloadClaims = NoClaims;
-        type DisclosableClaims = Disclosable;
+        type PayloadClaims = T;
 
         fn new(signing_key: Self::Signer) -> Self {
             Self {

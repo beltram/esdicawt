@@ -4,10 +4,20 @@ use serde::ser::SerializeSeq;
 
 use super::{ClaimName, CwtAny, Salt};
 
-#[derive(Debug, Clone, Eq, PartialEq, serde_tuple::Serialize_tuple, serde_tuple::Deserialize_tuple)]
+#[derive(Clone, Eq, PartialEq, serde_tuple::Serialize_tuple, serde_tuple::Deserialize_tuple)]
 pub struct SaltedElement<T: CwtAny> {
     pub salt: Salt,
     pub value: T,
+}
+
+impl<T: CwtAny> std::fmt::Debug for SaltedElement<T> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        if let Ok(value) = Value::serialized(&self.value) {
+            write!(f, "{value:?}")
+        } else {
+            write!(f, "???")
+        }
+    }
 }
 
 #[derive(Debug, Clone, serde_tuple::Serialize_tuple)]
@@ -17,11 +27,21 @@ pub struct SaltedElementRef<'a, T: CwtAny> {
 }
 
 // Do not change the order of the claims !!!
-#[derive(Debug, Clone, Eq, PartialEq, serde_tuple::Serialize_tuple, serde_tuple::Deserialize_tuple)]
+#[derive(Clone, Eq, PartialEq, serde_tuple::Serialize_tuple, serde_tuple::Deserialize_tuple)]
 pub struct SaltedClaim<T: CwtAny> {
     pub salt: Salt,
     pub value: T,
     pub name: ClaimName,
+}
+
+impl<T: CwtAny> std::fmt::Debug for SaltedClaim<T> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        if let Ok(value) = Value::serialized(&self.value) {
+            write!(f, "{:?}: {value:?}", self.name)
+        } else {
+            write!(f, "{:?}: ???", self.name)
+        }
+    }
 }
 
 // Do not change the order of the claims !!!

@@ -1,7 +1,7 @@
 use ciborium::Value;
 use coset::iana::CwtClaimName;
 use esdicawt_spec::{
-    ClaimName, CustomClaims,
+    ClaimName, CustomClaims, Select,
     blinded_claims::{Salted, SaltedClaim},
     issuance::{SdCwtIssuedTagged, SdInnerPayload},
     key_binding::KbtCwtTagged,
@@ -67,8 +67,8 @@ pub enum EsdicawtReadError {
     CustomError(#[from] Box<dyn std::error::Error + Send + Sync>),
 }
 
-impl<DisclosableClaims: CustomClaims, IssuerProtectedClaims: CustomClaims, IssuerUnprotectedClaims: CustomClaims, IssuerPayloadClaims: CustomClaims> SdCwtRead
-    for SdCwtIssuedTagged<DisclosableClaims, IssuerProtectedClaims, IssuerUnprotectedClaims, IssuerPayloadClaims>
+impl<IssuerProtectedClaims: CustomClaims, IssuerUnprotectedClaims: CustomClaims, IssuerPayloadClaims: Select> SdCwtRead
+    for SdCwtIssuedTagged<IssuerProtectedClaims, IssuerUnprotectedClaims, IssuerPayloadClaims>
 {
     type PayloadClaims = IssuerPayloadClaims;
 
@@ -139,14 +139,13 @@ impl<DisclosableClaims: CustomClaims, IssuerProtectedClaims: CustomClaims, Issue
 }
 
 impl<
-    DisclosedClaims: CustomClaims,
     IssuerProtectedClaims: CustomClaims,
     IssuerUnprotectedClaims: CustomClaims,
-    IssuerPayloadClaims: CustomClaims,
+    IssuerPayloadClaims: Select,
     KbtProtectedClaims: CustomClaims,
     KbtUnprotectedClaims: CustomClaims,
     KbtPayloadClaims: CustomClaims,
-> SdCwtRead for KbtCwtTagged<DisclosedClaims, IssuerProtectedClaims, IssuerUnprotectedClaims, IssuerPayloadClaims, KbtProtectedClaims, KbtUnprotectedClaims, KbtPayloadClaims>
+> SdCwtRead for KbtCwtTagged<IssuerProtectedClaims, IssuerUnprotectedClaims, IssuerPayloadClaims, KbtProtectedClaims, KbtUnprotectedClaims, KbtPayloadClaims>
 {
     type PayloadClaims = IssuerPayloadClaims;
 
