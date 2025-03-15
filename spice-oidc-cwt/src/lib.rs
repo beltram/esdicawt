@@ -278,8 +278,8 @@ pub trait SpiceOidcSdCwtRead {
     fn updated_at(&mut self) -> EsdicawtReadResult<Option<i64>>;
 }
 
-impl<IssuerProtectedClaims: CustomClaims, IssuerUnprotectedClaims: CustomClaims, PayloadClaims: Select> SpiceOidcSdCwtRead
-    for SdCwtIssuedTagged<IssuerProtectedClaims, IssuerUnprotectedClaims, PayloadClaims>
+impl<PayloadClaims: Select, IssuerProtectedClaims: CustomClaims, IssuerUnprotectedClaims: CustomClaims> SpiceOidcSdCwtRead
+    for SdCwtIssuedTagged<PayloadClaims, IssuerProtectedClaims, IssuerUnprotectedClaims>
 where
     for<'a> &'a PayloadClaims: Into<&'a SpiceOidcClaims>,
 {
@@ -402,7 +402,7 @@ impl<
     KbtProtectedClaims: CustomClaims,
     KbtUnprotectedClaims: CustomClaims,
     KbtPayloadClaims: CustomClaims,
-> SpiceOidcSdCwtRead for KbtCwtTagged<IssuerProtectedClaims, IssuerUnprotectedClaims, IssuerPayloadClaims, KbtProtectedClaims, KbtUnprotectedClaims, KbtPayloadClaims>
+> SpiceOidcSdCwtRead for KbtCwtTagged<IssuerPayloadClaims, IssuerProtectedClaims, IssuerUnprotectedClaims, KbtProtectedClaims, KbtUnprotectedClaims, KbtPayloadClaims>
 where
     for<'a> &'a IssuerPayloadClaims: Into<&'a SpiceOidcClaims>,
 {
@@ -585,7 +585,7 @@ mod tests {
         claims: SpiceOidcClaims,
         holder_pk: &ed25519_dalek::VerifyingKey,
         subject: &str,
-    ) -> SdCwtIssuedTagged<NoClaims, NoClaims, SpiceOidcClaims> {
+    ) -> SdCwtIssuedTagged<SpiceOidcClaims, NoClaims, NoClaims> {
         issuer
             .issue_cwt(
                 &mut rand::thread_rng(),

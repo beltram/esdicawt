@@ -4,7 +4,7 @@ use serde::ser::SerializeSeq;
 use super::SdCwtIssued;
 use crate::{CustomClaims, Select, issuance::SdCwtIssuedBuilder};
 
-impl<ProtectedClaims: CustomClaims, UnprotectedClaims: CustomClaims, PayloadClaims: Select> serde::Serialize for SdCwtIssued<ProtectedClaims, UnprotectedClaims, PayloadClaims> {
+impl<PayloadClaims: Select, ProtectedClaims: CustomClaims, UnprotectedClaims: CustomClaims> serde::Serialize for SdCwtIssued<PayloadClaims, ProtectedClaims, UnprotectedClaims> {
     fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
         let mut seq = serializer.serialize_seq(Some(4))?;
         seq.serialize_element(&self.protected)?;
@@ -15,18 +15,18 @@ impl<ProtectedClaims: CustomClaims, UnprotectedClaims: CustomClaims, PayloadClai
     }
 }
 
-impl<'de, ProtectedClaims: CustomClaims, UnprotectedClaims: CustomClaims, PayloadClaims: Select> serde::Deserialize<'de>
-    for SdCwtIssued<ProtectedClaims, UnprotectedClaims, PayloadClaims>
+impl<'de, PayloadClaims: Select, ProtectedClaims: CustomClaims, UnprotectedClaims: CustomClaims> serde::Deserialize<'de>
+    for SdCwtIssued<PayloadClaims, ProtectedClaims, UnprotectedClaims>
 {
     fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-        struct SdIssuedVisitor<ProtectedClaims: CustomClaims, UnprotectedClaims: CustomClaims, PayloadClaims: Select>(
-            std::marker::PhantomData<(ProtectedClaims, UnprotectedClaims, PayloadClaims)>,
+        struct SdIssuedVisitor<PayloadClaims: Select, ProtectedClaims: CustomClaims, UnprotectedClaims: CustomClaims>(
+            std::marker::PhantomData<(PayloadClaims, ProtectedClaims, UnprotectedClaims)>,
         );
 
-        impl<'de, ProtectedClaims: CustomClaims, UnprotectedClaims: CustomClaims, PayloadClaims: Select> serde::de::Visitor<'de>
-            for SdIssuedVisitor<ProtectedClaims, UnprotectedClaims, PayloadClaims>
+        impl<'de, PayloadClaims: Select, ProtectedClaims: CustomClaims, UnprotectedClaims: CustomClaims> serde::de::Visitor<'de>
+            for SdIssuedVisitor<PayloadClaims, ProtectedClaims, UnprotectedClaims>
         {
-            type Value = SdCwtIssued<ProtectedClaims, UnprotectedClaims, PayloadClaims>;
+            type Value = SdCwtIssued<PayloadClaims, ProtectedClaims, UnprotectedClaims>;
 
             fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
                 write!(formatter, "a sd-issued payload")
