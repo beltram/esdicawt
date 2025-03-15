@@ -11,7 +11,7 @@ impl<
     ProtectedClaims: CustomClaims,
     UnprotectedClaims: CustomClaims,
     PayloadClaims: CustomClaims,
-> serde::Serialize for KbtCwt<IssuerProtectedClaims, IssuerUnprotectedClaims, IssuerPayloadClaims, ProtectedClaims, UnprotectedClaims, PayloadClaims>
+> serde::Serialize for KbtCwt<IssuerPayloadClaims, IssuerProtectedClaims, IssuerUnprotectedClaims, PayloadClaims, ProtectedClaims, UnprotectedClaims>
 {
     fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
         let mut seq = serializer.serialize_seq(Some(4))?;
@@ -31,21 +31,21 @@ impl<
     ProtectedClaims: CustomClaims,
     UnprotectedClaims: CustomClaims,
     PayloadClaims: CustomClaims,
-> serde::Deserialize<'de> for KbtCwt<IssuerProtectedClaims, IssuerUnprotectedClaims, IssuerPayloadClaims, ProtectedClaims, UnprotectedClaims, PayloadClaims>
+> serde::Deserialize<'de> for KbtCwt<IssuerPayloadClaims, IssuerProtectedClaims, IssuerUnprotectedClaims, PayloadClaims, ProtectedClaims, UnprotectedClaims>
 {
     fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
         struct KbtVisitor<
+            IssuerPayloadClaims: Select,
             IssuerProtectedClaims: CustomClaims,
             IssuerUnprotectedClaims: CustomClaims,
-            IssuerPayloadClaims: Select,
             ProtectedClaims: CustomClaims,
             UnprotectedClaims: CustomClaims,
             PayloadClaims: CustomClaims,
         >(
             std::marker::PhantomData<(
+                IssuerPayloadClaims,
                 IssuerProtectedClaims,
                 IssuerUnprotectedClaims,
-                IssuerPayloadClaims,
                 ProtectedClaims,
                 UnprotectedClaims,
                 PayloadClaims,
@@ -54,15 +54,15 @@ impl<
 
         impl<
             'de,
+            IssuerPayloadClaims: Select,
             IssuerProtectedClaims: CustomClaims,
             IssuerUnprotectedClaims: CustomClaims,
-            IssuerPayloadClaims: Select,
             ProtectedClaims: CustomClaims,
             UnprotectedClaims: CustomClaims,
             PayloadClaims: CustomClaims,
-        > serde::de::Visitor<'de> for KbtVisitor<IssuerProtectedClaims, IssuerUnprotectedClaims, IssuerPayloadClaims, ProtectedClaims, UnprotectedClaims, PayloadClaims>
+        > serde::de::Visitor<'de> for KbtVisitor<IssuerPayloadClaims, IssuerProtectedClaims, IssuerUnprotectedClaims, PayloadClaims, ProtectedClaims, UnprotectedClaims>
         {
-            type Value = KbtCwt<IssuerProtectedClaims, IssuerUnprotectedClaims, IssuerPayloadClaims, ProtectedClaims, UnprotectedClaims, PayloadClaims>;
+            type Value = KbtCwt<IssuerPayloadClaims, IssuerProtectedClaims, IssuerUnprotectedClaims, PayloadClaims, ProtectedClaims, UnprotectedClaims>;
 
             fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
                 write!(formatter, "a kbt payload")

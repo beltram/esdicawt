@@ -52,9 +52,9 @@ pub trait Verifier {
         params: VerifyCwtParams,
     ) -> Result<
         KbtCwtVerified<
+            Self::IssuerPayloadClaims,
             Self::IssuerProtectedClaims,
             Self::IssuerUnprotectedClaims,
-            Self::IssuerPayloadClaims,
             Self::KbtProtectedClaims,
             Self::KbtUnprotectedClaims,
             Self::KbtPayloadClaims,
@@ -62,9 +62,9 @@ pub trait Verifier {
         SdCwtVerifierError<Self::Error>,
     > {
         let kbt_tagged = KbtCwtTagged::<
+            Self::IssuerPayloadClaims,
             Self::IssuerProtectedClaims,
             Self::IssuerUnprotectedClaims,
-            Self::IssuerPayloadClaims,
             Self::KbtProtectedClaims,
             Self::KbtUnprotectedClaims,
             Self::KbtPayloadClaims,
@@ -76,9 +76,9 @@ pub trait Verifier {
     fn verify_sd_kbt(
         &self,
         kbt: &KbtCwtTagged<
+            Self::IssuerPayloadClaims,
             Self::IssuerProtectedClaims,
             Self::IssuerUnprotectedClaims,
-            Self::IssuerPayloadClaims,
             Self::KbtProtectedClaims,
             Self::KbtUnprotectedClaims,
             Self::KbtPayloadClaims,
@@ -86,9 +86,9 @@ pub trait Verifier {
         params: VerifyCwtParams,
     ) -> Result<
         KbtCwtVerified<
+            Self::IssuerPayloadClaims,
             Self::IssuerProtectedClaims,
             Self::IssuerUnprotectedClaims,
-            Self::IssuerPayloadClaims,
             Self::KbtProtectedClaims,
             Self::KbtUnprotectedClaims,
             Self::KbtPayloadClaims,
@@ -331,7 +331,7 @@ mod tests {
         verifying(cbor!({ "a" => [0, 1] }));
     }
 
-    fn verify<T: Select<Error = EsdicawtSpecError>>(disclosable_claims: T) -> KbtCwtVerified<NoClaims, NoClaims, T, NoClaims, NoClaims, NoClaims> {
+    fn verify<T: Select<Error = EsdicawtSpecError>>(disclosable_claims: T) -> KbtCwtVerified<T, NoClaims, NoClaims, NoClaims, NoClaims, NoClaims> {
         let (issuer_signing_key, holder_signing_key, sd_kbt) = generate(disclosable_claims);
         let verifier = HybridVerifier::<T> {
             issuer_verifying_key: *issuer_signing_key.verifying_key(),
@@ -351,7 +351,7 @@ mod tests {
     ) -> (
         p256::ecdsa::SigningKey,
         ed25519_dalek::SigningKey,
-        KbtCwtTagged<NoClaims, NoClaims, T, NoClaims, NoClaims, NoClaims>,
+        KbtCwtTagged<T, NoClaims, NoClaims, NoClaims, NoClaims, NoClaims>,
     ) {
         let mut csprng = rand_chacha::ChaCha20Rng::from_entropy();
 
