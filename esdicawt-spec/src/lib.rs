@@ -289,7 +289,7 @@ impl std::ops::DerefMut for Salt {
 }
 
 pub trait Select: CustomClaims {
-    type Error: std::error::Error;
+    type Error;
 
     fn select(self) -> Result<SelectiveDisclosure, <Self as Select>::Error>
     where

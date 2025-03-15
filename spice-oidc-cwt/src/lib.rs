@@ -594,7 +594,7 @@ mod tests {
                     unprotected_claims: None,
                     payload_claims: Some(claims),
                     subject,
-                    identifier: "",
+                    issuer: "",
                     expiry: Duration::from_secs(90),
                     leeway: Duration::from_secs(1),
                     key_location: "",

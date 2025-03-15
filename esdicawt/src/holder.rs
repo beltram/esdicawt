@@ -14,7 +14,7 @@ pub mod error;
 pub mod params;
 
 pub trait Holder {
-    type Error: std::error::Error + Send + Sync;
+    type Error: core::error::Error + Send + Sync;
 
     type Signature;
 
@@ -180,7 +180,7 @@ mod tests {
             unprotected_claims: None,
             payload_claims: Some(disclosable_claims),
             subject: "mimi://example.com/u/alice.smith",
-            identifier: "mimi://example.com/i/acme.io",
+            issuer: "mimi://example.com/i/acme.io",
             key_location: "https://auth.acme.io/issuer.cwk",
             expiry: core::time::Duration::from_secs(90),
             leeway: core::time::Duration::from_secs(1),
