@@ -14,7 +14,6 @@ env:
   RUST_BACKTRACE: '1'
 
 jobs:
-
   fmt:
     runs-on: ubuntu-latest
     steps:
@@ -39,6 +38,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
+      - run: git submodule init && git submodule update --recursive --remote
       - run: cargo build --verbose
       - run: cargo clippy --tests -- -D warnings
 
@@ -49,9 +49,9 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
       - uses: taiki-e/install-action@nextest
       - uses: Swatinem/rust-cache@v2
+      - run: git submodule init && git submodule update --recursive --remote
       - run: cargo test --all-features
       - run: cargo test --doc
-
 
   wasm-test:
     runs-on: ubuntu-latest
@@ -68,6 +68,7 @@ jobs:
         id: setup-chrome
         with:
             chrome-version: stable
+      - run: git submodule init && git submodule update --recursive --remote
       - run: |
             echo "CHROME_PATH=${{ steps.setup-chrome.outputs.chrome-path }}" >> $GITHUB_ENV
       - name: Install wasm-pack
@@ -76,7 +77,6 @@ jobs:
             tool: wasm-pack
       - name: Run tests (wasm)
         run: wasm-pack test --headless --chrome ./${{ matrix.crate_paths }}
-
 
   hack:
     runs-on: ubuntu-latest

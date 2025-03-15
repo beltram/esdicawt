@@ -32,7 +32,7 @@ pub enum SdCwtHolderError<CustomError: Send + Sync> {
 #[cfg(any(feature = "pem", feature = "der"))]
 impl<T> From<pkcs8::Error> for SdCwtHolderError<T>
 where
-    T: std::error::Error + Send + Sync,
+    T: core::error::Error + Send + Sync,
 {
     fn from(err: pkcs8::Error) -> Self {
         Self::Pkcs8Error(err)

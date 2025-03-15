@@ -1,0 +1,3 @@
+[submodule "draft-ietf-spice-sd-cwt"]
+	path = draft-ietf-spice-sd-cwt
+	url = https://github.com/ietf-wg-spice/draft-ietf-spice-sd-cwt.git

@@ -17,7 +17,7 @@ use esdicawt_spec::{
 use signature::{Keypair, Signer};
 
 pub trait Issuer {
-    type Error: std::error::Error + Send + Sync + From<ciborium::value::Error>;
+    type Error: core::error::Error + Send + Sync + From<ciborium::value::Error>;
     type Hasher: digest::Digest;
 
     type Signature;
@@ -75,7 +75,7 @@ pub trait Issuer {
         params: IssueCwtParams<'_, Self::PayloadClaims, Self::ProtectedClaims, Self::UnprotectedClaims>,
     ) -> Result<SdCwtIssuedTagged<Self::PayloadClaims, Self::ProtectedClaims, Self::UnprotectedClaims>, SdCwtIssuerError<Self::Error>> {
         let alg = self.cwt_algorithm();
-        let issuer = params.identifier;
+        let issuer = params.issuer;
         let key_location = params.key_location;
 
         let mut protected_builder = coset::HeaderBuilder::new()
@@ -179,7 +179,7 @@ pub struct IssueCwtParams<'a, PayloadClaims: Select, ProtectedClaims: CustomClai
     pub payload_claims: Option<PayloadClaims>,
     pub subject: &'a str,
     /// Used to be inserted in the Issuer claim
-    pub identifier: &'a str,
+    pub issuer: &'a str,
     pub expiry: core::time::Duration,
     /// Dealing with clocks skew
     pub leeway: core::time::Duration,
@@ -375,7 +375,7 @@ mod tests {
                     unprotected_claims: None,
                     payload_claims: Some(disclosable_claims),
                     subject: "mimi://example.com/alice.smith",
-                    identifier: "mimi://example.com/i/acme.io",
+                    issuer: "mimi://example.com/i/acme.io",
                     expiry: core::time::Duration::from_secs(90),
                     leeway: core::time::Duration::from_secs(1),
                     key_location: "https://auth.acme.io/issuer.cwk",

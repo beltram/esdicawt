@@ -10,7 +10,7 @@ use std::ops::DerefMut;
 /// Redacts the claims in this Value by recursively traversing, depth-first the ClaimSet
 pub fn redact<E, Hasher>(csprng: &mut dyn rand_core::CryptoRngCore, disclosable_claims: &mut Value) -> Result<SaltedArray, SdCwtIssuerError<E>>
 where
-    E: std::error::Error + Send + Sync,
+    E: core::error::Error + Send + Sync,
     Hasher: digest::Digest,
 {
     let mut sd_claims = SaltedArray::default();
@@ -26,7 +26,7 @@ fn redact_value<E, Hasher>(
     parent_ctx: Option<(&ClaimName, &mut RedactedClaimKeys)>,
 ) -> Result<(), SdCwtIssuerError<E>>
 where
-    E: std::error::Error + Send + Sync,
+    E: core::error::Error + Send + Sync,
     Hasher: digest::Digest,
 {
     _redact::<E, Hasher>(value, csprng, sd_claims, parent_ctx)
@@ -40,7 +40,7 @@ fn _redact<E, Hasher>(
     parent_ctx: Option<(&ClaimName, &mut RedactedClaimKeys)>,
 ) -> Result<(), SdCwtIssuerError<E>>
 where
-    E: std::error::Error + Send + Sync,
+    E: core::error::Error + Send + Sync,
     Hasher: digest::Digest,
 {
     let digest = |v: &Value| Result::<_, SdCwtIssuerError<E>>::Ok(Hasher::digest(&v.to_cbor_bytes()?));
@@ -152,7 +152,7 @@ where
 
 fn new_salt<E>(csprng: &mut dyn rand_core::CryptoRngCore) -> Result<Salt, SdCwtIssuerError<E>>
 where
-    E: std::error::Error + Send + Sync,
+    E: core::error::Error + Send + Sync,
 {
     let mut salt = Salt::empty();
     csprng.try_fill_bytes(&mut *salt)?;

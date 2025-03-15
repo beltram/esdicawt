@@ -12,7 +12,8 @@ der = ["dep:pkcs8"]
 ed25519 = ["cose-key-confirmation/ed25519"]
 p256 = ["cose-key-confirmation/p256"]
 p384 = ["cose-key-confirmation/p384"]
-test-utils = ["dep:ed25519-dalek", "dep:p256", "dep:sha2", "cose-key-confirmation/ed25519", "cose-key-confirmation/p256", "cose-key-confirmation/p384"]
+test-utils = ["dep:ed25519-dalek", "dep:p256", "dep:p384", "dep:sha2", "cose-key-confirmation/ed25519", "cose-key-confirmation/p256", "cose-key-confirmation/p384"]
+test-vectors = ["test-utils"]
 
 [dependencies]
 esdicawt-spec.workspace = true
@@ -31,6 +32,7 @@ sha2 = { optional = true, workspace = true }
 time = { workspace = true, features = ["wasm-bindgen"] }
 ed25519-dalek = { optional = true, workspace = true, features = ["rand_core", "pem", "serde"] }
 p256 = { optional = true, workspace = true }
+p384 = { optional = true, workspace = true }
 
 [target.'cfg(all(target_arch = "wasm32", target_os = "unknown"))'.dependencies]
 js-sys = "0.3"
@@ -44,6 +46,8 @@ sha2.workspace = true
 thiserror.workspace = true
 wasm-bindgen-test.workspace = true
 hex.workspace = true
+spice-oidc-cwt = { workspace = true }
+anyhow.workspace = true
 
 [lints]
 workspace = true

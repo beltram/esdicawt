@@ -1,6 +1,6 @@
 use crate::verifier::error::SdCwtVerifierError;
 
-pub fn verify_time_claims<E: std::error::Error + Send + Sync>(now: i64, leeway: i64, iat: Option<i64>, exp: Option<i64>, nbf: Option<i64>) -> Result<(), SdCwtVerifierError<E>> {
+pub fn verify_time_claims<E: core::error::Error + Send + Sync>(now: i64, leeway: i64, iat: Option<i64>, exp: Option<i64>, nbf: Option<i64>) -> Result<(), SdCwtVerifierError<E>> {
     if let Some(iat) = iat {
         if iat > now.saturating_add(leeway) {
             return Err(SdCwtVerifierError::ClockDrift);

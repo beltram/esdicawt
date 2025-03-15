@@ -17,7 +17,7 @@ use esdicawt_spec::{
 use std::collections::HashMap;
 
 pub trait Verifier {
-    type Error: std::error::Error + Send + Sync;
+    type Error: core::error::Error + Send + Sync;
 
     type IssuerSignature;
     type IssuerVerifier: signature::Verifier<Self::IssuerSignature>;
@@ -199,7 +199,7 @@ pub trait Verifier {
 // wrapping "_walk" is required for fallible recursion
 fn walk_payload<E>(payload: &mut Value, disclosures: &mut HashMap<Vec<u8>, Salted<Value>>) -> SdCwtVerifierResult<(), E>
 where
-    E: std::error::Error + Send + Sync,
+    E: core::error::Error + Send + Sync,
 {
     _walk(payload, disclosures)
 }
@@ -207,7 +207,7 @@ where
 #[tailcall::tailcall]
 fn _walk<E>(payload: &mut Value, disclosures: &mut HashMap<Vec<u8>, Salted<Value>>) -> SdCwtVerifierResult<(), E>
 where
-    E: std::error::Error + Send + Sync,
+    E: core::error::Error + Send + Sync,
 {
     match payload {
         Value::Map(mapping) => {
@@ -365,7 +365,7 @@ mod tests {
             unprotected_claims: None,
             payload_claims: Some(disclosable_claims),
             subject: "mimi://example.com/u/alice.smith",
-            identifier: "mimi://example.com/i/acme.io",
+            issuer: "mimi://example.com/i/acme.io",
             expiry: core::time::Duration::from_secs(90),
             leeway: core::time::Duration::from_secs(1),
             key_location: "https://auth.acme.io/issuer.cwk",
