@@ -4,7 +4,7 @@ use serde::ser::SerializeMap;
 
 use super::KbtProtected;
 use crate::{
-    AnyMap, COSE_HEADER_KCWT, CWT_CLAIM_ALG, CWT_MEDIATYPE, ClaimName, CustomClaims, MEDIATYPE_KB_CWT, MapKey, Select, inlined_cbor::InlinedCbor, issuance::SdCwtIssuedTagged,
+    COSE_HEADER_KCWT, CWT_CLAIM_ALG, CWT_MEDIATYPE, CustomClaims, MEDIATYPE_KB_CWT, Select, inlined_cbor::InlinedCbor, issuance::SdCwtIssuedTagged,
     key_binding::KbtProtectedBuilder,
 };
 
@@ -13,7 +13,13 @@ impl<IssuerPayloadClaims: Select, IssuerProtectedClaims: CustomClaims, IssuerUnp
 {
     fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
         use serde::ser::Error as _;
-        let mut extra: Option<AnyMap> = self.extra.clone().map(Extra::into);
+        let mut extra = self
+            .extra
+            .as_ref()
+            .map(|extra| Value::serialized(extra).map_err(S::Error::custom))
+            .transpose()?
+            .map(|v| v.into_map().map_err(|_| S::Error::custom("should have been a mapping")))
+            .transpose()?;
         let extra_len = extra.as_ref().map(|extra| extra.len()).unwrap_or_default();
         let mut map = serializer.serialize_map(Some(3 + extra_len))?;
         map.serialize_entry(&CWT_MEDIATYPE, MEDIATYPE_KB_CWT)?;
@@ -56,18 +62,18 @@ impl<'de, IssuerPayloadClaims: Select, IssuerProtectedClaims: CustomClaims, Issu
                 use serde::de::Error as _;
                 let mut found_mediatype = false;
                 let mut builder = KbtProtectedBuilder::<IssuerPayloadClaims, IssuerProtectedClaims, IssuerUnprotectedClaims, Extra>::default();
-                let mut extra = AnyMap::default();
-                while let Some((k, v)) = map.next_entry::<MapKey, Value>()? {
+                let mut extra = vec![];
+                while let Some((k, v)) = map.next_entry::<Value, Value>()? {
                     match k {
-                        ClaimName::Integer(int_claim) => match int_claim {
+                        Value::Integer(label) => match label.try_into() {
                             // Ignore, but it must be there and have the correct value
-                            CWT_MEDIATYPE => {
+                            Ok(CWT_MEDIATYPE) => {
                                 found_mediatype = v.into_text().map(|s| s == MEDIATYPE_KB_CWT).unwrap_or_default();
                             }
-                            CWT_CLAIM_ALG => {
+                            Ok(CWT_CLAIM_ALG) => {
                                 builder.alg(coset::Algorithm::from_cbor_value(v).map_err(|e| A::Error::custom(format!("Cannot deserialize sd-protected.alg: {e}")))?);
                             }
-                            COSE_HEADER_KCWT => {
+                            Ok(COSE_HEADER_KCWT) => {
                                 let issuer_sd_cwt: InlinedCbor<SdCwtIssuedTagged<_, _, _>> = v
                                     .deserialized()
                                     .map_err(|value| A::Error::custom(format!("'issuer-sd-cwt' is not a sd-cwt-presentation: {value:?}")))?;
@@ -75,11 +81,11 @@ impl<'de, IssuerPayloadClaims: Select, IssuerProtectedClaims: CustomClaims, Issu
                                 builder.kcwt(issuer_sd_cwt);
                             }
                             _ => {
-                                extra.insert(k, v);
+                                extra.push((k, v));
                             }
                         },
                         _ => {
-                            extra.insert(k, v);
+                            extra.push((k, v));
                         }
                     }
                 }
@@ -89,8 +95,8 @@ impl<'de, IssuerPayloadClaims: Select, IssuerProtectedClaims: CustomClaims, Issu
                 }
 
                 if !extra.is_empty() {
-                    let custom_keys: Extra = extra.try_into().map_err(|_err| A::Error::custom("Cannot deserialize custom keys".to_string()))?;
-                    builder.extra(custom_keys);
+                    let extra = Value::deserialized::<Extra>(&Value::Map(extra)).map_err(A::Error::custom)?;
+                    builder.extra(extra);
                 }
 
                 builder.build().map_err(|e| A::Error::custom(format!("Cannot build sd-protected: {e}")))
@@ -120,11 +126,18 @@ impl<IssuerPayloadClaims: Select, IssuerProtectedClaims: CustomClaims, IssuerUnp
         builder = builder.algorithm(alg);
 
         // map extra claims
-        if let Some(claims) = kbtp.extra.map(Into::into) {
+        let extra = kbtp
+            .extra
+            .as_ref()
+            .map(Value::serialized)
+            .transpose()?
+            .map(|v| v.into_map().map_err(|_| "should have been a mapping"))
+            .transpose()?;
+        if let Some(claims) = extra {
             for (k, v) in claims {
                 builder = match k {
-                    MapKey::Integer(i) => builder.value(i, v),
-                    MapKey::Text(t) => builder.text_value(t, v),
+                    Value::Integer(i) => builder.value(i.try_into()?, v),
+                    Value::Text(t) => builder.text_value(t, v),
                     _ => builder,
                 }
             }

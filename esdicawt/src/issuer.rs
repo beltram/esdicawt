@@ -8,7 +8,7 @@ use crate::{
 use ciborium::Value;
 use cose_key_confirmation::KeyConfirmation;
 use esdicawt_spec::{
-    AnyMap, COSE_SD_CLAIMS, CWT_CLAIM_SD_ALG, CWT_MEDIATYPE, ClaimName, CustomClaims, CwtAny, EsdicawtSpecError, MEDIATYPE_SD_CWT, SdHashAlg, Select,
+    COSE_SD_CLAIMS, CWT_CLAIM_SD_ALG, CWT_MEDIATYPE, CustomClaims, CwtAny, EsdicawtSpecError, MEDIATYPE_SD_CWT, SdHashAlg, Select,
     issuance::{SdCwtIssuedTagged, SdInnerPayloadBuilder, SdPayloadBuilder},
     reexports::coset::{
         TaggedCborSerializable, {self},
@@ -85,11 +85,11 @@ pub trait Issuer {
             .key_id(key_location.as_bytes().into());
 
         if let Some(protected_claims) = params.protected_claims {
-            let protected_extra_claims: AnyMap = protected_claims.into();
+            let protected_extra_claims = Value::serialized(&protected_claims)?.into_map()?;
             for (k, v) in protected_extra_claims {
                 protected_builder = match k {
-                    ClaimName::Integer(identifier) => protected_builder.value(identifier, v),
-                    ClaimName::Text(named_claim) => protected_builder.text_value(named_claim, v),
+                    Value::Integer(i) => protected_builder.value(i.try_into()?, v),
+                    Value::Text(label) => protected_builder.text_value(label, v),
                     _ => protected_builder,
                 };
             }
@@ -97,7 +97,7 @@ pub trait Issuer {
 
         let protected = protected_builder.build();
 
-        let mut payload_claims = params.payload_claims.map(|c| c.select()).transpose().map_err(SdCwtIssuerError::CustomError)?;
+        let mut payload_claims = params.payload.map(|c| c.select()).transpose().map_err(SdCwtIssuerError::CustomError)?;
 
         let mut unprotected_builder = coset::HeaderBuilder::new();
 
@@ -107,11 +107,11 @@ pub trait Issuer {
             unprotected_builder = unprotected_builder.value(COSE_SD_CLAIMS, sd_claims.to_cbor_bytes()?.into());
 
             if let Some(unprotected_claims) = params.unprotected_claims {
-                let unprotected_extra_claims: AnyMap = unprotected_claims.into();
+                let unprotected_extra_claims = Value::serialized(&unprotected_claims)?.into_map()?;
                 for (k, v) in unprotected_extra_claims {
                     unprotected_builder = match k {
-                        ClaimName::Integer(identifier) => unprotected_builder.value(identifier, v),
-                        ClaimName::Text(named_claim) => unprotected_builder.text_value(named_claim, v),
+                        Value::Integer(i) => unprotected_builder.value(i.try_into()?, v),
+                        Value::Text(label) => unprotected_builder.text_value(label, v),
                         _ => unprotected_builder,
                     };
                 }
@@ -122,7 +122,7 @@ pub trait Issuer {
             let iat = now;
             let expiry = now + params.expiry.as_secs();
 
-            let mut inner_payload_builder = SdInnerPayloadBuilder::default();
+            let mut inner_payload_builder = SdInnerPayloadBuilder::<Self::PayloadClaims>::default();
             inner_payload_builder
                 .issuer(issuer)
                 .subject(params.subject)
@@ -176,7 +176,7 @@ pub struct IssueCwtParams<'a, PayloadClaims: Select, ProtectedClaims: CustomClai
     /// Extra claims in the unprotected header of the sd-cwt
     pub unprotected_claims: Option<UnprotectedClaims>,
     /// CBOR value with tagged claims to disclose
-    pub payload_claims: Option<PayloadClaims>,
+    pub payload: Option<PayloadClaims>,
     pub subject: &'a str,
     /// Used to be inserted in the Issuer claim
     pub issuer: &'a str,
@@ -189,11 +189,10 @@ pub struct IssueCwtParams<'a, PayloadClaims: Select, ProtectedClaims: CustomClai
 
 #[cfg(test)]
 mod tests {
-    use super::{AnyMap, claims::CustomTokenClaims, test_utils::Ed25519IssuerClaims};
+    use super::{claims::CustomTokenClaims, test_utils::Ed25519IssuerClaims};
     use crate::{
         Issuer,
         spec::{
-            MapKey,
             blinded_claims::{Salted, SaltedClaim, SaltedElement},
             sd,
         },
@@ -208,8 +207,8 @@ mod tests {
     #[test]
     #[wasm_bindgen_test::wasm_bindgen_test]
     fn should_generate_sd_cwt() {
-        let disclosable_claims = CustomTokenClaims { name: Some("Alice Smith".into()) };
-        let mut sd_cwt = issue(disclosable_claims);
+        let payload = CustomTokenClaims { name: Some("Alice Smith".into()) };
+        let mut sd_cwt = issue(payload);
 
         let cwt_cbor = sd_cwt.to_cbor_bytes().unwrap();
         let sd_cwt_2 = SdCwtIssuedTagged::from_cbor_bytes(&cwt_cbor).unwrap();
@@ -222,9 +221,9 @@ mod tests {
         assert_eq!(rck.len(), 1);
         let rck_name = rck.first().unwrap();
 
-        let disclosable_claims = sd_cwt.0.disclosures().unwrap().iter().map(|d| d.unwrap()).collect::<Vec<_>>();
-        assert_eq!(disclosable_claims.len(), 1);
-        let d0 = disclosable_claims.first().unwrap();
+        let payload = sd_cwt.0.disclosures().unwrap().iter().map(|d| d.unwrap()).collect::<Vec<_>>();
+        assert_eq!(payload.len(), 1);
+        let d0 = payload.first().unwrap();
         let Salted::Claim(SaltedClaim { name, value, .. }) = d0 else { unreachable!() };
 
         // verify content of disclosure
@@ -240,8 +239,7 @@ mod tests {
     #[wasm_bindgen_test::wasm_bindgen_test]
     fn should_issue_complex_types() {
         let verify_issuance = |value: Value, expected: (Option<ClaimName>, Result<Value, ciborium::value::Error>)| {
-            let mut payload = AnyMap::new();
-            payload.insert(MapKey::Text("___claim".into()), value);
+            let payload = cbor!({ "___claim" => value }).unwrap();
             let mut sd_cwt = issue(payload);
 
             let disclosable_claims = sd_cwt.0.disclosures().unwrap().iter().map(|d| d.unwrap()).collect::<Vec<_>>();
@@ -323,28 +321,6 @@ mod tests {
         pub age: Option<u32>,
     }
 
-    impl From<Model> for AnyMap {
-        fn from(val: Model) -> Self {
-            let mut map = Self::with_capacity(2);
-            if let Some(name) = val.name {
-                map.insert(ClaimName::Text("name".into()), Value::Text(name));
-            }
-            if let Some(age) = val.age {
-                map.insert(ClaimName::Text("age".into()), age.into());
-            }
-            map
-        }
-    }
-
-    impl TryFrom<AnyMap> for Model {
-        type Error = std::convert::Infallible;
-        fn try_from(mut value: AnyMap) -> Result<Self, Self::Error> {
-            let name = value.remove(&ClaimName::Text("name".into())).map(|name| name.into_text().unwrap());
-            let age = value.remove(&ClaimName::Text("age".into())).map(|name| name.into_integer().unwrap().try_into().unwrap());
-            Ok(Self { name, age })
-        }
-    }
-
     impl Select for Model {
         type Error = EsdicawtSpecError;
 
@@ -360,7 +336,7 @@ mod tests {
         }
     }
 
-    fn issue<T: Select<Error = EsdicawtSpecError>>(disclosable_claims: T) -> SdCwtIssuedTagged<T, NoClaims, NoClaims> {
+    fn issue<T: Select<Error = EsdicawtSpecError>>(payload: T) -> SdCwtIssuedTagged<T> {
         let mut csprng = rand_chacha::ChaCha20Rng::from_entropy();
 
         let holder_signing_key = ed25519_dalek::SigningKey::generate(&mut csprng);
@@ -373,7 +349,7 @@ mod tests {
                 crate::IssueCwtParams {
                     protected_claims: None,
                     unprotected_claims: None,
-                    payload_claims: Some(disclosable_claims),
+                    payload: Some(payload),
                     subject: "mimi://example.com/alice.smith",
                     issuer: "mimi://example.com/i/acme.io",
                     expiry: core::time::Duration::from_secs(90),
@@ -405,29 +381,11 @@ mod tests {
 #[cfg(any(test, feature = "test-utils"))]
 pub mod claims {
     use ciborium::Value;
-    use esdicawt_spec::{AnyMap, ClaimName, EsdicawtSpecError, Select, SelectiveDisclosure, sd};
+    use esdicawt_spec::{EsdicawtSpecError, Select, SelectiveDisclosure, sd};
 
     #[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
     pub struct CustomTokenClaims {
         pub name: Option<String>,
-    }
-
-    impl From<CustomTokenClaims> for AnyMap {
-        fn from(val: CustomTokenClaims) -> Self {
-            let mut map = Self::with_capacity(1);
-            if let Some(name) = val.name {
-                map.insert(ClaimName::Text("name".into()), Value::Text(name));
-            }
-            map
-        }
-    }
-
-    impl TryFrom<AnyMap> for CustomTokenClaims {
-        type Error = std::convert::Infallible;
-        fn try_from(mut value: AnyMap) -> Result<Self, Self::Error> {
-            let name = value.remove(&ClaimName::Text("name".into())).map(|name| name.into_text().unwrap());
-            Ok(Self { name })
-        }
     }
 
     impl Select for CustomTokenClaims {

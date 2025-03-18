@@ -1,20 +1,23 @@
-use crate::{CustomClaims, MapKey, key_binding::KbtUnprotected};
+use crate::{CustomClaims, EsdicawtSpecError, key_binding::KbtUnprotected};
+use ciborium::Value;
 
-impl<Extra: CustomClaims> From<KbtUnprotected<Extra>> for coset::Header {
-    fn from(kbtu: KbtUnprotected<Extra>) -> Self {
+impl<Extra: CustomClaims> TryFrom<KbtUnprotected<Extra>> for coset::Header {
+    type Error = EsdicawtSpecError;
+
+    fn try_from(kbtu: KbtUnprotected<Extra>) -> Result<Self, Self::Error> {
         let mut builder = coset::HeaderBuilder::new();
 
         // map extra claims
-        if let Some(claims) = kbtu.extra.map(Into::into) {
+        if let Some(claims) = kbtu.extra.as_ref().map(|e| Value::serialized(&e)).transpose()?.map(|v| v.into_map()).transpose()? {
             for (k, v) in claims {
                 builder = match k {
-                    MapKey::Integer(i) => builder.value(i, v),
-                    MapKey::Text(t) => builder.text_value(t, v),
+                    Value::Integer(i) => builder.value(i.try_into()?, v),
+                    Value::Text(t) => builder.text_value(t, v),
                     _ => builder,
                 }
             }
         }
 
-        builder.build()
+        Ok(builder.build())
     }
 }
