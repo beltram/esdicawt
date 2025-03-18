@@ -55,10 +55,7 @@ impl<'de, IssuerPayloadClaims: Select, IssuerProtectedClaims: CustomClaims, Issu
                 write!(formatter, "a sd-protected CWT")
             }
 
-            fn visit_map<A>(self, mut map: A) -> Result<Self::Value, A::Error>
-            where
-                A: serde::de::MapAccess<'de>,
-            {
+            fn visit_map<A: serde::de::MapAccess<'de>>(self, mut map: A) -> Result<Self::Value, A::Error> {
                 use serde::de::Error as _;
                 let mut found_mediatype = false;
                 let mut builder = KbtProtectedBuilder::<IssuerPayloadClaims, IssuerProtectedClaims, IssuerUnprotectedClaims, Extra>::default();

@@ -17,7 +17,9 @@ impl<Extra: CustomClaims> serde::Serialize for SdUnprotected<Extra> {
             .map(|v| v.into_map().map_err(|_| S::Error::custom("should have been a mapping")))
             .transpose()?;
         let extra_len = extra.as_ref().map(|extra| extra.len()).unwrap_or_default();
+
         let mut map = serializer.serialize_map(Some(1 + extra_len))?;
+
         map.serialize_entry(&COSE_SD_CLAIMS, &self.sd_claims)?;
 
         if let Some(extra) = extra.take() {
@@ -31,25 +33,23 @@ impl<Extra: CustomClaims> serde::Serialize for SdUnprotected<Extra> {
 
 impl<'de, Extra: CustomClaims> serde::Deserialize<'de> for SdUnprotected<Extra> {
     fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-        struct UnprotectedIssuedVisitor<Extra: CustomClaims>(std::marker::PhantomData<Extra>);
+        struct SdUnprotectedVisitor<Extra: CustomClaims>(std::marker::PhantomData<Extra>);
 
-        impl<'de, Extra: CustomClaims> serde::de::Visitor<'de> for UnprotectedIssuedVisitor<Extra> {
+        impl<'de, Extra: CustomClaims> serde::de::Visitor<'de> for SdUnprotectedVisitor<Extra> {
             type Value = SdUnprotected<Extra>;
 
             fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
                 write!(formatter, "an unprotected-issued header")
             }
 
-            fn visit_map<A>(self, mut map: A) -> Result<Self::Value, A::Error>
-            where
-                A: serde::de::MapAccess<'de>,
-            {
+            fn visit_map<A: serde::de::MapAccess<'de>>(self, mut map: A) -> Result<Self::Value, A::Error> {
                 use serde::de::Error as _;
                 let mut extra = vec![];
                 let mut sd_claims = None;
                 while let Some((k, v)) = map.next_entry::<Value, Value>()? {
                     if matches!(k, Value::Integer(label) if label == COSE_SD_CLAIMS.into()) {
-                        sd_claims.replace(v.deserialized().map_err(|err| A::Error::custom(format!("Cannot deserialize sd_claims: {err}")))?);
+                        let salted_array = v.deserialized().map_err(|err| A::Error::custom(format!("Cannot deserialize sd_claims: {err}")))?;
+                        sd_claims.replace(salted_array);
                     } else {
                         extra.push((k, v));
                     }
@@ -68,6 +68,6 @@ impl<'de, Extra: CustomClaims> serde::Deserialize<'de> for SdUnprotected<Extra> 
             }
         }
 
-        deserializer.deserialize_map(UnprotectedIssuedVisitor::<Extra>(Default::default()))
+        deserializer.deserialize_map(SdUnprotectedVisitor::<Extra>(Default::default()))
     }
 }

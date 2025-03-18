@@ -184,10 +184,9 @@ impl serde::Serialize for SaltedArray {
     fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
         use serde::ser::Error as _;
         let mut seq = serializer.serialize_seq(Some(self.0.len()))?;
-        for value in &self.0 {
+        for salted in &self.0 {
             let mut buf = vec![];
-            ciborium::into_writer(value, &mut buf).map_err(|e| S::Error::custom(format!("cannot serialize Salted value: {e}")))?;
-
+            ciborium::into_writer(salted, &mut buf).map_err(|e| S::Error::custom(format!("cannot serialize Salted value: {e}")))?;
             seq.serialize_element(&buf)?;
         }
         seq.end()
@@ -205,15 +204,12 @@ impl<'de> serde::Deserialize<'de> for SaltedArray {
                 write!(formatter, "a salted-array")
             }
 
-            fn visit_seq<A>(self, mut seq: A) -> Result<Self::Value, A::Error>
-            where
-                A: serde::de::SeqAccess<'de>,
-            {
+            fn visit_seq<A: serde::de::SeqAccess<'de>>(self, mut seq: A) -> Result<Self::Value, A::Error> {
                 use serde::de::Error as _;
                 let size = seq.size_hint().unwrap_or(0);
 
                 // SAFETY: passing raw size can cause a capacity overflow https://doc.rust-lang.org/std/vec/struct.Vec.html#guarantees
-                const MAX_SIZE: usize = isize::MAX as usize / std::mem::size_of::<Value>();
+                const MAX_SIZE: usize = isize::MAX as usize / size_of::<Value>();
                 if size > MAX_SIZE {
                     return Err(A::Error::custom("seq too big"));
                 }
