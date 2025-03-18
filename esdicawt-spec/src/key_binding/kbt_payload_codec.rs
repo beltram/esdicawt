@@ -51,10 +51,7 @@ impl<'de, Extra: CustomClaims> serde::Deserialize<'de> for KbtPayload<Extra> {
                 write!(formatter, "a kbt-payload")
             }
 
-            fn visit_map<A>(self, mut map: A) -> Result<Self::Value, A::Error>
-            where
-                A: serde::de::MapAccess<'de>,
-            {
+            fn visit_map<A: serde::de::MapAccess<'de>>(self, mut map: A) -> Result<Self::Value, A::Error> {
                 use ciborium::Value;
                 use serde::de::Error as _;
 

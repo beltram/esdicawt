@@ -84,7 +84,7 @@ impl<IssuerPayloadClaims: Select, IssuerProtectedClaims: CustomClaims, IssuerUnp
         if let Some(claim) = unredacted {
             Ok(Some(claim))
         } else {
-            let disclosures = self.0.sd_unprotected.sd_claims.to_value()?;
+            let disclosures = &self.0.sd_unprotected.sd_claims;
             let redacted = disclosures.iter().find_map(|s| match s {
                 Ok(Salted::Claim(SaltedClaim { name, value, .. })) if name == key => Some(value),
                 _ => None,
@@ -104,7 +104,7 @@ impl<IssuerPayloadClaims: Select, IssuerProtectedClaims: CustomClaims, IssuerUnp
         if let Some(claim) = unredacted {
             Ok(Some(claim))
         } else {
-            let disclosures = self.0.sd_unprotected.sd_claims.to_value()?;
+            let disclosures = &self.0.sd_unprotected.sd_claims;
             let redacted = disclosures
                 .iter()
                 .find_map(|s| match s {
@@ -123,7 +123,7 @@ impl<IssuerPayloadClaims: Select, IssuerProtectedClaims: CustomClaims, IssuerUnp
         if let Some(claim) = unredacted {
             Ok(Some(claim))
         } else {
-            let disclosures = self.0.sd_unprotected.sd_claims.to_value()?;
+            let disclosures = &self.0.sd_unprotected.sd_claims;
             let redacted = disclosures
                 .iter()
                 .find_map(|s| match s {
@@ -163,7 +163,7 @@ impl<
         if let Some(claim) = unredacted {
             Ok(Some(claim))
         } else {
-            let disclosures = sd_cwt.0.sd_unprotected.sd_claims.to_value()?;
+            let disclosures = &sd_cwt.0.sd_unprotected.sd_claims;
             let redacted = disclosures.iter().find_map(|s| match s {
                 Ok(Salted::Claim(SaltedClaim { name, value, .. })) if name == key => Some(value),
                 _ => None,
@@ -185,7 +185,7 @@ impl<
         if let Some(claim) = unredacted {
             Ok(Some(claim))
         } else {
-            let disclosures = sd_cwt.0.sd_unprotected.sd_claims.to_value()?;
+            let disclosures = &sd_cwt.0.sd_unprotected.sd_claims;
             let redacted = disclosures
                 .iter()
                 .find_map(|s| match s {
@@ -206,7 +206,7 @@ impl<
         if let Some(claim) = unredacted {
             Ok(Some(claim))
         } else {
-            let disclosures = sd_cwt.0.sd_unprotected.sd_claims.to_value()?;
+            let disclosures = &sd_cwt.0.sd_unprotected.sd_claims;
             let redacted = disclosures
                 .iter()
                 .find_map(|s| match s {

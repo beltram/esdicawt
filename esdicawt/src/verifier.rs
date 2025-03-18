@@ -156,7 +156,7 @@ pub trait Verifier {
         // TODO: verify revocation status w/ Status List
 
         // now verifying the disclosures
-        let disclosures = sd_cwt.0.sd_unprotected.sd_claims.to_value_mut()?;
+        let disclosures = &sd_cwt.0.sd_unprotected.sd_claims;
         let disclosures_size = disclosures.len();
 
         let sd_alg = sd_cwt.0.protected.to_value()?.sd_alg;
