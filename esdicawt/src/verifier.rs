@@ -6,7 +6,7 @@ use ::time::OffsetDateTime;
 use ciborium::Value;
 use cose_key_confirmation::{KeyConfirmation, error::CoseKeyConfirmationError};
 use esdicawt_spec::{
-    CustomClaims, CwtAny, SdHashAlg, Select,
+    CWT_CLAIM_KEY_CONFIRMATION_MAP, CustomClaims, CwtAny, SdHashAlg, Select,
     blinded_claims::{Salted, SaltedClaim, SaltedElement},
     issuance::SdInnerPayload,
     key_binding::KbtCwtTagged,
@@ -181,6 +181,10 @@ pub trait Verifier {
         let mut payload = Value::serialized(&sd_cwt_payload)?;
         walk_payload(&mut payload, &mut disclosures)?;
 
+        if let Some(map) = payload.as_map_mut() {
+            map.retain(|(k, _)| !matches!(k, Value::Integer(i) if i == &CWT_CLAIM_KEY_CONFIRMATION_MAP.into()));
+        }
+
         // TODO: this might fail if `Self::DisclosedClaims` does not support unknown claims (serde flatten etc..)
         let sd_cwt_payload = payload.deserialized::<SdInnerPayload<Self::IssuerPayloadClaims>>()?;
         let claimset = sd_cwt_payload
@@ -283,7 +287,7 @@ mod tests {
         verifier::test_utils::HybridVerifier,
     };
     use ciborium::{Value, cbor};
-    use esdicawt_spec::{AnyMap, ClaimName, CwtAny, MapKey, NoClaims, Select, key_binding::KbtCwtTagged, verified::KbtCwtVerified};
+    use esdicawt_spec::{CwtAny, NoClaims, Select, key_binding::KbtCwtTagged, verified::KbtCwtVerified};
     use rand_core::SeedableRng as _;
 
     wasm_bindgen_test::wasm_bindgen_test_configure!(run_in_browser);
@@ -291,8 +295,8 @@ mod tests {
     #[test]
     #[wasm_bindgen_test::wasm_bindgen_test]
     fn should_verify_valid_sd_cwt() {
-        let disclosable_claims = CustomTokenClaims { name: Some("Alice Smith".into()) };
-        let verified = verify(disclosable_claims);
+        let payload = CustomTokenClaims { name: Some("Alice Smith".into()) };
+        let verified = verify(payload);
 
         assert_eq!(verified.claimset.name.as_deref(), Some("Alice Smith"));
         assert_eq!(verified.sd_cwt().payload.subject, Some("mimi://example.com/u/alice.smith".into()));
@@ -303,12 +307,11 @@ mod tests {
     fn should_verify_complex() {
         let verifying = |value: Result<Value, ciborium::value::Error>| {
             let value = value.unwrap();
-            let mut disclosable_claims = AnyMap::new();
-            disclosable_claims.insert(MapKey::Text("___claim".into()), value.clone());
-            let verified = verify(disclosable_claims);
+            let payload = cbor!({ "___claim" => value }).unwrap();
+            let verified = verify(payload);
 
-            let label = ClaimName::Text("___claim".to_string());
-            let claim = verified.claimset.get(&label).unwrap();
+            let claimset = verified.claimset.into_map().unwrap();
+            let (_, claim) = claimset.iter().find(|(k, _)| matches!(k, Value::Text(t) if t == "___claim")).unwrap();
             assert_eq!(claim, &value);
         };
 
@@ -331,8 +334,8 @@ mod tests {
         verifying(cbor!({ "a" => [0, 1] }));
     }
 
-    fn verify<T: Select<Error = EsdicawtSpecError>>(disclosable_claims: T) -> KbtCwtVerified<T, NoClaims, NoClaims, NoClaims, NoClaims, NoClaims> {
-        let (issuer_signing_key, holder_signing_key, sd_kbt) = generate(disclosable_claims);
+    fn verify<T: Select<Error = EsdicawtSpecError>>(payload: T) -> KbtCwtVerified<T> {
+        let (issuer_signing_key, holder_signing_key, sd_kbt) = generate(payload);
         let verifier = HybridVerifier::<T> {
             issuer_verifying_key: *issuer_signing_key.verifying_key(),
             holder_verifying_key: holder_signing_key.verifying_key(),
@@ -346,13 +349,7 @@ mod tests {
     }
 
     #[allow(clippy::type_complexity)]
-    fn generate<T: Select<Error = EsdicawtSpecError>>(
-        disclosable_claims: T,
-    ) -> (
-        p256::ecdsa::SigningKey,
-        ed25519_dalek::SigningKey,
-        KbtCwtTagged<T, NoClaims, NoClaims, NoClaims, NoClaims, NoClaims>,
-    ) {
+    fn generate<T: Select<Error = EsdicawtSpecError>>(payload: T) -> (p256::ecdsa::SigningKey, ed25519_dalek::SigningKey, KbtCwtTagged<T>) {
         let mut csprng = rand_chacha::ChaCha20Rng::from_entropy();
 
         let issuer_signing_key = p256::ecdsa::SigningKey::random(&mut csprng);
@@ -363,7 +360,7 @@ mod tests {
         let issue_params = IssueCwtParams {
             protected_claims: None,
             unprotected_claims: None,
-            payload_claims: Some(disclosable_claims),
+            payload: Some(payload),
             subject: "mimi://example.com/u/alice.smith",
             issuer: "mimi://example.com/i/acme.io",
             expiry: core::time::Duration::from_secs(90),

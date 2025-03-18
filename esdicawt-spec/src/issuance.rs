@@ -1,4 +1,7 @@
-use crate::{CustomClaims, EsdicawtSpecResult, SdHashAlg, Select, alg::Algorithm, blinded_claims::SaltedArray, inlined_cbor::InlinedCbor, redacted_claims::RedactedClaimKeys};
+use crate::{
+    CustomClaims, CwtAny, EsdicawtSpecResult, NoClaims, SdHashAlg, Select, alg::Algorithm, blinded_claims::SaltedArray, inlined_cbor::InlinedCbor,
+    redacted_claims::RedactedClaimKeys,
+};
 
 mod sd_issued_payload_codec;
 mod sd_payload_codec;
@@ -7,7 +10,7 @@ mod unprotected_issued_codec;
 
 #[derive(Debug, Clone, PartialEq, derive_builder::Builder)]
 #[builder(pattern = "mutable")]
-pub struct SdCwtIssued<PayloadClaims: Select, ProtectedClaims: CustomClaims, UnprotectedClaims: CustomClaims> {
+pub struct SdCwtIssued<PayloadClaims: Select, ProtectedClaims: CustomClaims = NoClaims, UnprotectedClaims: CustomClaims = NoClaims> {
     pub protected: InlinedCbor<SdProtected<ProtectedClaims>>,
     pub sd_unprotected: SdUnprotected<UnprotectedClaims>,
     pub payload: InlinedCbor<SdPayload<PayloadClaims>>,
@@ -32,7 +35,7 @@ pub struct SdUnprotected<Extra: CustomClaims> {
 #[derive(Debug, Clone, PartialEq, derive_builder::Builder)]
 #[builder(pattern = "mutable", setter(into, strip_option))]
 #[builder(derive(Debug))]
-pub struct SdPayload<Extra: CustomClaims> {
+pub struct SdPayload<Extra: CwtAny> {
     pub cnf: cose_key_confirmation::KeyConfirmation,
     #[builder(default)]
     pub redacted_claim_keys: Option<RedactedClaimKeys>,
@@ -42,7 +45,7 @@ pub struct SdPayload<Extra: CustomClaims> {
 #[derive(Debug, Clone, PartialEq, derive_builder::Builder)]
 #[builder(pattern = "mutable", setter(into, strip_option))]
 #[builder(derive(Debug))]
-pub struct SdInnerPayload<Extra: CustomClaims> {
+pub struct SdInnerPayload<Extra: CwtAny> {
     pub issuer: String,
     #[builder(default)]
     pub subject: Option<String>,
@@ -58,7 +61,7 @@ pub struct SdInnerPayload<Extra: CustomClaims> {
     pub extra: Option<Extra>,
 }
 
-pub type SdCwtIssuedTagged<PayloadClaims, ProtectedClaims, UnprotectedClaims> =
+pub type SdCwtIssuedTagged<PayloadClaims, ProtectedClaims = NoClaims, UnprotectedClaims = NoClaims> =
     ciborium::tag::Required<SdCwtIssued<PayloadClaims, ProtectedClaims, UnprotectedClaims>, { <coset::CoseSign1 as coset::TaggedCborSerializable>::TAG }>;
 
 impl<PayloadClaims: Select, ProtectedClaims: CustomClaims, UnprotectedClaims: CustomClaims> SdCwtIssued<PayloadClaims, ProtectedClaims, UnprotectedClaims> {

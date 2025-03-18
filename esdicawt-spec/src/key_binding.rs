@@ -1,5 +1,5 @@
 use crate::{
-    CustomClaims, EsdicawtSpecResult, Select,
+    CustomClaims, EsdicawtSpecResult, NoClaims, Select,
     alg::Algorithm,
     blinded_claims::{Salted, SaltedArray},
     inlined_cbor::InlinedCbor,
@@ -15,11 +15,11 @@ mod kbt_unprotected_codec;
 #[builder(pattern = "mutable")]
 pub struct KbtCwt<
     IssuerPayloadClaims: Select,
-    IssuerProtectedClaims: CustomClaims,
-    IssuerUnprotectedClaims: CustomClaims,
-    ProtectedClaims: CustomClaims,
-    UnprotectedClaims: CustomClaims,
-    PayloadClaims: CustomClaims,
+    IssuerProtectedClaims: CustomClaims = NoClaims,
+    IssuerUnprotectedClaims: CustomClaims = NoClaims,
+    ProtectedClaims: CustomClaims = NoClaims,
+    UnprotectedClaims: CustomClaims = NoClaims,
+    PayloadClaims: CustomClaims = NoClaims,
 > {
     pub protected: InlinedCbor<KbtProtected<IssuerPayloadClaims, IssuerProtectedClaims, IssuerUnprotectedClaims, ProtectedClaims>>,
     pub unprotected: KbtUnprotected<UnprotectedClaims>,
@@ -83,7 +83,14 @@ impl<
     }
 }
 
-pub type KbtCwtTagged<IssuerPayloadClaims, IssuerProtectedClaims, IssuerUnprotectedClaims, PayloadClaims, ProtectedClaims, UnprotectedClaims> = ciborium::tag::Required<
+pub type KbtCwtTagged<
+    IssuerPayloadClaims,
+    IssuerProtectedClaims = NoClaims,
+    IssuerUnprotectedClaims = NoClaims,
+    PayloadClaims = NoClaims,
+    ProtectedClaims = NoClaims,
+    UnprotectedClaims = NoClaims,
+> = ciborium::tag::Required<
     KbtCwt<IssuerPayloadClaims, IssuerProtectedClaims, IssuerUnprotectedClaims, PayloadClaims, ProtectedClaims, UnprotectedClaims>,
     { <coset::CoseSign1 as coset::TaggedCborSerializable>::TAG },
 >;

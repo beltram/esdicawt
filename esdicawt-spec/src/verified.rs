@@ -1,5 +1,5 @@
 use crate::{
-    CustomClaims, EsdicawtSpecError, Select,
+    CustomClaims, EsdicawtSpecError, NoClaims, Select,
     alg::Algorithm,
     issuance::{SdCwtIssued, SdInnerPayload, SdProtected, SdUnprotected},
     key_binding::{KbtPayload, KbtProtected, KbtUnprotected},
@@ -9,11 +9,11 @@ use crate::{
 #[serde(bound = "IssuerProtectedClaims: Select")]
 pub struct KbtCwtVerified<
     IssuerPayloadClaims: Select,
-    IssuerProtectedClaims: CustomClaims,
-    IssuerUnprotectedClaims: CustomClaims,
-    KbtProtectedClaims: CustomClaims,
-    KbtUnprotectedClaims: CustomClaims,
-    KbtPayloadClaims: CustomClaims,
+    IssuerProtectedClaims: CustomClaims = NoClaims,
+    IssuerUnprotectedClaims: CustomClaims = NoClaims,
+    KbtProtectedClaims: CustomClaims = NoClaims,
+    KbtUnprotectedClaims: CustomClaims = NoClaims,
+    KbtPayloadClaims: CustomClaims = NoClaims,
 > {
     pub protected: KbtCwtProtectedVerified<IssuerPayloadClaims, IssuerProtectedClaims, IssuerUnprotectedClaims, KbtProtectedClaims>,
     pub unprotected: KbtUnprotected<KbtUnprotectedClaims>,

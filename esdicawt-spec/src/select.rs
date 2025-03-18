@@ -1,8 +1,7 @@
-use crate::redacted_claims::RedactedClaimKeys;
-use crate::{AnyMap, CWT_LABEL_REDACTED_KEYS, CustomClaims, EsdicawtSpecError, TO_BE_REDACTED_TAG};
+use crate::{CWT_LABEL_REDACTED_KEYS, CwtAny, EsdicawtSpecError, TO_BE_REDACTED_TAG, redacted_claims::RedactedClaimKeys};
 use ciborium::Value;
 
-pub trait Select: CustomClaims {
+pub trait Select: std::fmt::Debug + CwtAny + Clone {
     type Error;
 
     fn select(self) -> Result<SelectiveDisclosure, <Self as Select>::Error>
@@ -58,7 +57,7 @@ pub fn select_none(value: &mut Value) -> SelectiveDisclosure {
     value.clone().into()
 }
 
-impl Select for AnyMap {
+impl Select for Value {
     type Error = EsdicawtSpecError;
 }
 

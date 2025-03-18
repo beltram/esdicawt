@@ -150,17 +150,18 @@ impl<PayloadClaims: Select, ProtectedClaims: CustomClaims, UnprotectedClaims: Cu
 mod tests {
     use super::*;
     use ciborium::cbor;
-    use esdicawt_spec::{AnyMap, EsdicawtSpecError, NoClaims, Select, issuance::SdCwtIssuedTagged};
+    use esdicawt_spec::{EsdicawtSpecError, Select, issuance::SdCwtIssuedTagged};
     use rand_core::SeedableRng;
 
     use crate::{IssueCwtParams, Issuer, test_utils::P256IssuerClaims};
 
     #[test]
     fn can_query_top_level_claim() {
-        let mut payload = AnyMap::new();
-        payload.insert("a".into(), "b".into());
-        payload.insert("c".into(), "d".into());
-
+        let payload = cbor!({
+            "a" => "b",
+            "c" => "d",
+        })
+        .unwrap();
         let mut sd_cwt = generate(payload);
         assert_eq!(sd_cwt.0.query::<sha2::Sha256>(vec!["a".into()].into()).unwrap(), Some("b".into()));
 
@@ -174,16 +175,14 @@ mod tests {
 
     #[test]
     fn can_query_lower_level_claim() {
-        let mut payload = AnyMap::new();
-        payload.insert(
-            "a".into(),
-            cbor!({
+        let payload = cbor!({
+            "a" => {
                 "b" => "c",
                 "d" => "e"
-            })
-            .unwrap(),
-        );
-        payload.insert("b".into(), 1234.into());
+            },
+            "b" => 1234
+        })
+        .unwrap();
 
         let mut sd_cwt = generate(payload);
         assert_eq!(sd_cwt.0.query::<sha2::Sha256>(vec!["a".into(), "b".into()].into()).unwrap(), Some("c".into()));
@@ -191,9 +190,11 @@ mod tests {
 
     #[test]
     fn can_query_top_level_array_index() {
-        let mut payload = AnyMap::new();
-        payload.insert("a".into(), cbor!(["b", "c", "d", "e"]).unwrap());
-        payload.insert("b".into(), 1234.into());
+        let payload = cbor!({
+            "a" => ["b", "c", "d", "e"],
+            "b" => 1234
+        })
+        .unwrap();
 
         let mut sd_cwt = generate(payload);
         assert_eq!(sd_cwt.0.query::<sha2::Sha256>(vec!["a".into(), 2usize.into()].into()).unwrap(), Some("d".into()));
@@ -201,10 +202,8 @@ mod tests {
 
     #[test]
     fn can_query_inside_array_index() {
-        let mut payload = AnyMap::new();
-        payload.insert(
-            "a".into(),
-            cbor!([
+        let payload = cbor!({
+            "a" => [
                 {
                     "b" => "c"
                 },
@@ -212,10 +211,10 @@ mod tests {
                     "b" => "d",
                     "e" => "f"
                 }
-            ])
-            .unwrap(),
-        );
-        payload.insert("b".into(), 1234.into());
+            ],
+            "b" => 1234
+        })
+        .unwrap();
 
         let mut sd_cwt = generate(payload);
         assert_eq!(
@@ -224,7 +223,7 @@ mod tests {
         );
     }
 
-    fn generate<T: Select<Error = EsdicawtSpecError>>(payload: T) -> SdCwtIssuedTagged<T, NoClaims, NoClaims> {
+    fn generate<T: Select<Error = EsdicawtSpecError>>(payload: T) -> SdCwtIssuedTagged<T> {
         let mut csprng = rand_chacha::ChaCha20Rng::from_entropy();
 
         let issuer_signing_key = p256::ecdsa::SigningKey::random(&mut csprng);
@@ -235,7 +234,7 @@ mod tests {
         let issue_params = IssueCwtParams {
             protected_claims: None,
             unprotected_claims: None,
-            payload_claims: Some(payload),
+            payload: Some(payload),
             subject: "mimi://example.com/u/alice.smith",
             issuer: "mimi://example.com/i/proton.me",
             expiry: core::time::Duration::from_secs(90),

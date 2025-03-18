@@ -1,13 +1,21 @@
 use ciborium::Value;
 use serde::ser::SerializeMap;
 
-use crate::{AnyMap, COSE_SD_CLAIMS, CustomClaims, MapKey};
+use crate::{COSE_SD_CLAIMS, CustomClaims};
 
 use super::SdUnprotected;
 
 impl<Extra: CustomClaims> serde::Serialize for SdUnprotected<Extra> {
     fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
-        let mut extra: Option<AnyMap> = self.extra.clone().map(|extra| extra.into());
+        use serde::ser::Error as _;
+
+        let mut extra = self
+            .extra
+            .as_ref()
+            .map(|extra| Value::serialized(extra).map_err(S::Error::custom))
+            .transpose()?
+            .map(|v| v.into_map().map_err(|_| S::Error::custom("should have been a mapping")))
+            .transpose()?;
         let extra_len = extra.as_ref().map(|extra| extra.len()).unwrap_or_default();
         let mut map = serializer.serialize_map(Some(1 + extra_len))?;
         map.serialize_entry(&COSE_SD_CLAIMS, &self.sd_claims)?;
@@ -37,13 +45,13 @@ impl<'de, Extra: CustomClaims> serde::Deserialize<'de> for SdUnprotected<Extra> 
                 A: serde::de::MapAccess<'de>,
             {
                 use serde::de::Error as _;
-                let mut extra = AnyMap::default();
+                let mut extra = vec![];
                 let mut sd_claims = None;
-                while let Some((k, v)) = map.next_entry::<MapKey, Value>()? {
-                    if matches!(k, crate::ClaimName::Integer(COSE_SD_CLAIMS)) {
+                while let Some((k, v)) = map.next_entry::<Value, Value>()? {
+                    if matches!(k, Value::Integer(label) if label == COSE_SD_CLAIMS.into()) {
                         sd_claims.replace(v.deserialized().map_err(|err| A::Error::custom(format!("Cannot deserialize sd_claims: {err}")))?);
                     } else {
-                        extra.insert(k, v);
+                        extra.push((k, v));
                     }
                 }
 
@@ -51,14 +59,12 @@ impl<'de, Extra: CustomClaims> serde::Deserialize<'de> for SdUnprotected<Extra> 
                     return Err(A::Error::custom("Missing sd_claims"));
                 };
 
-                Ok(SdUnprotected {
-                    sd_claims,
-                    extra: if extra.is_empty() {
-                        None
-                    } else {
-                        Some(extra.try_into().map_err(|_err| A::Error::custom("Cannot deserialize CustomKeys".to_string()))?)
-                    },
-                })
+                let extra = if extra.is_empty() {
+                    None
+                } else {
+                    Some(Value::deserialized::<Extra>(&Value::Map(extra)).map_err(A::Error::custom)?)
+                };
+                Ok(SdUnprotected { sd_claims, extra })
             }
         }
 
