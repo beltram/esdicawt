@@ -240,9 +240,9 @@ mod tests {
     #[wasm_bindgen_test::wasm_bindgen_test]
     fn should_issue_complex_types() {
         let verify_issuance = |value: Value, expected: (Option<ClaimName>, Result<Value, ciborium::value::Error>)| {
-            let mut disclosable_claims = AnyMap::new();
-            disclosable_claims.insert(MapKey::Text("___claim".into()), value);
-            let mut sd_cwt = issue(disclosable_claims);
+            let mut payload = AnyMap::new();
+            payload.insert(MapKey::Text("___claim".into()), value);
+            let mut sd_cwt = issue(payload);
 
             let disclosable_claims = sd_cwt.0.disclosures().unwrap().iter().map(|d| d.unwrap()).collect::<Vec<_>>();
 
