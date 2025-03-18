@@ -1,6 +1,6 @@
 use crate::{
-    CWT_CLAIM_AUDIENCE, CWT_CLAIM_EXPIRES_AT, CWT_CLAIM_ISSUED_AT, CWT_CLAIM_ISSUER, CWT_CLAIM_KEY_CONFIRMATION_MAP, CWT_CLAIM_NOT_BEFORE, CWT_CLAIM_SUBJECT, ClaimName,
-    CustomClaims, SelectiveDisclosureStandardClaim,
+    CWT_CLAIM_AUDIENCE, CWT_CLAIM_CNONCE, CWT_CLAIM_CTI, CWT_CLAIM_EXPIRES_AT, CWT_CLAIM_ISSUED_AT, CWT_CLAIM_ISSUER, CWT_CLAIM_KEY_CONFIRMATION_MAP, CWT_CLAIM_NOT_BEFORE,
+    CWT_CLAIM_SUBJECT, ClaimName, CustomClaims, SdCwtStandardClaim,
     issuance::{SdInnerPayload, SdInnerPayloadBuilder, SdPayload, SdPayloadBuilder},
     redacted_claims::RedactedClaimKeys,
 };
@@ -47,8 +47,8 @@ impl<'de, Extra: CustomClaims> serde::Deserialize<'de> for SdPayload<Extra> {
                 while let Some((k, v)) = map.next_entry::<Value, Value>()? {
                     let label = k.deserialized::<ClaimName>().map_err(A::Error::custom)?;
                     match label {
-                        ClaimName::Integer(key) => match SelectiveDisclosureStandardClaim::try_from(key) {
-                            Ok(SelectiveDisclosureStandardClaim::KeyConfirmationClaim) => {
+                        ClaimName::Integer(key) => match SdCwtStandardClaim::try_from(key) {
+                            Ok(SdCwtStandardClaim::KeyConfirmation) => {
                                 let kc = v
                                     .deserialized::<KeyConfirmation>()
                                     .map_err(|value| A::Error::custom(format!("cnf is not a map: {value:?}")))?;
@@ -107,6 +107,12 @@ fn serialize_sd_cwt_payload<Extra: CustomClaims, S: serde::Serializer>(p: &SdInn
     if let Some(iat) = &p.issued_at {
         map.serialize_entry(&CWT_CLAIM_ISSUED_AT, iat)?;
     }
+    if let Some(cti) = &p.cti {
+        map.serialize_entry(&CWT_CLAIM_CTI, cti)?;
+    }
+    if let Some(cnonce) = &p.cnonce {
+        map.serialize_entry(&CWT_CLAIM_CNONCE, cnonce)?;
+    }
 
     if let Some(extra) = &p.extra {
         for (k, v) in Value::serialized(extra)
@@ -143,30 +149,38 @@ impl<'de, Extra: CustomClaims> serde::Deserialize<'de> for SdInnerPayload<Extra>
                         continue;
                     }
                     match k {
-                        ref label @ Value::Integer(_) => match SelectiveDisclosureStandardClaim::try_from(label) {
-                            Ok(SelectiveDisclosureStandardClaim::IssuerClaim) => {
+                        ref label @ Value::Integer(_) => match SdCwtStandardClaim::try_from(label) {
+                            Ok(SdCwtStandardClaim::Issuer) => {
                                 builder.issuer(v.into_text().map_err(|value| A::Error::custom(format!("iss is not a string: {value:?}")))?);
                             }
-                            Ok(SelectiveDisclosureStandardClaim::SubjectClaim) => {
+                            Ok(SdCwtStandardClaim::Subject) => {
                                 builder.subject(v.into_text().map_err(|value| A::Error::custom(format!("sub is not a string: {value:?}")))?);
                             }
-                            Ok(SelectiveDisclosureStandardClaim::AudienceClaim) => {
+                            Ok(SdCwtStandardClaim::Audience) => {
                                 builder.audience(v.into_text().map_err(|value| A::Error::custom(format!("aud is not a string: {value:?}")))?);
                             }
-                            Ok(SelectiveDisclosureStandardClaim::ExpiresAtClaim) => {
+                            Ok(SdCwtStandardClaim::ExpiresAt) => {
                                 let cbor_int = v.into_integer().map_err(|value| A::Error::custom(format!("exp is not an integer: {value:?}")))?;
                                 let int: i64 = cbor_int.try_into().map_err(|_| A::Error::custom("exp is not a 64-bit signed integer"))?;
                                 builder.expiration(int);
                             }
-                            Ok(SelectiveDisclosureStandardClaim::NotBeforeClaim) => {
+                            Ok(SdCwtStandardClaim::NotBefore) => {
                                 let cbor_int = v.into_integer().map_err(|value| A::Error::custom(format!("nbf is not an integer: {value:?}")))?;
                                 let int: i64 = cbor_int.try_into().map_err(|_| A::Error::custom("nbf is not a 64-bit signed integer"))?;
                                 builder.not_before(int);
                             }
-                            Ok(SelectiveDisclosureStandardClaim::IssuedAtClaim) => {
+                            Ok(SdCwtStandardClaim::IssuedAt) => {
                                 let cbor_int = v.into_integer().map_err(|value| A::Error::custom(format!("iat is not an integer: {value:?}")))?;
                                 let int: i64 = cbor_int.try_into().map_err(|_| A::Error::custom("iat is not a 64-bit signed integer"))?;
                                 builder.issued_at(int);
+                            }
+                            Ok(SdCwtStandardClaim::Cnonce) => {
+                                let cnonce = v.into_bytes().map_err(|value| A::Error::custom(format!("cnonce is not a bstr: {value:?}")))?;
+                                builder.cnonce(cnonce);
+                            }
+                            Ok(SdCwtStandardClaim::Cti) => {
+                                let cti = v.into_bytes().map_err(|value| A::Error::custom(format!("cti is not a bstr: {value:?}")))?;
+                                builder.cti(cti);
                             }
                             _ => {
                                 extra.push((k, v));

@@ -1,6 +1,6 @@
 use super::KbtPayload;
 use crate::{
-    CWT_CLAIM_AUDIENCE, CWT_CLAIM_CLIENT_NONCE, CWT_CLAIM_EXPIRES_AT, CWT_CLAIM_ISSUED_AT, CWT_CLAIM_NOT_BEFORE, CustomClaims, KbtStandardClaim, key_binding::KbtPayloadBuilder,
+    CWT_CLAIM_AUDIENCE, CWT_CLAIM_CNONCE, CWT_CLAIM_EXPIRES_AT, CWT_CLAIM_ISSUED_AT, CWT_CLAIM_NOT_BEFORE, CustomClaims, KbtStandardClaim, key_binding::KbtPayloadBuilder,
 };
 use ciborium::Value;
 use serde::ser::SerializeMap;
@@ -23,7 +23,7 @@ impl<Extra: CustomClaims> serde::Serialize for KbtPayload<Extra> {
         map.serialize_entry(&CWT_CLAIM_ISSUED_AT, &self.issued_at)?;
 
         if let Some(cnonce) = &self.cnonce {
-            map.serialize_entry(&CWT_CLAIM_CLIENT_NONCE, cnonce)?;
+            map.serialize_entry(&CWT_CLAIM_CNONCE, cnonce)?;
         }
 
         if let Some(extra) = &self.extra {
@@ -66,25 +66,25 @@ impl<'de, Extra: CustomClaims> serde::Deserialize<'de> for KbtPayload<Extra> {
                         Value::Integer(label) => {
                             if let Ok(sd_claim_name) = KbtStandardClaim::try_from(label) {
                                 match sd_claim_name {
-                                    KbtStandardClaim::AudienceClaim => {
+                                    KbtStandardClaim::Audience => {
                                         sd_builder.audience(v.into_text().map_err(|value| A::Error::custom(format!("aud is not a string: {value:?}")))?);
                                     }
-                                    KbtStandardClaim::ExpiresAtClaim => {
+                                    KbtStandardClaim::ExpiresAt => {
                                         let cbor_int = v.into_integer().map_err(|value| A::Error::custom(format!("exp is not an integer: {value:?}")))?;
                                         let int: i64 = cbor_int.try_into().map_err(|_| A::Error::custom("exp is not a 64-bit signed integer"))?;
                                         sd_builder.expiration(int);
                                     }
-                                    KbtStandardClaim::NotBeforeClaim => {
+                                    KbtStandardClaim::NotBefore => {
                                         let cbor_int = v.into_integer().map_err(|value| A::Error::custom(format!("nbf is not an integer: {value:?}")))?;
                                         let int: i64 = cbor_int.try_into().map_err(|_| A::Error::custom("nbf is not a 64-bit signed integer"))?;
                                         sd_builder.not_before(int);
                                     }
-                                    KbtStandardClaim::IssuedAtClaim => {
+                                    KbtStandardClaim::IssuedAt => {
                                         let cbor_int = v.into_integer().map_err(|value| A::Error::custom(format!("iat is not an integer: {value:?}")))?;
                                         let int: i64 = cbor_int.try_into().map_err(|_| A::Error::custom("iat is not a 64-bit signed integer"))?;
                                         sd_builder.issued_at(int);
                                     }
-                                    KbtStandardClaim::ClientNonceClaim => {
+                                    KbtStandardClaim::Cnonce => {
                                         let cnonce: Vec<u8> = v.deserialized().map_err(|value| A::Error::custom(format!("cnonce is not bstr: {value:?}")))?;
                                         sd_builder.cnonce(cnonce);
                                     }
