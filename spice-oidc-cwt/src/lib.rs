@@ -1,6 +1,6 @@
 use esdicawt::{
-    spec::{issuance::SdCwtIssuedTagged, key_binding::KbtCwtTagged, CustomClaims}, EsdicawtReadError, EsdicawtReadResult,
-    SdCwtRead,
+    EsdicawtReadError, EsdicawtReadResult, SdCwtRead,
+    spec::{CustomClaims, issuance::SdCwtIssuedTagged, key_binding::KbtCwtTagged},
 };
 use esdicawt_spec::{ClaimName, Select, Value};
 use serde::ser::SerializeMap;
@@ -611,8 +611,8 @@ mod tests {
 
     use super::{ed25519::*, *};
     use esdicawt::{
-        spec::{issuance::SdCwtIssuedTagged, CwtAny}, Holder, Issuer,
-        Presentation,
+        Holder, Issuer, Presentation,
+        spec::{CwtAny, issuance::SdCwtIssuedTagged},
     };
     use esdicawt_spec::EsdicawtSpecError;
     wasm_bindgen_test::wasm_bindgen_test_configure!(run_in_browser);
@@ -717,8 +717,8 @@ mod tests {
 mod ed25519 {
     use crate::SpiceOidcClaims;
     use esdicawt::{
-        spec::{reexports::coset, NoClaims, SdHashAlg}, Holder,
-        Issuer,
+        Holder, Issuer,
+        spec::{NoClaims, SdHashAlg, reexports::coset},
     };
     use esdicawt_spec::EsdicawtSpecError;
 
