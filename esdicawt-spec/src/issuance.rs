@@ -58,6 +58,10 @@ pub struct SdInnerPayload<Extra: CwtAny> {
     #[builder(default)]
     pub issued_at: Option<i64>,
     #[builder(default)]
+    pub cti: Option<Vec<u8>>,
+    #[builder(default)]
+    pub cnonce: Option<Vec<u8>>,
+    #[builder(default)]
     pub extra: Option<Extra>,
 }
 
