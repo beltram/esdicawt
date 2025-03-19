@@ -1,12 +1,13 @@
 pub mod error;
+pub mod params;
 mod redaction;
 
+use crate::issuer::params::IssuerParams;
 use crate::{
     issuer::{error::SdCwtIssuerError, redaction::redact},
     now,
 };
 use ciborium::Value;
-use cose_key_confirmation::KeyConfirmation;
 use esdicawt_spec::{
     COSE_SD_CLAIMS, CWT_CLAIM_SD_ALG, CWT_MEDIATYPE, CustomClaims, CwtAny, EsdicawtSpecError, MEDIATYPE_SD_CWT, SdHashAlg, Select,
     issuance::{SdCwtIssuedTagged, SdInnerPayloadBuilder, SdPayloadBuilder},
@@ -170,28 +171,11 @@ pub trait Issuer {
     }
 }
 
-pub struct IssuerParams<'a, PayloadClaims: Select, ProtectedClaims: CustomClaims, UnprotectedClaims: CustomClaims> {
-    /// Extra claims in the protected header of the sd-cwt
-    pub protected_claims: Option<ProtectedClaims>,
-    /// Extra claims in the unprotected header of the sd-cwt
-    pub unprotected_claims: Option<UnprotectedClaims>,
-    /// CBOR value with tagged claims to disclose
-    pub payload: Option<PayloadClaims>,
-    pub subject: &'a str,
-    /// Used to be inserted in the Issuer claim
-    pub issuer: &'a str,
-    pub expiry: core::time::Duration,
-    /// Dealing with clocks skew
-    pub leeway: core::time::Duration,
-    pub key_location: &'a str,
-    pub holder_confirmation_key: KeyConfirmation,
-}
-
 #[cfg(test)]
 mod tests {
     use super::{claims::CustomTokenClaims, test_utils::Ed25519IssuerClaims};
     use crate::{
-        Issuer,
+        Issuer, IssuerParams,
         spec::{
             blinded_claims::{Salted, SaltedClaim, SaltedElement},
             sd,
@@ -369,7 +353,7 @@ mod tests {
         issuer
             .issue_cwt(
                 &mut csprng,
-                crate::IssuerParams {
+                IssuerParams {
                     protected_claims: None,
                     unprotected_claims: None,
                     payload: Some(payload),
