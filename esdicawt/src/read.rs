@@ -42,7 +42,7 @@ pub trait SdCwtRead {
         &'a mut self,
         key: ClaimName,
         extractor: impl FnOnce(&'a SdInnerPayload<Self::PayloadClaims>) -> Option<&'a T>,
-    ) -> EsdicawtReadResult<Option<Value>>;
+    ) -> EsdicawtReadResult<Option<Cow<'a, Value>>>;
 
     fn maybe_std_str_claim<'a>(
         &'a mut self,
@@ -76,19 +76,22 @@ impl<IssuerPayloadClaims: Select, IssuerProtectedClaims: CustomClaims, IssuerUnp
         &'a mut self,
         key: ClaimName,
         extractor: impl FnOnce(&'a SdInnerPayload<Self::PayloadClaims>) -> Option<&'a T>,
-    ) -> EsdicawtReadResult<Option<Value>> {
+    ) -> EsdicawtReadResult<Option<Cow<'a, Value>>> {
         let payload = self.0.payload.to_value()?;
         let unredacted = extractor(&payload.inner);
         let unredacted = unredacted.as_ref().map(Value::serialized).transpose()?;
 
         if let Some(claim) = unredacted {
-            Ok(Some(claim))
+            Ok(Some(Cow::Owned(claim)))
         } else {
-            let disclosures = &self.0.sd_unprotected.sd_claims;
-            let redacted = disclosures.iter().find_map(|s| match s {
-                Ok(Salted::Claim(SaltedClaim { name, value, .. })) if name == key => Some(value),
-                _ => None,
-            });
+            let disclosures = &mut self.0.sd_unprotected.sd_claims;
+            let redacted = disclosures
+                .iter()
+                .find_map(|s| match s {
+                    Ok(Salted::Claim(SaltedClaim { name, value, .. })) if *name == key => Some(value),
+                    _ => None,
+                })
+                .map(Cow::Borrowed);
             Ok(redacted)
         }
     }
@@ -104,14 +107,14 @@ impl<IssuerPayloadClaims: Select, IssuerProtectedClaims: CustomClaims, IssuerUnp
         if let Some(claim) = unredacted {
             Ok(Some(claim))
         } else {
-            let disclosures = &self.0.sd_unprotected.sd_claims;
+            let disclosures = &mut self.0.sd_unprotected.sd_claims;
             let redacted = disclosures
                 .iter()
                 .find_map(|s| match s {
-                    Ok(Salted::Claim(SaltedClaim { name, value: Value::Text(v), .. })) if name == key => Some(v),
+                    Ok(Salted::Claim(SaltedClaim { name, value: Value::Text(v), .. })) if *name == key => Some(v.as_str()),
                     _ => None,
                 })
-                .map(Cow::Owned);
+                .map(Cow::Borrowed);
             Ok(redacted)
         }
     }
@@ -123,13 +126,13 @@ impl<IssuerPayloadClaims: Select, IssuerProtectedClaims: CustomClaims, IssuerUnp
         if let Some(claim) = unredacted {
             Ok(Some(claim))
         } else {
-            let disclosures = &self.0.sd_unprotected.sd_claims;
+            let disclosures = &mut self.0.sd_unprotected.sd_claims;
             let redacted = disclosures
                 .iter()
                 .find_map(|s| match s {
                     Ok(Salted::Claim(SaltedClaim {
                         name, value: Value::Integer(v), ..
-                    })) if name == key => Some(v.try_into()),
+                    })) if *name == key => Some((*v).try_into()),
                     _ => None,
                 })
                 .transpose()?;
@@ -153,7 +156,7 @@ impl<
         &'a mut self,
         key: ClaimName,
         extractor: impl FnOnce(&'a SdInnerPayload<Self::PayloadClaims>) -> Option<&'a T>,
-    ) -> EsdicawtReadResult<Option<Value>> {
+    ) -> EsdicawtReadResult<Option<Cow<'a, Value>>> {
         let protected = self.0.protected.to_value_mut()?;
         let sd_cwt = protected.kcwt.to_value_mut()?;
         let sd_cwt_payload = sd_cwt.0.payload.to_value_mut()?;
@@ -161,13 +164,16 @@ impl<
         let unredacted = unredacted.as_ref().map(Value::serialized).transpose()?;
 
         if let Some(claim) = unredacted {
-            Ok(Some(claim))
+            Ok(Some(Cow::Owned(claim)))
         } else {
-            let disclosures = &sd_cwt.0.sd_unprotected.sd_claims;
-            let redacted = disclosures.iter().find_map(|s| match s {
-                Ok(Salted::Claim(SaltedClaim { name, value, .. })) if name == key => Some(value),
-                _ => None,
-            });
+            let disclosures = &mut sd_cwt.0.sd_unprotected.sd_claims;
+            let redacted = disclosures
+                .iter()
+                .find_map(|s| match s {
+                    Ok(Salted::Claim(SaltedClaim { name, value, .. })) if *name == key => Some(value),
+                    _ => None,
+                })
+                .map(Cow::Borrowed);
             Ok(redacted)
         }
     }
@@ -185,14 +191,14 @@ impl<
         if let Some(claim) = unredacted {
             Ok(Some(claim))
         } else {
-            let disclosures = &sd_cwt.0.sd_unprotected.sd_claims;
+            let disclosures = &mut sd_cwt.0.sd_unprotected.sd_claims;
             let redacted = disclosures
                 .iter()
                 .find_map(|s| match s {
-                    Ok(Salted::Claim(SaltedClaim { name, value: Value::Text(v), .. })) if name == key => Some(v),
+                    Ok(Salted::Claim(SaltedClaim { name, value: Value::Text(v), .. })) if *name == key => Some(v.as_str()),
                     _ => None,
                 })
-                .map(Cow::Owned);
+                .map(Cow::Borrowed);
             Ok(redacted)
         }
     }
@@ -206,13 +212,13 @@ impl<
         if let Some(claim) = unredacted {
             Ok(Some(claim))
         } else {
-            let disclosures = &sd_cwt.0.sd_unprotected.sd_claims;
+            let disclosures = &mut sd_cwt.0.sd_unprotected.sd_claims;
             let redacted = disclosures
                 .iter()
                 .find_map(|s| match s {
                     Ok(Salted::Claim(SaltedClaim {
                         name, value: Value::Integer(v), ..
-                    })) if name == key => Some(v.try_into()),
+                    })) if *name == key => Some((*v).try_into()),
                     _ => None,
                 })
                 .transpose()?;

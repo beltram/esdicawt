@@ -611,7 +611,7 @@ mod tests {
 
     use super::{ed25519::*, *};
     use esdicawt::{
-        Holder, Issuer, Presentation,
+        CborPath, Holder, Issuer, Presentation,
         spec::{CwtAny, issuance::SdCwtIssuedTagged},
     };
     use esdicawt_spec::EsdicawtSpecError;
@@ -640,11 +640,21 @@ mod tests {
         assert_eq!(nickname, "alice".to_string());
         assert_eq!(preferred_username, "alice".to_string());
 
+        let presentation = Presentation::Path(Box::new(|path| {
+            matches!(
+                path,
+                [CborPath::Int(CWT_CLAIM_NAME), ..]
+                    | [CborPath::Int(CWT_CLAIM_GIVEN_NAME), ..]
+                    | [CborPath::Int(CWT_CLAIM_FAMILY_NAME), ..]
+                    | [CborPath::Int(CWT_CLAIM_NICKNAME), ..]
+                    | [CborPath::Int(CWT_CLAIM_PREFERRED_USERNAME), ..]
+            )
+        }));
         let mut alice_kbt = alice_holder
             .new_presentation(
                 &alice_sd_cwt.to_cbor_bytes().unwrap(),
                 esdicawt::HolderParams {
-                    presentation: Presentation::Full,
+                    presentation,
                     audience: "bob",
                     expiry: Duration::from_secs(86400),
                     leeway: Duration::from_secs(100),
@@ -769,6 +779,7 @@ mod ed25519 {
         type Error = std::convert::Infallible;
         type Signer = ed25519_dalek::SigningKey;
         type Signature = ed25519_dalek::Signature;
+        type Hasher = sha2::Sha256;
 
         type IssuerProtectedClaims = NoClaims;
         type IssuerUnprotectedClaims = NoClaims;

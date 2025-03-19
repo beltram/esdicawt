@@ -85,7 +85,7 @@ impl<'a> std::ops::Deref for RedactedClaimKeysRef<'a> {
 }
 
 /// Digest of a value in a CBOR Array represented by a [crate::blinded_claims::SaltedElement] in the disclosures
-#[derive(Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 #[serde(transparent)]
 pub struct RedactedClaimElement(ciborium::tag::Required<serde_bytes::ByteBuf, REDACTED_CLAIM_ELEMENT_TAG>);
 

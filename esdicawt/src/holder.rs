@@ -11,11 +11,13 @@ use signature::Signer;
 
 pub mod error;
 pub mod params;
+pub mod traverse;
 
 pub trait Holder {
     type Error: core::error::Error + Send + Sync;
 
     type Signature;
+    type Hasher: digest::Digest;
 
     #[cfg(not(any(feature = "pem", feature = "der")))]
     type Signer: Signer<Self::Signature>;
@@ -93,7 +95,9 @@ pub trait Holder {
 
         // --- redaction of claims ---
         // select the claims to disclose
-        let sd_claims = params.presentation.select_disclosures(sd_cwt_issued.0.sd_unprotected.sd_claims);
+        let sd_claims = params
+            .presentation
+            .try_select_disclosures::<Self::Hasher, Self::Error>(sd_cwt_issued.0.sd_unprotected.sd_claims)?;
 
         // then replace them in the issued sd-cwt
         sd_cwt_issued.0.sd_unprotected.sd_claims = sd_claims;
@@ -143,11 +147,8 @@ pub fn unix_timestamp(leeway: Option<core::time::Duration>) -> u64 {
 
 #[cfg(test)]
 mod tests {
-    use super::{test_utils::Ed25519Holder, *};
-    use crate::{
-        Issuer, IssuerParams, Presentation,
-        issuer::{claims::CustomTokenClaims, test_utils::Ed25519IssuerClaims},
-    };
+    use super::{claims::CustomTokenClaims, test_utils::Ed25519Holder, *};
+    use crate::{Issuer, IssuerParams, Presentation, holder::params::CborPath, issuer::test_utils::Ed25519IssuerClaims};
     use ciborium::cbor;
     use esdicawt_spec::{
         ClaimName, NoClaims,
@@ -166,7 +167,10 @@ mod tests {
         let issuer_signing_key = ed25519_dalek::SigningKey::generate(&mut csprng);
         let issuer = Ed25519IssuerClaims::<CustomTokenClaims>::new(issuer_signing_key);
 
-        let payload = CustomTokenClaims { name: Some("Alice Smith".into()) };
+        let payload = CustomTokenClaims {
+            name: Some("Alice Smith".into()),
+            age: Some(42),
+        };
         let issue_params = IssuerParams {
             protected_claims: None,
             unprotected_claims: None,
@@ -181,8 +185,15 @@ mod tests {
         let sd_cwt = issuer.issue_cwt(&mut csprng, issue_params).unwrap().to_cbor_bytes().unwrap();
 
         let holder = Ed25519Holder::<CustomTokenClaims>::new(holder_signing_key);
+
+        let presentation = Presentation::Path(Box::new(|path| match path {
+            [CborPath::Str(name), ..] if name == "name" => true,
+            [CborPath::Str(age), ..] if age == "age" => false,
+            _ => false,
+        }));
+
         let presentation_params = HolderParams {
-            presentation: Presentation::Full,
+            presentation,
             audience: "mimi://example.com/r/alice-bob-group",
             expiry: core::time::Duration::from_secs(90 * 24 * 3600),
             leeway: core::time::Duration::from_secs(3600),
@@ -201,7 +212,7 @@ mod tests {
         assert_eq!(disclosable_claims.len(), 1);
         let is_alice = |sc: &SaltedClaim<ciborium::Value>| sc.name == ClaimName::Text("name".into()) && sc.value == cbor!("Alice Smith").unwrap();
 
-        assert!(disclosable_claims.into_iter().any(|c| { matches!(c.unwrap(), Salted::Claim(sc) if is_alice(&sc)) }));
+        assert!(disclosable_claims.into_iter().any(|c| { matches!(c.unwrap(), Salted::Claim(sc) if is_alice(sc)) }));
     }
 
     #[allow(dead_code, unused_variables)]
@@ -217,9 +228,37 @@ mod tests {
                     Error = std::convert::Infallible,
                     Signer = ed25519_dalek::SigningKey,
                     Signature = ed25519_dalek::Signature,
+                    Hasher = sha2::Sha256,
                 >,
         >,
     ) {
+    }
+}
+
+#[cfg(test)]
+pub mod claims {
+    use ciborium::Value;
+    use esdicawt_spec::{EsdicawtSpecError, Select, SelectiveDisclosure, sd};
+
+    #[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
+    pub(super) struct CustomTokenClaims {
+        pub name: Option<String>,
+        pub age: Option<u32>,
+    }
+
+    impl Select for CustomTokenClaims {
+        type Error = EsdicawtSpecError;
+
+        fn select(self) -> Result<SelectiveDisclosure, <Self as Select>::Error> {
+            let mut map = Vec::with_capacity(2);
+            if let Some(name) = self.name {
+                map.push((sd(Value::Text("name".into())), Value::Text(name)));
+            }
+            if let Some(age) = self.age {
+                map.push((sd(Value::Text("age".into())), Value::Integer(age.into())));
+            }
+            Ok(Value::Map(map).into())
+        }
     }
 }
 
@@ -240,6 +279,7 @@ pub mod test_utils {
         type Error = std::convert::Infallible;
         type Signer = ed25519_dalek::SigningKey;
         type Signature = ed25519_dalek::Signature;
+        type Hasher = sha2::Sha256;
 
         type IssuerProtectedClaims = NoClaims;
         type IssuerUnprotectedClaims = NoClaims;
