@@ -1,6 +1,7 @@
 use esdicawt_spec::CustomClaims;
+use esdicawt_spec::blinded_claims::SaltedArray;
 
-#[derive(Debug, Clone, Eq, PartialEq)]
+#[derive(Debug)]
 pub struct HolderParams<'a, KbtProtectedClaims: CustomClaims, KbtUnprotectedClaims: CustomClaims, KbtPayloadClaims: CustomClaims> {
     pub presentation: Presentation,
     pub audience: &'a str,
@@ -11,8 +12,26 @@ pub struct HolderParams<'a, KbtProtectedClaims: CustomClaims, KbtUnprotectedClai
     pub extra_kbt_payload: Option<KbtPayloadClaims>,
 }
 
-#[derive(Default, Debug, Copy, Clone, Eq, PartialEq)]
+#[derive(Default)]
 pub enum Presentation {
     #[default]
     Full,
+    Custom(Box<dyn FnOnce(SaltedArray) -> SaltedArray>),
+    None,
+}
+
+impl Presentation {
+    pub fn select_disclosures(&self, disclosures: SaltedArray) -> SaltedArray {
+        disclosures
+    }
+}
+
+impl std::fmt::Debug for Presentation {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Full => write!(f, "Full"),
+            Self::Custom(_) => write!(f, "Custom"),
+            Self::None => write!(f, "None"),
+        }
+    }
 }
