@@ -1,7 +1,6 @@
-use crate::{HolderParams, Presentation, SdCwtHolderError, now};
+use crate::{HolderParams, SdCwtHolderError, now};
 use esdicawt_spec::{
     CustomClaims, CwtAny, SdHashAlg, Select,
-    blinded_claims::SaltedArray,
     issuance::SdCwtIssuedTagged,
     key_binding::{KbtCwtTagged, KbtPayload, KbtProtected, KbtUnprotected},
     reexports::coset::{
@@ -94,9 +93,7 @@ pub trait Holder {
 
         // --- redaction of claims ---
         // select the claims to disclose
-        let sd_claims = match params.presentation {
-            Presentation::Full => select_claims(sd_cwt_issued.0.sd_unprotected.sd_claims),
-        };
+        let sd_claims = params.presentation.select_disclosures(sd_cwt_issued.0.sd_unprotected.sd_claims);
 
         // then replace them in the issued sd-cwt
         sd_cwt_issued.0.sd_unprotected.sd_claims = sd_claims;
@@ -140,11 +137,6 @@ pub trait Holder {
     }
 }
 
-// TODO: filter at some point either with json path or other
-fn select_claims(claims: SaltedArray) -> SaltedArray {
-    claims
-}
-
 pub fn unix_timestamp(leeway: Option<core::time::Duration>) -> u64 {
     now() - leeway.unwrap_or_default().as_secs()
 }
@@ -153,7 +145,7 @@ pub fn unix_timestamp(leeway: Option<core::time::Duration>) -> u64 {
 mod tests {
     use super::{test_utils::Ed25519Holder, *};
     use crate::{
-        Issuer, IssuerParams,
+        Issuer, IssuerParams, Presentation,
         issuer::{claims::CustomTokenClaims, test_utils::Ed25519IssuerClaims},
     };
     use ciborium::cbor;
