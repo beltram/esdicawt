@@ -5,16 +5,16 @@ pub use esdicawt_spec as spec;
 pub use holder::{
     Holder,
     error::{SdCwtHolderError, SdCwtHolderResult},
-    params::{CwtPresentationParams, Presentation},
+    params::{HolderParams, Presentation},
 };
 pub use issuer::{
-    IssueCwtParams, Issuer,
+    Issuer, IssuerParams,
     error::{SdCwtIssuerError, SdCwtIssuerResult},
 };
 pub use read::{EsdicawtReadError, EsdicawtReadResult, SdCwtRead};
 pub use signature::Keypair;
 pub use verifier::{
-    Verifier, VerifyCwtParams,
+    Verifier, VerifierParams,
     error::{SdCwtVerifierError, SdCwtVerifierResult},
 };
 
