@@ -1,6 +1,8 @@
 pub mod error;
+pub mod params;
 mod time;
 
+use crate::VerifierParams;
 use crate::verifier::error::{SdCwtVerifierError, SdCwtVerifierResult};
 use ::time::OffsetDateTime;
 use ciborium::Value;
@@ -269,11 +271,6 @@ where
         _ => {}
     }
     Ok(())
-}
-
-pub struct VerifierParams {
-    pub current_timestamp: Option<i64>,
-    pub leeway: i64,
 }
 
 #[cfg(test)]

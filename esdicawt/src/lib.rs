@@ -8,14 +8,16 @@ pub use holder::{
     params::{HolderParams, Presentation},
 };
 pub use issuer::{
-    Issuer, IssuerParams,
+    Issuer,
     error::{SdCwtIssuerError, SdCwtIssuerResult},
+    params::IssuerParams,
 };
 pub use read::{EsdicawtReadError, EsdicawtReadResult, SdCwtRead};
 pub use signature::Keypair;
 pub use verifier::{
-    Verifier, VerifierParams,
+    Verifier,
     error::{SdCwtVerifierError, SdCwtVerifierResult},
+    params::VerifierParams,
 };
 
 mod holder;
