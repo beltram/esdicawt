@@ -1,8 +1,7 @@
-use crate::EsdicawtSpecResult;
+use super::{ClaimName, CwtAny, Salt};
+use crate::{EsdicawtSpecResult, inlined_cbor::InlinedCbor};
 use ciborium::Value;
 use serde::ser::SerializeSeq;
-
-use super::{ClaimName, CwtAny, Salt};
 
 #[derive(Clone, Eq, PartialEq, serde_tuple::Serialize_tuple, serde_tuple::Deserialize_tuple)]
 pub struct SaltedElement<T: CwtAny> {
@@ -22,7 +21,7 @@ impl<T: CwtAny> std::fmt::Debug for SaltedElement<T> {
 
 #[derive(Debug, Clone, serde_tuple::Serialize_tuple)]
 pub struct SaltedElementRef<'a, T: CwtAny> {
-    pub salt: &'a Salt,
+    pub salt: Salt,
     pub value: &'a T,
 }
 
@@ -47,12 +46,12 @@ impl<T: CwtAny> std::fmt::Debug for SaltedClaim<T> {
 // Do not change the order of the claims !!!
 #[derive(Debug, Clone, serde_tuple::Serialize_tuple)]
 pub struct SaltedClaimRef<'a, T: CwtAny> {
-    pub salt: &'a Salt,
+    pub salt: Salt,
     pub value: &'a T,
-    pub claim: &'a ClaimName,
+    pub name: &'a ClaimName,
 }
 
-#[derive(Debug, Clone, serde_tuple::Serialize_tuple, serde_tuple::Deserialize_tuple)]
+#[derive(Debug, Clone, Copy, serde_tuple::Serialize_tuple, serde_tuple::Deserialize_tuple)]
 pub struct Decoy {
     pub salt: (Salt,),
 }
@@ -65,16 +64,42 @@ impl PartialEq for Decoy {
 
 impl Eq for Decoy {}
 
-#[derive(Debug, Clone, serde_tuple::Serialize_tuple)]
-pub struct DecoyRef<'a> {
-    pub salt: (&'a Salt,),
-}
-
 #[derive(Debug, Clone, Eq, PartialEq)]
-pub enum Salted<T: serde::Serialize + for<'d> serde::Deserialize<'d>> {
+pub enum Salted<T: CwtAny> {
     Claim(SaltedClaim<T>),
     Element(SaltedElement<T>),
     Decoy(Decoy),
+}
+
+impl<T: CwtAny> Salted<T> {
+    pub fn upcast(self) -> EsdicawtSpecResult<Salted<Value>> {
+        Ok(match self {
+            Self::Claim(SaltedClaim { salt, value, name }) => Salted::<Value>::Claim(SaltedClaim {
+                salt,
+                value: Value::serialized(&value)?,
+                name,
+            }),
+            Self::Element(SaltedElement { salt, value }) => Salted::<Value>::Element(SaltedElement {
+                salt,
+                value: Value::serialized(&value)?,
+            }),
+            Self::Decoy(salt) => Salted::<Value>::Decoy(salt),
+        })
+    }
+
+    pub fn salt(&self) -> Salt {
+        match self {
+            Self::Claim(SaltedClaim { salt, .. }) | Self::Element(SaltedElement { salt, .. }) => *salt,
+            Self::Decoy(Decoy { salt: (s, ..) }) => *s,
+        }
+    }
+
+    pub fn value(&self) -> Option<&T> {
+        match self {
+            Self::Claim(SaltedClaim { value, .. }) | Self::Element(SaltedElement { value, .. }) => Some(value),
+            Self::Decoy(_) => None,
+        }
+    }
 }
 
 impl<T: CwtAny> serde::Serialize for Salted<T> {
@@ -156,7 +181,7 @@ impl<T: CwtAny> From<Decoy> for Salted<T> {
 pub enum SaltedRef<'a, T: CwtAny> {
     Claim(SaltedClaimRef<'a, T>),
     Element(SaltedElementRef<'a, T>),
-    Decoy(DecoyRef<'a>),
+    Decoy(Decoy),
 }
 
 impl<'a, T: CwtAny> From<SaltedClaimRef<'a, T>> for SaltedRef<'a, T> {
@@ -171,78 +196,69 @@ impl<'a, T: CwtAny> From<SaltedElementRef<'a, T>> for SaltedRef<'a, T> {
     }
 }
 
-impl<'a, T: CwtAny> From<DecoyRef<'a>> for SaltedRef<'a, T> {
-    fn from(v: DecoyRef<'a>) -> Self {
+impl<T: CwtAny> From<Decoy> for SaltedRef<'_, T> {
+    fn from(v: Decoy) -> Self {
         Self::Decoy(v)
     }
 }
 
-#[derive(Default, Debug, Clone, PartialEq)]
-pub struct SaltedArray(pub Vec<Value>);
-
-impl serde::Serialize for SaltedArray {
-    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
-        use serde::ser::Error as _;
-        let mut seq = serializer.serialize_seq(Some(self.0.len()))?;
-        for salted in &self.0 {
-            let mut buf = vec![];
-            ciborium::into_writer(salted, &mut buf).map_err(|e| S::Error::custom(format!("cannot serialize Salted value: {e}")))?;
-            seq.serialize_element(&buf)?;
+impl<'a, T: CwtAny> From<SaltedRef<'a, T>> for Salted<T> {
+    fn from(s: SaltedRef<'a, T>) -> Self {
+        match s {
+            SaltedRef::Claim(SaltedClaimRef { salt, value, name }) => Self::Claim(SaltedClaim {
+                salt,
+                value: value.to_owned(),
+                name: name.to_owned(),
+            }),
+            SaltedRef::Element(SaltedElementRef { salt, value }) => Self::Element(SaltedElement { salt, value: value.to_owned() }),
+            SaltedRef::Decoy(decoy) => Self::Decoy(decoy),
         }
-        seq.end()
     }
 }
 
-impl<'de> serde::Deserialize<'de> for SaltedArray {
-    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-        struct SaltedArrayVisitor;
-
-        impl<'de> serde::de::Visitor<'de> for SaltedArrayVisitor {
-            type Value = SaltedArray;
-
-            fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
-                write!(formatter, "a salted-array")
-            }
-
-            fn visit_seq<A: serde::de::SeqAccess<'de>>(self, mut seq: A) -> Result<Self::Value, A::Error> {
-                use serde::de::Error as _;
-                let size = seq.size_hint().unwrap_or(0);
-
-                // SAFETY: passing raw size can cause a capacity overflow https://doc.rust-lang.org/std/vec/struct.Vec.html#guarantees
-                const MAX_SIZE: usize = isize::MAX as usize / size_of::<Value>();
-                if size > MAX_SIZE {
-                    return Err(A::Error::custom("seq too big"));
-                }
-
-                let mut list = Vec::with_capacity(size);
-                while let Some(value_raw) = seq.next_element::<Vec<u8>>()? {
-                    let value: Value = ciborium::from_reader(&value_raw[..]).map_err(|err| A::Error::custom(format!("Cannot deserialize SaltedArray Bstr: {err}")))?;
-                    list.push(value);
-                }
-
-                Ok(SaltedArray(list))
-            }
+impl<'a, T: CwtAny> From<&'a Salted<T>> for SaltedRef<'a, T> {
+    fn from(s: &'a Salted<T>) -> Self {
+        match s {
+            Salted::Claim(SaltedClaim { salt, value, name }) => Self::Claim(SaltedClaimRef { salt: *salt, value, name }),
+            Salted::Element(SaltedElement { salt, value }) => Self::Element(SaltedElementRef { salt: *salt, value }),
+            Salted::Decoy(decoy) => Self::Decoy(*decoy),
         }
-
-        deserializer.deserialize_seq(SaltedArrayVisitor)
     }
 }
+
+#[derive(Default, Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
+pub struct SaltedArray(pub Vec<InlinedCbor<Salted<Value>>>);
 
 impl SaltedArray {
     pub fn with_capacity(capacity: usize) -> Self {
         Self(Vec::with_capacity(capacity))
     }
 
-    /// Adds the item to the array and return a reference to it to hash it later
-    pub fn push_ref<'a, T: CwtAny + 'a>(&'a mut self, salted: impl Into<SaltedRef<'a, T>>) -> Result<&'a Value, ciborium::value::Error> {
-        let salted = Value::serialized(&salted.into())?;
-        self.0.push(salted);
-        // SAFETY: we just inserted the item in the array so '.last()' cannot fail
-        Ok(self.0.last().unwrap())
+    /// Adds the item to the array and return a reference to it in order to hash it later
+    pub fn push_ref<'a, T: CwtAny + 'a>(&'a mut self, salted: impl Into<SaltedRef<'a, T>>) -> EsdicawtSpecResult<Value> {
+        self.0.push(InlinedCbor::Value(Salted::from(salted.into()).upcast()?, None));
+        // SAFETY: we just inserted the item in the array so '.last_mut()' cannot fail
+        Ok(self.0.last_mut().map(InlinedCbor::to_value).transpose()?.map(Value::serialized).transpose()?.unwrap())
     }
 
-    pub fn iter(&self) -> impl Iterator<Item = EsdicawtSpecResult<Salted<Value>>> + '_ {
-        self.0.iter().map(|v| v.deserialized().map_err(Into::into))
+    pub fn as_iter(&self) -> impl Iterator<Item = EsdicawtSpecResult<std::borrow::Cow<'_, Salted<Value>>>> + '_ {
+        self.0.iter().map(InlinedCbor::as_value)
+    }
+
+    pub fn iter_clone(&self) -> impl Iterator<Item = EsdicawtSpecResult<Salted<Value>>> {
+        self.0.iter().map(InlinedCbor::clone_value)
+    }
+
+    pub fn iter(&mut self) -> impl Iterator<Item = EsdicawtSpecResult<&Salted<Value>>> + '_ {
+        self.0.iter_mut().map(InlinedCbor::to_value)
+    }
+
+    pub fn take_into_iter(self) -> impl Iterator<Item = EsdicawtSpecResult<Salted<Value>>> {
+        self.0.into_iter().map(InlinedCbor::try_into_value)
+    }
+
+    pub fn iter_mut(&mut self) -> impl Iterator<Item = EsdicawtSpecResult<&mut Salted<Value>>> + '_ {
+        self.0.iter_mut().map(InlinedCbor::to_value_mut)
     }
 
     pub fn is_empty(&self) -> bool {

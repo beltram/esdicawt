@@ -69,4 +69,8 @@ impl<PayloadClaims: Select, ProtectedClaims: CustomClaims, UnprotectedClaims: Cu
     pub fn disclosures(&self) -> &SaltedArray {
         &self.sd_unprotected.sd_claims
     }
+
+    pub fn disclosures_mut(&mut self) -> &mut SaltedArray {
+        &mut self.sd_unprotected.sd_claims
+    }
 }

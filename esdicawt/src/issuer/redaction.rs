@@ -70,13 +70,9 @@ where
             // if we are ourselves in a mapping then redact the mapping itself
             let parent_ctx = parent_ctx.map(|(l, rcks)| (l.untag(), rcks));
             if let Some((Some(parent_label), rcks)) = parent_ctx {
-                let salt = &new_salt(csprng)?;
-                let salted_claim = sd_claims.push_ref(SaltedClaimRef {
-                    salt,
-                    claim: &parent_label,
-                    value,
-                })?;
-                rcks.push(&digest(salted_claim)?[..]);
+                let salt = new_salt(csprng)?;
+                let salted_claim = sd_claims.push_ref(SaltedClaimRef { salt, name: &parent_label, value })?;
+                rcks.push(&digest(&salted_claim)?[..]);
             }
         }
         Value::Array(array) => {
@@ -87,14 +83,10 @@ where
             // if we are in a mapping then redact the array itself
             let parent_ctx = parent_ctx.map(|(l, rcks)| (l.untag(), rcks));
             if let Some((Some(parent_label), rcks)) = parent_ctx {
-                let salt = &new_salt(csprng)?;
-                let disclosure = SaltedClaimRef {
-                    salt,
-                    claim: &parent_label,
-                    value,
-                };
+                let salt = new_salt(csprng)?;
+                let disclosure = SaltedClaimRef { salt, name: &parent_label, value };
                 let salted_claim = sd_claims.push_ref(disclosure)?;
-                rcks.push(&digest(salted_claim)?[..]);
+                rcks.push(&digest(&salted_claim)?[..]);
             }
         }
         Value::Tag(tag, original_value) if *tag == TO_BE_REDACTED_TAG && (original_value.is_map() || original_value.is_array()) => {
@@ -104,9 +96,9 @@ where
 
             // if we are in an array then redact in place
             if in_array {
-                let salt = &new_salt(csprng)?;
+                let salt = new_salt(csprng)?;
                 let salted_element = sd_claims.push_ref(SaltedElementRef { salt, value: original_value })?;
-                let digest = digest(salted_element)?;
+                let digest = digest(&salted_element)?;
                 let rce = RedactedClaimElement::from(&digest[..]);
                 *value = Value::serialized(&rce)?;
             }
@@ -123,23 +115,19 @@ where
                     };
 
                     if let Some(parent_label) = parent_label.untag() {
-                        let salt = &new_salt(csprng)?;
-                        let disclosure = SaltedClaimRef {
-                            salt,
-                            claim: &parent_label,
-                            value,
-                        };
+                        let salt = new_salt(csprng)?;
+                        let disclosure = SaltedClaimRef { salt, name: &parent_label, value };
                         let salted_claim = sd_claims.push_ref(disclosure)?;
-                        rcks.push(&digest(salted_claim)?[..]);
+                        rcks.push(&digest(&salted_claim)?[..]);
                     }
                 }
                 None => {
                     if let Value::Tag(TO_BE_REDACTED_TAG, original_value) = value {
                         // ... in an Array. So we insert it in the disclosures and replace the element with its digest in the array
-                        let salt = &new_salt(csprng)?;
+                        let salt = new_salt(csprng)?;
                         let disclosure = SaltedElementRef { salt, value: original_value };
                         let salted_element = sd_claims.push_ref(disclosure)?;
-                        let digest = digest(salted_element)?;
+                        let digest = digest(&salted_element)?;
                         let rce = RedactedClaimElement::from(&digest[..]);
                         *value = Value::serialized(&rce)?;
                     }
@@ -166,7 +154,7 @@ mod tests {
     use ciborium::cbor;
     use esdicawt_spec::{
         REDACTED_CLAIM_ELEMENT_TAG,
-        blinded_claims::{Decoy, SaltedClaim, SaltedElement},
+        blinded_claims::{SaltedClaim, SaltedElement},
     };
     use rand_chacha::rand_core::SeedableRng as _;
     use sha2::Digest as _;
@@ -361,24 +349,21 @@ mod tests {
         assert_eq!(Value::serialized(&mapping12).unwrap(), element_digest(&d1));
     }
 
+    // TODO: if got time change return to '(Value, [Salted<Value>; N])'
     fn _redact<const N: usize>(mut payload: Value) -> (Value, [Value; N]) {
         let mut rng = rand_chacha::ChaCha20Rng::from_entropy();
         let mut sd_claims = SaltedArray::default();
 
         redact_value::<Error, sha2::Sha256>(&mut payload, &mut rng, &mut sd_claims, None).unwrap();
 
-        for d in &sd_claims.0 {
-            if let Ok(d) = d.deserialized::<SaltedClaim<Value>>() {
-                assert_eq!(d.salt.0.len(), Salt::SIZE);
-            } else if let Ok(d) = d.deserialized::<SaltedElement<Value>>() {
-                assert_eq!(d.salt.0.len(), Salt::SIZE);
-            } else if let Ok(d) = d.deserialized::<Decoy>() {
-                assert_eq!(d.salt.0.len(), Salt::SIZE);
-            }
+        for d in &mut sd_claims.0 {
+            let d = d.to_value_mut().unwrap();
+            assert_eq!(d.salt().len(), Salt::SIZE);
         }
 
-        let size = sd_claims.0.len();
-        let disclosures = sd_claims.0.try_into().unwrap_or_else(|_| panic!("Expected {N} disclosures but got {size}"));
+        let size = sd_claims.len();
+        let disclosures = sd_claims.iter().map(|s| s.unwrap().clone()).map(|s| Value::serialized(&s).unwrap()).collect::<Vec<_>>();
+        let disclosures = disclosures.try_into().unwrap_or_else(|_| panic!("Expected {N} disclosures but got {size}"));
 
         (payload, disclosures)
     }

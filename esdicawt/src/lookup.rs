@@ -46,7 +46,7 @@ impl From<usize> for QueryElement {
     }
 }
 
-pub fn query<Hasher>(array: &SaltedArray, payload: &Value, query: &[u8]) -> EsdicawtSpecResult<Option<Value>>
+pub fn query<Hasher>(array: &mut SaltedArray, payload: &Value, query: &[u8]) -> EsdicawtSpecResult<Option<Value>>
 where
     Hasher: digest::Digest,
 {
@@ -55,7 +55,7 @@ where
     query_inner::<Hasher>(array, payload, &query.elements)
 }
 
-pub fn query_inner<Hasher>(array: &SaltedArray, payload: &Value, query: &[QueryElement]) -> EsdicawtSpecResult<Option<Value>>
+pub fn query_inner<Hasher>(array: &mut SaltedArray, payload: &Value, query: &[QueryElement]) -> EsdicawtSpecResult<Option<Value>>
 where
     Hasher: digest::Digest,
 {
@@ -87,7 +87,8 @@ where
                                 let hashed: Value = Hasher::digest(cbor.clone()).to_vec().into();
 
                                 if rcks.contains(&hashed) {
-                                    found = Some(sc.value);
+                                    // TODO: try removing this clone
+                                    found = Some(sc.value.clone());
                                     break;
                                 }
                             }
@@ -111,7 +112,8 @@ where
                         ciborium::into_writer(&sc, &mut cbor)?;
                         let hashed: Value = Hasher::digest(cbor.clone()).to_vec().into();
                         if *value == hashed {
-                            found = Some(sc.value);
+                            // TODO: try removing this clone
+                            found = Some(sc.value.clone());
                         }
                     }
                 }
@@ -141,7 +143,7 @@ pub trait TokenQuery {
 impl<PayloadClaims: Select, ProtectedClaims: CustomClaims, UnprotectedClaims: CustomClaims> TokenQuery for SdCwtIssued<PayloadClaims, ProtectedClaims, UnprotectedClaims> {
     fn query<Hasher: digest::Digest>(&mut self, token_query: Query) -> EsdicawtSpecResult<Option<Value>> {
         let payload: Value = Value::from_cbor_bytes(self.payload.to_bytes()?)?;
-        query_inner::<Hasher>(self.disclosures(), &payload, &token_query.elements)
+        query_inner::<Hasher>(self.disclosures_mut(), &payload, &token_query.elements)
     }
 }
 
@@ -165,7 +167,9 @@ mod tests {
         assert_eq!(sd_cwt.0.query::<sha2::Sha256>(vec!["a".into()].into()).unwrap(), Some("b".into()));
 
         let salted = &mut sd_cwt.0.sd_unprotected.sd_claims;
-        salted.0.retain(|cl| cl.as_array().map(|a| a[2] != "a".into()).unwrap_or_default());
+        salted
+            .0
+            .retain_mut(|cl| cl.to_value().unwrap().value().unwrap().as_array().map(|a| a[2] != "a".into()).unwrap_or_default());
 
         let _ = salted;
 

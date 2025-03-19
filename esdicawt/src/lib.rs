@@ -5,7 +5,7 @@ pub use esdicawt_spec as spec;
 pub use holder::{
     Holder,
     error::{SdCwtHolderError, SdCwtHolderResult},
-    params::{HolderParams, Presentation},
+    params::{CborPath, HolderParams, Presentation},
 };
 pub use issuer::{
     Issuer,

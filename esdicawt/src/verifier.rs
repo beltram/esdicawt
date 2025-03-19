@@ -1,18 +1,20 @@
 pub mod error;
 pub mod params;
 mod time;
+mod walk;
 
-use crate::VerifierParams;
-use crate::verifier::error::{SdCwtVerifierError, SdCwtVerifierResult};
+use crate::{
+    VerifierParams,
+    verifier::error::{SdCwtVerifierError, SdCwtVerifierResult},
+};
 use ::time::OffsetDateTime;
 use ciborium::Value;
 use cose_key_confirmation::{KeyConfirmation, error::CoseKeyConfirmationError};
 use esdicawt_spec::{
     CWT_CLAIM_KEY_CONFIRMATION_MAP, CustomClaims, CwtAny, SdHashAlg, Select,
-    blinded_claims::{Salted, SaltedClaim, SaltedElement},
+    blinded_claims::Salted,
     issuance::SdInnerPayload,
     key_binding::KbtCwtTagged,
-    redacted_claims::{RedactedClaimElement, RedactedClaimKeys},
     reexports::coset::{AsCborValue, CoseSign1, TaggedCborSerializable},
     verified::KbtCwtVerified,
 };
@@ -158,14 +160,14 @@ pub trait Verifier {
         // TODO: verify revocation status w/ Status List
 
         // now verifying the disclosures
-        let disclosures = &sd_cwt.0.sd_unprotected.sd_claims;
+        let disclosures = &mut sd_cwt.0.sd_unprotected.sd_claims;
         let disclosures_size = disclosures.len();
 
         let sd_alg = sd_cwt.0.protected.to_value()?.sd_alg;
 
         // compute the hash of all disclosures
         let mut disclosures = disclosures
-            .iter()
+            .iter_mut()
             .map(|d| match d {
                 Ok(salted) => {
                     let bytes = salted.to_cbor_bytes()?;
@@ -174,14 +176,14 @@ pub trait Verifier {
                 }
                 Err(e) => Err(e.into()),
             })
-            .collect::<Result<HashMap<Vec<u8>, Salted<Value>>, _>>()?;
+            .collect::<Result<HashMap<Vec<u8>, &mut Salted<Value>>, _>>()?;
 
         if disclosures.len() != disclosures_size {
             return Err(SdCwtVerifierError::DisclosureHashCollision);
         }
 
         let mut payload = Value::serialized(&sd_cwt_payload)?;
-        walk_payload(&mut payload, &mut disclosures)?;
+        walk::walk_payload(&mut payload, &mut disclosures)?;
 
         if let Some(map) = payload.as_map_mut() {
             map.retain(|(k, _)| !matches!(k, Value::Integer(i) if i == &CWT_CLAIM_KEY_CONFIRMATION_MAP.into()));
@@ -202,83 +204,12 @@ pub trait Verifier {
     }
 }
 
-// wrapping "_walk" is required for fallible recursion
-fn walk_payload<E>(payload: &mut Value, disclosures: &mut HashMap<Vec<u8>, Salted<Value>>) -> SdCwtVerifierResult<(), E>
-where
-    E: core::error::Error + Send + Sync,
-{
-    _walk(payload, disclosures)
-}
-
-#[tailcall::tailcall]
-fn _walk<E>(payload: &mut Value, disclosures: &mut HashMap<Vec<u8>, Salted<Value>>) -> SdCwtVerifierResult<(), E>
-where
-    E: core::error::Error + Send + Sync,
-{
-    match payload {
-        Value::Map(mapping) => {
-            let pos = mapping.iter().position(|(k, _)| match k {
-                Value::Simple(i) => *i == RedactedClaimKeys::CWT_LABEL,
-                _ => false,
-            });
-
-            if let Some(pos) = pos {
-                let (_, rcks) = mapping.remove(pos);
-                let rcks = rcks.deserialized::<RedactedClaimKeys>()?;
-                for rck in rcks.iter() {
-                    if let Some(salted) = disclosures.remove(rck.as_ref()) {
-                        match salted {
-                            Salted::Claim(SaltedClaim { name, mut value, .. }) => {
-                                if value.is_map() || value.is_array() {
-                                    walk_payload(&mut value, disclosures)?;
-                                }
-                                // TODO: verify the key ('name') is not already present in the mapping
-                                let name = Value::serialized(&name)?;
-                                mapping.push((name, value))
-                            }
-                            Salted::Decoy(_) => {} // nothing to do, validity of hash already checked
-                            Salted::Element(_) => return Err(SdCwtVerifierError::MalformedSdCwt("'redacted_claim_keys' must not contain redacted elements")),
-                        }
-                    } else {
-                        return Err(SdCwtVerifierError::MalformedSdCwt("Redacted claim not in disclosures"));
-                    }
-                }
-            }
-        }
-        Value::Array(array) => {
-            for element in array {
-                // not all the array elements are redacted, we might have partial redactions
-                let Ok(e) = element.deserialized::<RedactedClaimElement>() else {
-                    walk_payload(element, disclosures)?;
-                    continue;
-                };
-                if let Some(salted) = disclosures.remove(&*e) {
-                    match salted {
-                        Salted::Element(SaltedElement { mut value, .. }) => {
-                            if value.is_map() || value.is_array() {
-                                walk_payload(&mut value, disclosures)?;
-                            }
-                            *element = value
-                        }
-                        Salted::Decoy(_) => {} // nothing to do, validity of hash already checked
-                        Salted::Claim(_) => return Err(SdCwtVerifierError::MalformedSdCwt("a array must not contain a redacted claim key")),
-                    }
-                } else {
-                    return Err(SdCwtVerifierError::MalformedSdCwt("Redacted element not in disclosures"));
-                }
-            }
-        }
-        _ => {}
-    }
-    Ok(())
-}
-
 #[cfg(test)]
 mod tests {
+    use super::claims::CustomTokenClaims;
     use crate::{
         HolderParams, Issuer, IssuerParams, Presentation, Verifier, VerifierParams,
         holder::Holder,
-        issuer::claims::CustomTokenClaims,
         spec::EsdicawtSpecError,
         test_utils::{Ed25519Holder, P256IssuerClaims},
         verifier::test_utils::HybridVerifier,
@@ -401,6 +332,29 @@ mod tests {
                 >,
         >,
     ) {
+    }
+}
+
+#[cfg(test)]
+pub mod claims {
+    use ciborium::Value;
+    use esdicawt_spec::{EsdicawtSpecError, Select, SelectiveDisclosure, sd};
+
+    #[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
+    pub(super) struct CustomTokenClaims {
+        pub name: Option<String>,
+    }
+
+    impl Select for CustomTokenClaims {
+        type Error = EsdicawtSpecError;
+
+        fn select(self) -> Result<SelectiveDisclosure, <Self as Select>::Error> {
+            let mut map = Vec::with_capacity(1);
+            if let Some(name) = self.name {
+                map.push((sd(Value::Text("name".into())), Value::Text(name)));
+            }
+            Ok(Value::Map(map).into())
+        }
     }
 }
 
