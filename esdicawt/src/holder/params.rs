@@ -1,7 +1,7 @@
 use esdicawt_spec::CustomClaims;
 
 #[derive(Debug, Clone, Eq, PartialEq)]
-pub struct CwtPresentationParams<'a, KbtProtectedClaims: CustomClaims, KbtUnprotectedClaims: CustomClaims, KbtPayloadClaims: CustomClaims> {
+pub struct HolderParams<'a, KbtProtectedClaims: CustomClaims, KbtUnprotectedClaims: CustomClaims, KbtPayloadClaims: CustomClaims> {
     pub presentation: Presentation,
     pub audience: &'a str,
     pub expiry: core::time::Duration,

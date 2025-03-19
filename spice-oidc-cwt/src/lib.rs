@@ -643,7 +643,7 @@ mod tests {
         let mut alice_kbt = alice_holder
             .new_presentation(
                 &alice_sd_cwt.to_cbor_bytes().unwrap(),
-                esdicawt::CwtPresentationParams {
+                esdicawt::HolderParams {
                     presentation: Presentation::Full,
                     audience: "bob",
                     expiry: Duration::from_secs(86400),
@@ -671,7 +671,7 @@ mod tests {
         issuer
             .issue_cwt(
                 &mut rand::thread_rng(),
-                esdicawt::IssueCwtParams {
+                esdicawt::IssuerParams {
                     protected_claims: None,
                     unprotected_claims: None,
                     payload: Some(claims),

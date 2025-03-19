@@ -72,7 +72,7 @@ pub trait Issuer {
     fn issue_cwt(
         &self,
         csprng: &mut dyn rand_core::CryptoRngCore,
-        params: IssueCwtParams<'_, Self::PayloadClaims, Self::ProtectedClaims, Self::UnprotectedClaims>,
+        params: IssuerParams<'_, Self::PayloadClaims, Self::ProtectedClaims, Self::UnprotectedClaims>,
     ) -> Result<SdCwtIssuedTagged<Self::PayloadClaims, Self::ProtectedClaims, Self::UnprotectedClaims>, SdCwtIssuerError<Self::Error>> {
         let alg = self.cwt_algorithm();
         let issuer = params.issuer;
@@ -170,7 +170,7 @@ pub trait Issuer {
     }
 }
 
-pub struct IssueCwtParams<'a, PayloadClaims: Select, ProtectedClaims: CustomClaims, UnprotectedClaims: CustomClaims> {
+pub struct IssuerParams<'a, PayloadClaims: Select, ProtectedClaims: CustomClaims, UnprotectedClaims: CustomClaims> {
     /// Extra claims in the protected header of the sd-cwt
     pub protected_claims: Option<ProtectedClaims>,
     /// Extra claims in the unprotected header of the sd-cwt
@@ -369,7 +369,7 @@ mod tests {
         issuer
             .issue_cwt(
                 &mut csprng,
-                crate::IssueCwtParams {
+                crate::IssuerParams {
                     protected_claims: None,
                     unprotected_claims: None,
                     payload: Some(payload),

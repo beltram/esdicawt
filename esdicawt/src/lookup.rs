@@ -152,7 +152,7 @@ mod tests {
     use esdicawt_spec::{EsdicawtSpecError, Select, issuance::SdCwtIssuedTagged};
     use rand_core::SeedableRng;
 
-    use crate::{IssueCwtParams, Issuer, test_utils::P256IssuerClaims};
+    use crate::{Issuer, IssuerParams, test_utils::P256IssuerClaims};
 
     #[test]
     fn can_query_top_level_claim() {
@@ -230,7 +230,7 @@ mod tests {
 
         let issuer = P256IssuerClaims::new(issuer_signing_key);
 
-        let issue_params = IssueCwtParams {
+        let issue_params = IssuerParams {
             protected_claims: None,
             unprotected_claims: None,
             payload: Some(payload),

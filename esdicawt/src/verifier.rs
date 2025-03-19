@@ -49,7 +49,7 @@ pub trait Verifier {
     fn verify_sd_kbt_from_bytes(
         &self,
         kbt_bytes: &[u8],
-        params: VerifyCwtParams,
+        params: VerifierParams,
     ) -> Result<
         KbtCwtVerified<
             Self::IssuerPayloadClaims,
@@ -83,7 +83,7 @@ pub trait Verifier {
             Self::KbtUnprotectedClaims,
             Self::KbtPayloadClaims,
         >,
-        params: VerifyCwtParams,
+        params: VerifierParams,
     ) -> Result<
         KbtCwtVerified<
             Self::IssuerPayloadClaims,
@@ -271,7 +271,7 @@ where
     Ok(())
 }
 
-pub struct VerifyCwtParams {
+pub struct VerifierParams {
     pub current_timestamp: Option<i64>,
     pub leeway: i64,
 }
@@ -279,7 +279,7 @@ pub struct VerifyCwtParams {
 #[cfg(test)]
 mod tests {
     use crate::{
-        CwtPresentationParams, IssueCwtParams, Issuer, Presentation, Verifier, VerifyCwtParams,
+        HolderParams, Issuer, IssuerParams, Presentation, Verifier, VerifierParams,
         holder::Holder,
         issuer::claims::CustomTokenClaims,
         spec::EsdicawtSpecError,
@@ -341,7 +341,7 @@ mod tests {
             holder_verifying_key: holder_signing_key.verifying_key(),
             _marker: Default::default(),
         };
-        let verifier_params = VerifyCwtParams {
+        let verifier_params = VerifierParams {
             current_timestamp: None,
             leeway: 0,
         };
@@ -357,7 +357,7 @@ mod tests {
 
         let issuer = P256IssuerClaims::new(issuer_signing_key.clone());
 
-        let issue_params = IssueCwtParams {
+        let issue_params = IssuerParams {
             protected_claims: None,
             unprotected_claims: None,
             payload: Some(payload),
@@ -371,7 +371,7 @@ mod tests {
         let sd_cwt = issuer.issue_cwt(&mut csprng, issue_params).unwrap().to_cbor_bytes().unwrap();
 
         let holder = Ed25519Holder::new(holder_signing_key.clone());
-        let presentation_params = CwtPresentationParams {
+        let presentation_params = HolderParams {
             presentation: Presentation::Full,
             audience: "mimi://example.com/r/alice-bob-group",
             expiry: core::time::Duration::from_secs(90 * 24 * 3600),

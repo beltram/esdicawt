@@ -1,4 +1,4 @@
-use crate::{CwtPresentationParams, Presentation, SdCwtHolderError, now};
+use crate::{HolderParams, Presentation, SdCwtHolderError, now};
 use esdicawt_spec::{
     CustomClaims, CwtAny, SdHashAlg, Select,
     blinded_claims::SaltedArray,
@@ -71,7 +71,7 @@ pub trait Holder {
     fn new_presentation(
         &self,
         sd_cwt_issued: &[u8],
-        params: CwtPresentationParams<Self::KbtProtectedClaims, Self::KbtUnprotectedClaims, Self::KbtPayloadClaims>,
+        params: HolderParams<Self::KbtProtectedClaims, Self::KbtUnprotectedClaims, Self::KbtPayloadClaims>,
     ) -> Result<
         KbtCwtTagged<
             Self::IssuerPayloadClaims,
@@ -153,7 +153,7 @@ pub fn unix_timestamp(leeway: Option<core::time::Duration>) -> u64 {
 mod tests {
     use super::{test_utils::Ed25519Holder, *};
     use crate::{
-        IssueCwtParams, Issuer,
+        Issuer, IssuerParams,
         issuer::{claims::CustomTokenClaims, test_utils::Ed25519IssuerClaims},
     };
     use ciborium::cbor;
@@ -175,7 +175,7 @@ mod tests {
         let issuer = Ed25519IssuerClaims::<CustomTokenClaims>::new(issuer_signing_key);
 
         let payload = CustomTokenClaims { name: Some("Alice Smith".into()) };
-        let issue_params = IssueCwtParams {
+        let issue_params = IssuerParams {
             protected_claims: None,
             unprotected_claims: None,
             payload: Some(payload),
@@ -189,7 +189,7 @@ mod tests {
         let sd_cwt = issuer.issue_cwt(&mut csprng, issue_params).unwrap().to_cbor_bytes().unwrap();
 
         let holder = Ed25519Holder::<CustomTokenClaims>::new(holder_signing_key);
-        let presentation_params = CwtPresentationParams {
+        let presentation_params = HolderParams {
             presentation: Presentation::Full,
             audience: "mimi://example.com/r/alice-bob-group",
             expiry: core::time::Duration::from_secs(90 * 24 * 3600),
