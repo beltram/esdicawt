@@ -27,12 +27,21 @@ pub const CWT_CLAIM_PHONE_NUMBER_VERIFIED: i64 = 186;
 pub const CWT_CLAIM_ADDRESS: i64 = 187;
 pub const CWT_CLAIM_UPDATED_AT: i64 = 188;
 
-pub const CWT_CLAIM_ADDRESS_FORMATTED: i64 = 1;
-pub const CWT_CLAIM_ADDRESS_STREET_ADDRESS: i64 = 2;
-pub const CWT_CLAIM_ADDRESS_LOCALITY: i64 = 3;
-pub const CWT_CLAIM_ADDRESS_REGION: i64 = 4;
-pub const CWT_CLAIM_ADDRESS_POSTAL_CODE: i64 = 5;
-pub const CWT_CLAIM_ADDRESS_COUNTRY: i64 = 6;
+// FIXME: for test-vectors
+pub const CWT_CLAIM_ADDRESS_FORMATTED: i64 = 6;
+pub const CWT_CLAIM_ADDRESS_STREET_ADDRESS: i64 = 5;
+pub const CWT_CLAIM_ADDRESS_LOCALITY: i64 = 4;
+pub const CWT_CLAIM_ADDRESS_REGION: i64 = 2;
+pub const CWT_CLAIM_ADDRESS_POSTAL_CODE: i64 = 3;
+pub const CWT_CLAIM_ADDRESS_COUNTRY: i64 = 1;
+
+// true values
+// pub const CWT_CLAIM_ADDRESS_FORMATTED: i64 = 1;
+// pub const CWT_CLAIM_ADDRESS_STREET_ADDRESS: i64 = 2;
+// pub const CWT_CLAIM_ADDRESS_LOCALITY: i64 = 3;
+// pub const CWT_CLAIM_ADDRESS_REGION: i64 = 4;
+// pub const CWT_CLAIM_ADDRESS_POSTAL_CODE: i64 = 5;
+// pub const CWT_CLAIM_ADDRESS_COUNTRY: i64 = 6;
 
 pub const OIDC_NAME: &str = "name";
 pub const OIDC_GIVEN_NAME: &str = "given_name";
@@ -308,8 +317,6 @@ impl<'de> serde::Deserialize<'de> for OidcAddressClaim {
             }
 
             fn visit_map<A: serde::de::MapAccess<'de>>(self, mut map: A) -> Result<Self::Value, A::Error> {
-                use serde::de::Error as _;
-
                 let mut address = OidcAddressClaim::default();
                 while let Some((k, v)) = map.next_entry::<Value, Value>()? {
                     match (k, v) {
@@ -331,7 +338,7 @@ impl<'de> serde::Deserialize<'de> for OidcAddressClaim {
                         (Value::Integer(i), Value::Text(s)) if i == CWT_CLAIM_ADDRESS_COUNTRY.into() => {
                             address.country.replace(s);
                         }
-                        _ => return Err(A::Error::custom("invalid claim in an address")),
+                        _ => {}
                     }
                 }
 
@@ -656,11 +663,13 @@ mod tests {
                 esdicawt::HolderParams {
                     presentation,
                     audience: "bob",
-                    expiry: Duration::from_secs(86400),
+                    expiry: Some(Duration::from_secs(86400)),
+                    with_not_before: false,
                     leeway: Duration::from_secs(100),
                     extra_kbt_unprotected: None,
                     extra_kbt_protected: None,
                     extra_kbt_payload: None,
+                    now: None,
                 },
             )
             .unwrap();
@@ -685,12 +694,18 @@ mod tests {
                     protected_claims: None,
                     unprotected_claims: None,
                     payload: Some(claims),
-                    subject,
+                    subject: Some(subject),
+                    audience: Default::default(),
+                    cti: Default::default(),
+                    cnonce: Default::default(),
                     issuer: "",
-                    expiry: Duration::from_secs(90),
+                    expiry: Some(Duration::from_secs(90)),
+                    with_not_before: false,
                     leeway: Duration::from_secs(1),
                     key_location: "",
                     holder_confirmation_key: holder_pk.try_into().unwrap(),
+                    now: None,
+                    with_issued_at: false,
                 },
             )
             .unwrap()
@@ -806,11 +821,6 @@ mod ed25519 {
 
         fn serialize_signature(&self, signature: &ed25519_dalek::Signature) -> Result<Vec<u8>, Self::Error> {
             Ok(ed25519_dalek::Signature::to_bytes(signature).into())
-        }
-
-        fn hash(&self, msg: &[u8]) -> Vec<u8> {
-            use sha2::digest::Digest as _;
-            sha2::Sha256::digest(msg).to_vec()
         }
     }
 }

@@ -8,8 +8,8 @@ use crate::{
 };
 use ciborium::Value;
 use esdicawt_spec::{
-    COSE_SD_CLAIMS, CWT_CLAIM_EXPIRES_AT, CWT_CLAIM_ISSUED_AT, CWT_CLAIM_ISSUER, CWT_CLAIM_KEY_CONFIRMATION_MAP, CWT_CLAIM_NOT_BEFORE, CWT_CLAIM_SD_ALG, CWT_CLAIM_SUBJECT,
-    CWT_MEDIATYPE, CustomClaims, CwtAny, EsdicawtSpecError, MEDIATYPE_SD_CWT, SdHashAlg, Select,
+    COSE_SD_CLAIMS, CWT_CLAIM_AUDIENCE, CWT_CLAIM_CNONCE, CWT_CLAIM_CTI, CWT_CLAIM_EXPIRES_AT, CWT_CLAIM_ISSUED_AT, CWT_CLAIM_ISSUER, CWT_CLAIM_KEY_CONFIRMATION,
+    CWT_CLAIM_NOT_BEFORE, CWT_CLAIM_SD_ALG, CWT_CLAIM_SUBJECT, CWT_MEDIATYPE, CustomClaims, CwtAny, EsdicawtSpecError, MEDIATYPE_SD_CWT, SdHashAlg, Select,
     issuance::SdCwtIssuedTagged,
     reexports::coset::{
         TaggedCborSerializable, {self},
@@ -76,14 +76,12 @@ pub trait Issuer {
         params: IssuerParams<'_, Self::PayloadClaims, Self::ProtectedClaims, Self::UnprotectedClaims>,
     ) -> Result<SdCwtIssuedTagged<Self::PayloadClaims, Self::ProtectedClaims, Self::UnprotectedClaims>, SdCwtIssuerError<Self::Error>> {
         let alg = self.cwt_algorithm();
-        let issuer = params.issuer;
-        let key_location = params.key_location;
 
         let mut protected_builder = coset::HeaderBuilder::new()
             .algorithm(alg)
             .value(CWT_MEDIATYPE, Value::Text(MEDIATYPE_SD_CWT.to_string()))
             .value(CWT_CLAIM_SD_ALG, Value::Integer((self.hash_algorithm() as i64).into()))
-            .key_id(key_location.as_bytes().into());
+            .key_id(params.key_location.as_bytes().into());
 
         if let Some(protected_claims) = params.protected_claims {
             let protected_extra_claims = Value::serialized(&protected_claims)?.into_map()?;
@@ -118,19 +116,42 @@ pub trait Issuer {
                 }
             }
 
-            let now = now();
-            let nbf = now - params.leeway.as_secs();
-            let iat = now;
-            let expiry = now + params.expiry.as_secs();
+            let payload = sd.0.as_map_mut().ok_or(SdCwtIssuerError::InputError)?;
 
-            let payload = sd.0.as_map_mut().expect("FIXME");
+            payload.push((Value::Integer(CWT_CLAIM_ISSUER.into()), params.issuer.into()));
+            if let Some(sub) = params.subject {
+                payload.push((Value::Integer(CWT_CLAIM_SUBJECT.into()), sub.into()));
+            }
+            if let Some(aud) = params.audience {
+                payload.push((Value::Integer(CWT_CLAIM_AUDIENCE.into()), aud.into()));
+            }
+            if let Some(cti) = params.cti {
+                payload.push((Value::Integer(CWT_CLAIM_CTI.into()), cti.into()));
+            }
+            if let Some(cnonce) = params.cnonce {
+                payload.push((Value::Integer(CWT_CLAIM_CNONCE.into()), cnonce.into()));
+            }
 
-            payload.push((Value::Integer(CWT_CLAIM_ISSUER.into()), issuer.into()));
-            payload.push((Value::Integer(CWT_CLAIM_SUBJECT.into()), params.subject.into()));
-            payload.push((Value::Integer(CWT_CLAIM_EXPIRES_AT.into()), expiry.into()));
-            payload.push((Value::Integer(CWT_CLAIM_NOT_BEFORE.into()), nbf.into()));
-            payload.push((Value::Integer(CWT_CLAIM_ISSUED_AT.into()), iat.into()));
-            payload.push((Value::Integer(CWT_CLAIM_KEY_CONFIRMATION_MAP.into()), Value::serialized(&params.holder_confirmation_key)?));
+            if params.expiry.is_some() || params.with_issued_at || params.with_not_before {
+                #[cfg(feature = "test-vectors")]
+                let now = params.now.map(|d| d.as_secs()).unwrap_or_else(now);
+                #[cfg(not(feature = "test-vectors"))]
+                let now = now();
+                if let Some(expiry) = params.expiry {
+                    let expiry = now + expiry.as_secs();
+                    payload.push((Value::Integer(CWT_CLAIM_EXPIRES_AT.into()), expiry.into()));
+                }
+                if params.with_not_before {
+                    let nbf = now - params.leeway.as_secs();
+                    payload.push((Value::Integer(CWT_CLAIM_NOT_BEFORE.into()), nbf.into()));
+                }
+                if params.with_issued_at {
+                    let iat = now;
+                    payload.push((Value::Integer(CWT_CLAIM_ISSUED_AT.into()), iat.into()));
+                }
+            }
+
+            payload.push((Value::Integer(CWT_CLAIM_KEY_CONFIRMATION.into()), Value::serialized(&params.holder_confirmation_key)?));
 
             Value::Map(payload.clone())
         } else {
@@ -383,12 +404,18 @@ mod tests {
                     protected_claims: None,
                     unprotected_claims: None,
                     payload: Some(payload),
-                    subject: "mimi://example.com/alice.smith",
                     issuer: "mimi://example.com/i/acme.io",
-                    expiry: core::time::Duration::from_secs(90),
+                    subject: Some("mimi://example.com/alice.smith"),
+                    audience: Default::default(),
+                    cti: Default::default(),
+                    cnonce: Default::default(),
+                    expiry: Some(core::time::Duration::from_secs(90)),
+                    with_not_before: true,
+                    with_issued_at: true,
                     leeway: core::time::Duration::from_secs(1),
                     key_location: "https://auth.acme.io/issuer.cwk",
                     holder_confirmation_key: (&holder_signing_key.verifying_key()).try_into().unwrap(),
+                    now: None,
                 },
             )
             .unwrap()

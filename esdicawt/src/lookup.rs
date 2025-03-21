@@ -238,12 +238,18 @@ mod tests {
             protected_claims: None,
             unprotected_claims: None,
             payload: Some(payload),
-            subject: "mimi://example.com/u/alice.smith",
             issuer: "mimi://example.com/i/proton.me",
-            expiry: core::time::Duration::from_secs(90),
+            subject: Some("mimi://example.com/u/alice.smith"),
+            audience: Default::default(),
+            cti: Default::default(),
+            cnonce: Default::default(),
+            expiry: Some(core::time::Duration::from_secs(90)),
+            with_not_before: true,
+            with_issued_at: true,
             leeway: core::time::Duration::from_secs(1),
             key_location: "https://auth.proton.me/issuer.cwk",
             holder_confirmation_key: (&holder_signing_key.verifying_key()).try_into().unwrap(),
+            now: None,
         };
         issuer.issue_cwt(&mut csprng, issue_params).unwrap()
     }

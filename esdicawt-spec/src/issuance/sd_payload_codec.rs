@@ -1,5 +1,5 @@
 use crate::{
-    CWT_CLAIM_AUDIENCE, CWT_CLAIM_CNONCE, CWT_CLAIM_CTI, CWT_CLAIM_EXPIRES_AT, CWT_CLAIM_ISSUED_AT, CWT_CLAIM_ISSUER, CWT_CLAIM_KEY_CONFIRMATION_MAP, CWT_CLAIM_NOT_BEFORE,
+    CWT_CLAIM_AUDIENCE, CWT_CLAIM_CNONCE, CWT_CLAIM_CTI, CWT_CLAIM_EXPIRES_AT, CWT_CLAIM_ISSUED_AT, CWT_CLAIM_ISSUER, CWT_CLAIM_KEY_CONFIRMATION, CWT_CLAIM_NOT_BEFORE,
     CWT_CLAIM_SUBJECT, ClaimName, CustomClaims, SdCwtStandardClaim,
     issuance::{SdInnerPayload, SdInnerPayloadBuilder, SdPayload, SdPayloadBuilder},
     redacted_claims::RedactedClaimKeys,
@@ -15,7 +15,7 @@ impl<Extra: CustomClaims> serde::Serialize for SdPayload<Extra> {
 
         serialize_sd_cwt_payload::<Extra, S>(&self.inner, &mut map)?;
 
-        map.serialize_entry(&CWT_CLAIM_KEY_CONFIRMATION_MAP, &self.cnf)?;
+        map.serialize_entry(&CWT_CLAIM_KEY_CONFIRMATION, &self.cnf)?;
 
         if let Some(redacted_claim_keys) = &self.redacted_claim_keys {
             let label = Value::Simple(RedactedClaimKeys::CWT_LABEL);

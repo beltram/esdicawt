@@ -133,3 +133,23 @@ impl<T: CwtAny> From<T> for InlinedCbor<T> {
         Self::Value(v, None)
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn should_serialize_as_bstr() {
+        let value = InlinedCbor::Value(0u32, None);
+        let ser = value.to_cbor_bytes().unwrap();
+        println!("ser: {ser:x?}");
+        assert_eq!(ser, vec![0b010_00001, 0b0000_0000]);
+    }
+
+    #[test]
+    fn should_deserialize_from_bstr() {
+        let ser: Vec<u8> = vec![0b010_00001, 0b0000_0000];
+        let value = InlinedCbor::<u32>::from_cbor_bytes(&ser).unwrap();
+        assert_eq!(value.clone_value().unwrap(), 0);
+    }
+}
