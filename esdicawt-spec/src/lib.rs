@@ -19,11 +19,11 @@ pub const COSE_SD_KBT: i64 = 18;
 
 /// Used for redacted claims in an array
 /// TODO: Pending IANA registration. Later on we should get it via coset
-pub const REDACTED_CLAIM_ELEMENT_TAG: u64 = 60;
+pub const REDACTED_CLAIM_ELEMENT_TAG: u64 = 59;
 pub const TO_BE_REDACTED_TAG: u64 = 58;
 
 pub const CWT_CLAIM_ALG: i64 = 1;
-pub const CWT_CLAIM_SD_ALG: i64 = 12;
+pub const CWT_CLAIM_SD_ALG: i64 = 18;
 pub const CWT_CLAIM_ISSUER_SD_CWT: i64 = 11;
 pub const CWT_CLAIM_REDACTED_ELEMENT: i64 = 41;
 pub const CWT_CLAIM_VCT: i64 = 42;
@@ -33,7 +33,7 @@ pub const CWT_CLAIM_AUDIENCE: i64 = coset::iana::CwtClaimName::Aud as i64;
 pub const CWT_CLAIM_EXPIRES_AT: i64 = coset::iana::CwtClaimName::Exp as i64;
 pub const CWT_CLAIM_NOT_BEFORE: i64 = coset::iana::CwtClaimName::Nbf as i64;
 pub const CWT_CLAIM_ISSUED_AT: i64 = coset::iana::CwtClaimName::Iat as i64;
-pub const CWT_CLAIM_KEY_CONFIRMATION_MAP: i64 = coset::iana::CwtClaimName::Cnf as i64;
+pub const CWT_CLAIM_KEY_CONFIRMATION: i64 = coset::iana::CwtClaimName::Cnf as i64;
 pub const CWT_CLAIM_CNONCE: i64 = coset::iana::CwtClaimName::CNonce as i64;
 pub const CWT_CLAIM_CTI: i64 = coset::iana::CwtClaimName::Cti as i64;
 
@@ -111,7 +111,7 @@ pub enum SdCwtStandardClaim {
     IssuedAt = CWT_CLAIM_ISSUED_AT,
     Cnonce = CWT_CLAIM_CNONCE,
     Cti = CWT_CLAIM_CTI,
-    KeyConfirmation = CWT_CLAIM_KEY_CONFIRMATION_MAP,
+    KeyConfirmation = CWT_CLAIM_KEY_CONFIRMATION,
 }
 
 impl TryFrom<i64> for SdCwtStandardClaim {
@@ -126,7 +126,7 @@ impl TryFrom<i64> for SdCwtStandardClaim {
             CWT_CLAIM_ISSUED_AT => Self::IssuedAt,
             CWT_CLAIM_CNONCE => Self::Cnonce,
             CWT_CLAIM_CTI => Self::Cti,
-            CWT_CLAIM_KEY_CONFIRMATION_MAP => Self::KeyConfirmation,
+            CWT_CLAIM_KEY_CONFIRMATION => Self::KeyConfirmation,
             value => return Err(EsdicawtSpecError::UnknownStandardClaim(value)),
         })
     }
@@ -144,7 +144,7 @@ impl TryFrom<&Value> for SdCwtStandardClaim {
             Value::Integer(i) if i == &CWT_CLAIM_ISSUED_AT.into() => Self::IssuedAt,
             Value::Integer(i) if i == &CWT_CLAIM_CNONCE.into() => Self::Cnonce,
             Value::Integer(i) if i == &CWT_CLAIM_CTI.into() => Self::Cti,
-            Value::Integer(i) if i == &CWT_CLAIM_KEY_CONFIRMATION_MAP.into() => Self::KeyConfirmation,
+            Value::Integer(i) if i == &CWT_CLAIM_KEY_CONFIRMATION.into() => Self::KeyConfirmation,
             Value::Integer(i) => return Err(EsdicawtSpecError::UnknownStandardClaim(i64::try_from(*i)?)),
             _ => return Err(EsdicawtSpecError::InputError),
         })

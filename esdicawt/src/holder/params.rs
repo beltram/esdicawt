@@ -5,9 +5,16 @@ use esdicawt_spec::{ClaimName, CustomClaims, blinded_claims::SaltedArray};
 #[derive(Debug)]
 pub struct HolderParams<'a, KbtProtectedClaims: CustomClaims, KbtUnprotectedClaims: CustomClaims, KbtPayloadClaims: CustomClaims> {
     pub presentation: Presentation,
+    /// Subject, see https://www.rfc-editor.org/rfc/rfc8392.html#section-3.1.3
     pub audience: &'a str,
-    pub expiry: core::time::Duration,
+    /// Expiry, see https://www.rfc-editor.org/rfc/rfc8392.html#section-3.1.4
+    pub expiry: Option<core::time::Duration>,
+    /// Whether to include a not_before, see https://www.rfc-editor.org/rfc/rfc8392.html#section-3.1.5
+    pub with_not_before: bool,
+    /// Dealing with clocks skew
     pub leeway: core::time::Duration,
+    #[cfg(feature = "test-vectors")]
+    pub now: Option<core::time::Duration>,
     pub extra_kbt_protected: Option<KbtProtectedClaims>,
     pub extra_kbt_unprotected: Option<KbtUnprotectedClaims>,
     pub extra_kbt_payload: Option<KbtPayloadClaims>,

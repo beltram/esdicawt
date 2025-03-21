@@ -11,7 +11,7 @@ use ::time::OffsetDateTime;
 use ciborium::Value;
 use cose_key_confirmation::{KeyConfirmation, error::CoseKeyConfirmationError};
 use esdicawt_spec::{
-    CWT_CLAIM_KEY_CONFIRMATION_MAP, CustomClaims, CwtAny, SdHashAlg, Select,
+    CWT_CLAIM_KEY_CONFIRMATION, CustomClaims, CwtAny, SdHashAlg, Select,
     blinded_claims::Salted,
     issuance::SdInnerPayload,
     key_binding::KbtCwtTagged,
@@ -186,7 +186,7 @@ pub trait Verifier {
         walk::walk_payload(&mut payload, &mut disclosures)?;
 
         if let Some(map) = payload.as_map_mut() {
-            map.retain(|(k, _)| !matches!(k, Value::Integer(i) if i == &CWT_CLAIM_KEY_CONFIRMATION_MAP.into()));
+            map.retain(|(k, _)| !matches!(k, Value::Integer(i) if i == &CWT_CLAIM_KEY_CONFIRMATION.into()));
         }
 
         // TODO: this might fail if `Self::DisclosedClaims` does not support unknown claims (serde flatten etc..)
@@ -289,12 +289,18 @@ mod tests {
             protected_claims: None,
             unprotected_claims: None,
             payload: Some(payload),
-            subject: "mimi://example.com/u/alice.smith",
+            subject: Some("mimi://example.com/u/alice.smith"),
             issuer: "mimi://example.com/i/acme.io",
-            expiry: core::time::Duration::from_secs(90),
+            audience: Default::default(),
+            cti: Default::default(),
+            cnonce: Default::default(),
+            expiry: Some(core::time::Duration::from_secs(90)),
+            with_not_before: true,
+            with_issued_at: true,
             leeway: core::time::Duration::from_secs(1),
             key_location: "https://auth.acme.io/issuer.cwk",
             holder_confirmation_key: (&holder_signing_key.verifying_key()).try_into().unwrap(),
+            now: None,
         };
         let sd_cwt = issuer.issue_cwt(&mut csprng, issue_params).unwrap().to_cbor_bytes().unwrap();
 
@@ -302,11 +308,13 @@ mod tests {
         let presentation_params = HolderParams {
             presentation: Presentation::Full,
             audience: "mimi://example.com/r/alice-bob-group",
-            expiry: core::time::Duration::from_secs(90 * 24 * 3600),
+            expiry: Some(core::time::Duration::from_secs(90 * 24 * 3600)),
+            with_not_before: true,
             leeway: core::time::Duration::from_secs(3600),
             extra_kbt_unprotected: None,
             extra_kbt_protected: None,
             extra_kbt_payload: None,
+            now: None,
         };
 
         let sd_kbt = holder.new_presentation(&sd_cwt, presentation_params).unwrap();

@@ -15,6 +15,7 @@ coset = { workspace = true, features = ["std"] }
 ciborium.workspace = true
 thiserror.workspace = true
 cose-key-confirmation.workspace = true
+hex.workspace = true
 
 [lints]
 workspace = true

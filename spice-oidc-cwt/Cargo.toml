@@ -13,7 +13,7 @@ serde_json = { workspace = true, features = ["preserve_order"] }
 url = { workspace = true, features = ["serde"] }
 
 [dev-dependencies]
-esdicawt = { workspace = true, features = ["test-utils", "ed25519", "p256", "p384"] }
+esdicawt = { workspace = true, features = ["test-utils", "test-vectors", "ed25519", "p256", "p384"] }
 rand.workspace = true
 ed25519-dalek = { workspace = true, features = ["rand_core"] }
 sha2.workspace = true
