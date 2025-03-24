@@ -8,8 +8,9 @@ use crate::{
 };
 use ciborium::Value;
 use esdicawt_spec::{
-    COSE_SD_CLAIMS, CWT_CLAIM_SD_ALG, CWT_MEDIATYPE, CustomClaims, CwtAny, EsdicawtSpecError, MEDIATYPE_SD_CWT, SdHashAlg, Select,
-    issuance::{SdCwtIssuedTagged, SdInnerPayloadBuilder, SdPayloadBuilder},
+    COSE_SD_CLAIMS, CWT_CLAIM_EXPIRES_AT, CWT_CLAIM_ISSUED_AT, CWT_CLAIM_ISSUER, CWT_CLAIM_KEY_CONFIRMATION_MAP, CWT_CLAIM_NOT_BEFORE, CWT_CLAIM_SD_ALG, CWT_CLAIM_SUBJECT,
+    CWT_MEDIATYPE, CustomClaims, CwtAny, EsdicawtSpecError, MEDIATYPE_SD_CWT, SdHashAlg, Select,
+    issuance::SdCwtIssuedTagged,
     reexports::coset::{
         TaggedCborSerializable, {self},
     },
@@ -122,33 +123,16 @@ pub trait Issuer {
             let iat = now;
             let expiry = now + params.expiry.as_secs();
 
-            let mut inner_payload_builder = SdInnerPayloadBuilder::<Self::PayloadClaims>::default();
-            inner_payload_builder
-                .issuer(issuer)
-                .subject(params.subject)
-                .expiration(expiry as i64)
-                .not_before(nbf as i64)
-                .issued_at(iat as i64);
+            let payload = sd.0.as_map_mut().expect("FIXME");
 
-            // remove 'redacted_claim_keys' which is not part of 'Self::PayloadClaims'
-            let rcks = sd.take_rcks()?;
+            payload.push((Value::Integer(CWT_CLAIM_ISSUER.into()), issuer.into()));
+            payload.push((Value::Integer(CWT_CLAIM_SUBJECT.into()), params.subject.into()));
+            payload.push((Value::Integer(CWT_CLAIM_EXPIRES_AT.into()), expiry.into()));
+            payload.push((Value::Integer(CWT_CLAIM_NOT_BEFORE.into()), nbf.into()));
+            payload.push((Value::Integer(CWT_CLAIM_ISSUED_AT.into()), iat.into()));
+            payload.push((Value::Integer(CWT_CLAIM_KEY_CONFIRMATION_MAP.into()), Value::serialized(&params.holder_confirmation_key)?));
 
-            // take the unredacted claims and shove it in the payload
-            let public_claims = sd.0.deserialized::<Self::PayloadClaims>()?;
-            inner_payload_builder.extra(public_claims);
-
-            let inner = inner_payload_builder.build().map_err(EsdicawtSpecError::from)?;
-
-            let mut payload_builder = SdPayloadBuilder::default();
-            payload_builder.inner(inner).cnf(params.holder_confirmation_key);
-
-            if let Some(rcks) = rcks {
-                payload_builder.redacted_claim_keys(rcks);
-            }
-
-            let payload = payload_builder.build().map_err(EsdicawtSpecError::from)?;
-
-            Value::serialized(&payload).map_err(EsdicawtSpecError::from)?
+            Value::Map(payload.clone())
         } else {
             Value::Bytes(vec![])
         };
@@ -166,7 +150,7 @@ pub trait Issuer {
             .build()
             .to_tagged_vec()?;
 
-        Ok(SdCwtIssuedTagged::from_cbor_bytes(&sign1)?)
+        Ok(SdCwtIssuedTagged::from_cbor_bytes(&sign1).unwrap())
     }
 }
 
@@ -262,10 +246,36 @@ mod tests {
     #[test]
     #[wasm_bindgen_test::wasm_bindgen_test]
     fn should_selectively_disclose() {
-        #[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
+        #[derive(Default, Debug, Clone, PartialEq, serde::Serialize)]
         pub struct Model {
             pub name: Option<String>,
-            pub age: Option<u32>,
+            pub age: Option<u64>,
+            pub numbers: Vec<u64>,
+        }
+
+        impl<'de> serde::Deserialize<'de> for Model {
+            fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+                let value = <Value as serde::Deserialize>::deserialize(deserializer).unwrap();
+
+                let mut model = Self::default();
+                for (k, v) in value.into_map().unwrap() {
+                    match (k, v) {
+                        (Value::Text(label), Value::Text(name)) if &label == "name" => {
+                            model.name.replace(name);
+                        }
+                        (Value::Text(label), Value::Integer(age)) if &label == "age" => {
+                            model.age.replace(age.try_into().unwrap());
+                        }
+                        (Value::Text(label), Value::Array(numbers)) if &label == "numbers" => {
+                            // filter out tags
+                            let numbers = numbers.iter().filter_map(|n| n.as_integer()).map(|i| u64::try_from(i).unwrap()).collect::<Vec<_>>();
+                            model.numbers.extend(numbers);
+                        }
+                        _ => unreachable!(),
+                    }
+                }
+                Ok(model)
+            }
         }
 
         impl Select for Model {
@@ -279,6 +289,16 @@ mod tests {
                 if let Some(age) = self.age {
                     map.push((Value::Text("age".into()), age.into()));
                 }
+                let numbers = self
+                    .numbers
+                    .iter()
+                    .enumerate()
+                    .map(|(i, &n)| match i {
+                        1 => sd(Value::Integer(n.into())),
+                        _ => Value::Integer(n.into()),
+                    })
+                    .collect();
+                map.push((Value::Text("numbers".into()), Value::Array(numbers)));
                 Ok(Value::Map(map).into())
             }
         }
@@ -286,6 +306,7 @@ mod tests {
         let model = Model {
             name: Some("Alice Smith".to_string()),
             age: Some(42),
+            numbers: vec![0, 1, 2],
         };
         let mut sd_cwt = issue(model);
 
@@ -294,17 +315,23 @@ mod tests {
         let model = payload.inner.extra.unwrap();
 
         // name has been redacted but not age
-        assert!(model.age.is_some());
+        assert_eq!(model.age, Some(42));
         assert!(model.name.is_none());
+        assert_eq!(model.numbers, vec![0, 2]);
 
-        let disclosable_claims = sd_cwt.0.disclosures_mut().iter().map(|d| d.unwrap()).collect::<Vec<_>>();
-        assert_eq!(disclosable_claims.len(), 1);
-        let d0 = disclosable_claims.first().unwrap();
+        let disclosures = sd_cwt.0.disclosures_mut().iter().map(|d| d.unwrap()).collect::<Vec<_>>();
+        assert_eq!(disclosures.len(), 2);
+
+        let d0 = disclosures.first().unwrap();
         let Salted::Claim(SaltedClaim { name, value, .. }) = d0 else { unreachable!() };
 
         // verify content of disclosure
         assert_eq!(name, &ClaimName::Text("name".into()));
         assert_eq!(value, &cbor!("Alice Smith").unwrap());
+
+        let d1 = disclosures.get(1).unwrap();
+        let Salted::Element(SaltedElement { value, .. }) = d1 else { unreachable!() };
+        assert_eq!(value, &cbor!(1).unwrap());
     }
 
     #[test]
