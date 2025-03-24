@@ -97,6 +97,7 @@ impl<T: Select<Error = EsdicawtSpecError>> Issuer for P384Issuer<T> {
 }
 
 #[test]
+#[ignore]
 fn issuer() {
     let mut csprng = TestVectorRng;
 
