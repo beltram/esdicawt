@@ -246,7 +246,7 @@ mod tests {
 #[cfg(test)]
 pub mod claims {
     use ciborium::Value;
-    use esdicawt_spec::{EsdicawtSpecError, Select, sd};
+    use esdicawt_spec::{Select, sd};
 
     #[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
     pub(super) struct CustomTokenClaims {
@@ -255,15 +255,13 @@ pub mod claims {
     }
 
     impl Select for CustomTokenClaims {
-        type Error = EsdicawtSpecError;
-
-        fn select(self) -> Result<Value, <Self as Select>::Error> {
+        fn select(self) -> Result<Value, ciborium::value::Error> {
             let mut map = Vec::with_capacity(2);
             if let Some(name) = self.name {
-                map.push((sd(Value::Text("name".into())), Value::Text(name)));
+                map.push((sd!("name"), Value::Text(name)));
             }
             if let Some(age) = self.age {
-                map.push((sd(Value::Text("age".into())), Value::Integer(age.into())));
+                map.push((sd!("age"), Value::Integer(age.into())));
             }
             Ok(Value::Map(map))
         }

@@ -212,7 +212,6 @@ mod tests {
     use crate::{
         HolderParams, Issuer, IssuerParams, Presentation, Verifier, VerifierParams,
         holder::Holder,
-        spec::EsdicawtSpecError,
         test_utils::{Ed25519Holder, P256IssuerClaims},
         verifier::test_utils::HybridVerifier,
     };
@@ -264,7 +263,7 @@ mod tests {
         verifying(cbor!({ "a" => [0, 1] }));
     }
 
-    fn verify<T: Select<Error = EsdicawtSpecError>>(payload: T) -> KbtCwtVerified<T> {
+    fn verify<T: Select>(payload: T) -> KbtCwtVerified<T> {
         let (issuer_signing_key, holder_signing_key, sd_kbt) = generate(payload);
         let verifier = HybridVerifier::<T> {
             issuer_verifying_key: *issuer_signing_key.verifying_key(),
@@ -279,7 +278,7 @@ mod tests {
     }
 
     #[allow(clippy::type_complexity)]
-    fn generate<T: Select<Error = EsdicawtSpecError>>(payload: T) -> (p256::ecdsa::SigningKey, ed25519_dalek::SigningKey, KbtCwtTagged<T, sha2::Sha256>) {
+    fn generate<T: Select>(payload: T) -> (p256::ecdsa::SigningKey, ed25519_dalek::SigningKey, KbtCwtTagged<T, sha2::Sha256>) {
         let mut csprng = rand_chacha::ChaCha20Rng::from_entropy();
 
         let issuer_signing_key = p256::ecdsa::SigningKey::random(&mut csprng);
@@ -348,7 +347,7 @@ mod tests {
 #[cfg(test)]
 pub mod claims {
     use ciborium::Value;
-    use esdicawt_spec::{EsdicawtSpecError, Select, sd};
+    use esdicawt_spec::{Select, sd};
 
     #[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
     pub(super) struct CustomTokenClaims {
@@ -356,12 +355,10 @@ pub mod claims {
     }
 
     impl Select for CustomTokenClaims {
-        type Error = EsdicawtSpecError;
-
-        fn select(self) -> Result<Value, <Self as Select>::Error> {
+        fn select(self) -> Result<Value, ciborium::value::Error> {
             let mut map = Vec::with_capacity(1);
             if let Some(name) = self.name {
-                map.push((sd(Value::Text("name".into())), Value::Text(name)));
+                map.push((sd!("name"), Value::Text(name)));
             }
             Ok(Value::Map(map))
         }
