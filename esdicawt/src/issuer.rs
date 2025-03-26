@@ -19,7 +19,7 @@ use signature::{Keypair, Signer};
 
 pub trait Issuer {
     type Error: core::error::Error + Send + Sync + From<ciborium::value::Error>;
-    type Hasher: digest::Digest;
+    type Hasher: digest::Digest + Clone;
 
     type Signature;
 
@@ -74,7 +74,7 @@ pub trait Issuer {
         &self,
         csprng: &mut dyn rand_core::CryptoRngCore,
         params: IssuerParams<'_, Self::PayloadClaims, Self::ProtectedClaims, Self::UnprotectedClaims>,
-    ) -> Result<SdCwtIssuedTagged<Self::PayloadClaims, Self::ProtectedClaims, Self::UnprotectedClaims>, SdCwtIssuerError<Self::Error>> {
+    ) -> Result<SdCwtIssuedTagged<Self::PayloadClaims, Self::Hasher, Self::ProtectedClaims, Self::UnprotectedClaims>, SdCwtIssuerError<Self::Error>> {
         let alg = self.cwt_algorithm();
 
         let mut protected_builder = coset::HeaderBuilder::new()
@@ -199,8 +199,8 @@ mod tests {
         let mut sd_cwt = issue(payload);
 
         let cwt_cbor = sd_cwt.to_cbor_bytes().unwrap();
-        let sd_cwt_2 = SdCwtIssuedTagged::from_cbor_bytes(&cwt_cbor).unwrap();
-        assert_eq!(sd_cwt, sd_cwt_2);
+        let sd_cwt_2 = SdCwtIssuedTagged::<CustomTokenClaims, sha2::Sha256>::from_cbor_bytes(&cwt_cbor).unwrap();
+        assert_eq!(sd_cwt.to_cbor_bytes().unwrap(), sd_cwt_2.to_cbor_bytes().unwrap());
 
         // should have 'redacted_claim_keys' in the payload
         let mut payload = sd_cwt.0.payload.clone();
@@ -390,7 +390,7 @@ mod tests {
         assert!(disclosures.next().is_none());
     }
 
-    fn issue<T: Select<Error = EsdicawtSpecError>>(payload: T) -> SdCwtIssuedTagged<T> {
+    fn issue<T: Select<Error = EsdicawtSpecError>>(payload: T) -> SdCwtIssuedTagged<T, sha2::Sha256> {
         let mut csprng = rand_chacha::ChaCha20Rng::from_entropy();
 
         let holder_signing_key = ed25519_dalek::SigningKey::generate(&mut csprng);

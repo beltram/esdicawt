@@ -8,8 +8,8 @@ use crate::{
     key_binding::KbtProtectedBuilder,
 };
 
-impl<IssuerPayloadClaims: Select, IssuerProtectedClaims: CustomClaims, IssuerUnprotectedClaims: CustomClaims, Extra: CustomClaims> serde::Serialize
-    for KbtProtected<IssuerPayloadClaims, IssuerProtectedClaims, IssuerUnprotectedClaims, Extra>
+impl<IssuerPayloadClaims: Select, Hasher: digest::Digest + Clone, IssuerProtectedClaims: CustomClaims, IssuerUnprotectedClaims: CustomClaims, Extra: CustomClaims> serde::Serialize
+    for KbtProtected<IssuerPayloadClaims, Hasher, IssuerProtectedClaims, IssuerUnprotectedClaims, Extra>
 {
     fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
         use serde::ser::Error as _;
@@ -39,17 +39,17 @@ impl<IssuerPayloadClaims: Select, IssuerProtectedClaims: CustomClaims, IssuerUnp
     }
 }
 
-impl<'de, IssuerPayloadClaims: Select, IssuerProtectedClaims: CustomClaims, IssuerUnprotectedClaims: CustomClaims, Extra: CustomClaims> serde::Deserialize<'de>
-    for KbtProtected<IssuerPayloadClaims, IssuerProtectedClaims, IssuerUnprotectedClaims, Extra>
+impl<'de, IssuerPayloadClaims: Select, Hasher: digest::Digest + Clone, IssuerProtectedClaims: CustomClaims, IssuerUnprotectedClaims: CustomClaims, Extra: CustomClaims>
+    serde::Deserialize<'de> for KbtProtected<IssuerPayloadClaims, Hasher, IssuerProtectedClaims, IssuerUnprotectedClaims, Extra>
 {
     fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-        struct KbtProtectedVisitor<IssuerPayloadClaims, IssuerProtectedClaims, IssuerUnprotectedClaims, Extra>(
-            std::marker::PhantomData<(IssuerPayloadClaims, IssuerProtectedClaims, IssuerUnprotectedClaims, Extra)>,
+        struct KbtProtectedVisitor<IssuerPayloadClaims, Hasher, IssuerProtectedClaims, IssuerUnprotectedClaims, Extra>(
+            std::marker::PhantomData<(IssuerPayloadClaims, Hasher, IssuerProtectedClaims, IssuerUnprotectedClaims, Extra)>,
         );
-        impl<'de, IssuerPayloadClaims: Select, IssuerProtectedClaims: CustomClaims, IssuerUnprotectedClaims: CustomClaims, Extra: CustomClaims> serde::de::Visitor<'de>
-            for KbtProtectedVisitor<IssuerPayloadClaims, IssuerProtectedClaims, IssuerUnprotectedClaims, Extra>
+        impl<'de, IssuerPayloadClaims: Select, Hasher: digest::Digest + Clone, IssuerProtectedClaims: CustomClaims, IssuerUnprotectedClaims: CustomClaims, Extra: CustomClaims>
+            serde::de::Visitor<'de> for KbtProtectedVisitor<IssuerPayloadClaims, Hasher, IssuerProtectedClaims, IssuerUnprotectedClaims, Extra>
         {
-            type Value = KbtProtected<IssuerPayloadClaims, IssuerProtectedClaims, IssuerUnprotectedClaims, Extra>;
+            type Value = KbtProtected<IssuerPayloadClaims, Hasher, IssuerProtectedClaims, IssuerUnprotectedClaims, Extra>;
 
             fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
                 write!(formatter, "a sd-protected CWT")
@@ -58,7 +58,7 @@ impl<'de, IssuerPayloadClaims: Select, IssuerProtectedClaims: CustomClaims, Issu
             fn visit_map<A: serde::de::MapAccess<'de>>(self, mut map: A) -> Result<Self::Value, A::Error> {
                 use serde::de::Error as _;
                 let mut found_mediatype = false;
-                let mut builder = KbtProtectedBuilder::<IssuerPayloadClaims, IssuerProtectedClaims, IssuerUnprotectedClaims, Extra>::default();
+                let mut builder = KbtProtectedBuilder::<IssuerPayloadClaims, Hasher, IssuerProtectedClaims, IssuerUnprotectedClaims, Extra>::default();
                 let mut extra = vec![];
                 while let Some((k, v)) = map.next_entry::<Value, Value>()? {
                     match k {
@@ -71,7 +71,7 @@ impl<'de, IssuerPayloadClaims: Select, IssuerProtectedClaims: CustomClaims, Issu
                                 builder.alg(coset::Algorithm::from_cbor_value(v).map_err(|e| A::Error::custom(format!("Cannot deserialize sd-protected.alg: {e}")))?);
                             }
                             Ok(COSE_HEADER_KCWT) => {
-                                let issuer_sd_cwt: InlinedCbor<SdCwtIssuedTagged<_, _, _>> = v
+                                let issuer_sd_cwt: InlinedCbor<SdCwtIssuedTagged<_, _, _, _>> = v
                                     .deserialized()
                                     .map_err(|value| A::Error::custom(format!("'issuer-sd-cwt' is not a sd-cwt-presentation: {value:?}")))?;
 
@@ -104,12 +104,12 @@ impl<'de, IssuerPayloadClaims: Select, IssuerProtectedClaims: CustomClaims, Issu
     }
 }
 
-impl<IssuerPayloadClaims: Select, IssuerProtectedClaims: CustomClaims, IssuerUnprotectedClaims: CustomClaims, Extra: CustomClaims>
-    TryFrom<KbtProtected<IssuerPayloadClaims, IssuerProtectedClaims, IssuerUnprotectedClaims, Extra>> for coset::Header
+impl<IssuerPayloadClaims: Select, Hasher: digest::Digest + Clone, IssuerProtectedClaims: CustomClaims, IssuerUnprotectedClaims: CustomClaims, Extra: CustomClaims>
+    TryFrom<KbtProtected<IssuerPayloadClaims, Hasher, IssuerProtectedClaims, IssuerUnprotectedClaims, Extra>> for coset::Header
 {
     type Error = Box<dyn core::error::Error>;
 
-    fn try_from(kbtp: KbtProtected<IssuerPayloadClaims, IssuerProtectedClaims, IssuerUnprotectedClaims, Extra>) -> Result<Self, Self::Error> {
+    fn try_from(kbtp: KbtProtected<IssuerPayloadClaims, Hasher, IssuerProtectedClaims, IssuerUnprotectedClaims, Extra>) -> Result<Self, Self::Error> {
         let mut builder = coset::HeaderBuilder::new();
 
         // map alg

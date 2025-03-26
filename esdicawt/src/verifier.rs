@@ -29,7 +29,7 @@ pub trait Verifier {
     type HolderSignature;
     type HolderVerifier: signature::Verifier<Self::HolderSignature> + PartialEq + for<'a> TryFrom<&'a KeyConfirmation, Error = CoseKeyConfirmationError>;
 
-    type Hasher: digest::Digest;
+    type Hasher: digest::Digest + Clone;
 
     type IssuerProtectedClaims: CustomClaims;
     type IssuerUnprotectedClaims: CustomClaims;
@@ -67,6 +67,7 @@ pub trait Verifier {
     > {
         let kbt_tagged = KbtCwtTagged::<
             Self::IssuerPayloadClaims,
+            Self::Hasher,
             Self::IssuerProtectedClaims,
             Self::IssuerUnprotectedClaims,
             Self::KbtProtectedClaims,
@@ -81,6 +82,7 @@ pub trait Verifier {
         &self,
         kbt: &KbtCwtTagged<
             Self::IssuerPayloadClaims,
+            Self::Hasher,
             Self::IssuerProtectedClaims,
             Self::IssuerUnprotectedClaims,
             Self::KbtProtectedClaims,
@@ -277,7 +279,7 @@ mod tests {
     }
 
     #[allow(clippy::type_complexity)]
-    fn generate<T: Select<Error = EsdicawtSpecError>>(payload: T) -> (p256::ecdsa::SigningKey, ed25519_dalek::SigningKey, KbtCwtTagged<T>) {
+    fn generate<T: Select<Error = EsdicawtSpecError>>(payload: T) -> (p256::ecdsa::SigningKey, ed25519_dalek::SigningKey, KbtCwtTagged<T, sha2::Sha256>) {
         let mut csprng = rand_chacha::ChaCha20Rng::from_entropy();
 
         let issuer_signing_key = p256::ecdsa::SigningKey::random(&mut csprng);

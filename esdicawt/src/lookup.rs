@@ -1,11 +1,14 @@
 #![allow(dead_code)]
 
 use crate::spec::{
-    ClaimName,
+    ClaimName, CustomClaims, CwtAny, EsdicawtSpecResult, REDACTED_CLAIM_ELEMENT_TAG, Select,
     blinded_claims::{Salted, SaltedArray},
+    issuance::SdCwtIssued,
+    key_binding::KbtCwt,
+    redacted_claims::RedactedClaimKeys,
 };
 use ciborium::Value;
-use esdicawt_spec::{CustomClaims, CwtAny, EsdicawtSpecResult, REDACTED_CLAIM_ELEMENT_TAG, Select, issuance::SdCwtIssued, redacted_claims::RedactedClaimKeys};
+use esdicawt_spec::{issuance::SdCwtIssuedTagged, key_binding::KbtCwtTagged};
 
 #[derive(Debug, Clone, Hash, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct Query {
@@ -137,13 +140,53 @@ where
 }
 
 pub trait TokenQuery {
-    fn query<Hasher: digest::Digest>(&mut self, query: Query) -> EsdicawtSpecResult<Option<Value>>;
+    fn query(&mut self, query: Query) -> EsdicawtSpecResult<Option<Value>>;
 }
 
-impl<PayloadClaims: Select, ProtectedClaims: CustomClaims, UnprotectedClaims: CustomClaims> TokenQuery for SdCwtIssued<PayloadClaims, ProtectedClaims, UnprotectedClaims> {
-    fn query<Hasher: digest::Digest>(&mut self, token_query: Query) -> EsdicawtSpecResult<Option<Value>> {
+impl<PayloadClaims: Select, Hasher: digest::Digest + Clone, ProtectedClaims: CustomClaims, UnprotectedClaims: CustomClaims> TokenQuery
+    for SdCwtIssuedTagged<PayloadClaims, Hasher, ProtectedClaims, UnprotectedClaims>
+{
+    fn query(&mut self, token_query: Query) -> EsdicawtSpecResult<Option<Value>> {
+        self.0.query(token_query)
+    }
+}
+
+impl<PayloadClaims: Select, Hasher: digest::Digest + Clone, ProtectedClaims: CustomClaims, UnprotectedClaims: CustomClaims> TokenQuery
+    for SdCwtIssued<PayloadClaims, Hasher, ProtectedClaims, UnprotectedClaims>
+{
+    fn query(&mut self, token_query: Query) -> EsdicawtSpecResult<Option<Value>> {
         let payload: Value = Value::from_cbor_bytes(self.payload.to_bytes()?)?;
         query_inner::<Hasher>(self.disclosures_mut(), &payload, &token_query.elements)
+    }
+}
+
+impl<
+    IssuerPayloadClaims: Select,
+    Hasher: digest::Digest + Clone,
+    IssuerProtectedClaims: CustomClaims,
+    IssuerUnprotectedClaims: CustomClaims,
+    KbtProtectedClaims: CustomClaims,
+    KbtUnprotectedClaims: CustomClaims,
+    KbtPayloadClaims: CustomClaims,
+> TokenQuery for KbtCwtTagged<IssuerPayloadClaims, Hasher, IssuerProtectedClaims, IssuerUnprotectedClaims, KbtProtectedClaims, KbtUnprotectedClaims, KbtPayloadClaims>
+{
+    fn query(&mut self, token_query: Query) -> EsdicawtSpecResult<Option<Value>> {
+        self.0.query(token_query)
+    }
+}
+
+impl<
+    IssuerPayloadClaims: Select,
+    Hasher: digest::Digest + Clone,
+    IssuerProtectedClaims: CustomClaims,
+    IssuerUnprotectedClaims: CustomClaims,
+    KbtProtectedClaims: CustomClaims,
+    KbtUnprotectedClaims: CustomClaims,
+    KbtPayloadClaims: CustomClaims,
+> TokenQuery for KbtCwt<IssuerPayloadClaims, Hasher, IssuerProtectedClaims, IssuerUnprotectedClaims, KbtProtectedClaims, KbtUnprotectedClaims, KbtPayloadClaims>
+{
+    fn query(&mut self, token_query: Query) -> EsdicawtSpecResult<Option<Value>> {
+        self.protected.to_value_mut()?.kcwt.to_value_mut()?.0.query(token_query)
     }
 }
 
@@ -154,7 +197,11 @@ mod tests {
     use esdicawt_spec::{EsdicawtSpecError, Select, issuance::SdCwtIssuedTagged};
     use rand_core::SeedableRng;
 
-    use crate::{Issuer, IssuerParams, test_utils::P256IssuerClaims};
+    use crate::{
+        Holder, HolderParams, Issuer, IssuerParams, Presentation,
+        key_binding::KbtCwtTagged,
+        test_utils::{Ed25519Holder, P256IssuerClaims},
+    };
 
     #[test]
     fn can_query_top_level_claim() {
@@ -163,8 +210,10 @@ mod tests {
             "c" => "d",
         })
         .unwrap();
-        let mut sd_cwt = generate(payload);
-        assert_eq!(sd_cwt.0.query::<sha2::Sha256>(vec!["a".into()].into()).unwrap(), Some("b".into()));
+        let (mut sd_cwt, holder_signing_key) = generate(payload);
+        let mut kbt = present::<Value>(&sd_cwt.to_cbor_bytes().unwrap()[..], holder_signing_key);
+        assert_eq!(sd_cwt.0.query(vec!["a".into()].into()).unwrap(), Some("b".into()));
+        assert_eq!(kbt.0.query(vec!["a".into()].into()).unwrap(), Some("b".into()));
 
         let salted = &mut sd_cwt.0.sd_unprotected.sd_claims;
         salted
@@ -173,7 +222,7 @@ mod tests {
 
         let _ = salted;
 
-        assert_eq!(sd_cwt.0.query::<sha2::Sha256>(vec!["a".into()].into()).unwrap(), None);
+        assert_eq!(sd_cwt.0.query(vec!["a".into()].into()).unwrap(), None);
     }
 
     #[test]
@@ -187,8 +236,10 @@ mod tests {
         })
         .unwrap();
 
-        let mut sd_cwt = generate(payload);
-        assert_eq!(sd_cwt.0.query::<sha2::Sha256>(vec!["a".into(), "b".into()].into()).unwrap(), Some("c".into()));
+        let (mut sd_cwt, holder_signing_key) = generate(payload);
+        let mut kbt = present::<Value>(&sd_cwt.to_cbor_bytes().unwrap()[..], holder_signing_key);
+        assert_eq!(sd_cwt.0.query(vec!["a".into(), "b".into()].into()).unwrap(), Some("c".into()));
+        assert_eq!(kbt.0.query(vec!["a".into(), "b".into()].into()).unwrap(), Some("c".into()));
     }
 
     #[test]
@@ -199,8 +250,10 @@ mod tests {
         })
         .unwrap();
 
-        let mut sd_cwt = generate(payload);
-        assert_eq!(sd_cwt.0.query::<sha2::Sha256>(vec!["a".into(), 2usize.into()].into()).unwrap(), Some("d".into()));
+        let (mut sd_cwt, holder_signing_key) = generate(payload);
+        let mut kbt = present::<Value>(&sd_cwt.to_cbor_bytes().unwrap()[..], holder_signing_key);
+        assert_eq!(sd_cwt.0.query(vec!["a".into(), 2usize.into()].into()).unwrap(), Some("d".into()));
+        assert_eq!(kbt.0.query(vec!["a".into(), 2usize.into()].into()).unwrap(), Some("d".into()));
     }
 
     #[test]
@@ -219,14 +272,13 @@ mod tests {
         })
         .unwrap();
 
-        let mut sd_cwt = generate(payload);
-        assert_eq!(
-            sd_cwt.0.query::<sha2::Sha256>(vec!["a".into(), 1usize.into(), "b".into()].into()).unwrap(),
-            Some("d".into())
-        );
+        let (mut sd_cwt, holder_signing_key) = generate(payload);
+        let mut kbt = present::<Value>(&sd_cwt.to_cbor_bytes().unwrap()[..], holder_signing_key);
+        assert_eq!(sd_cwt.0.query(vec!["a".into(), 1usize.into(), "b".into()].into()).unwrap(), Some("d".into()));
+        assert_eq!(kbt.0.query(vec!["a".into(), 1usize.into(), "b".into()].into()).unwrap(), Some("d".into()));
     }
 
-    fn generate<T: Select<Error = EsdicawtSpecError>>(payload: T) -> SdCwtIssuedTagged<T> {
+    fn generate<T: Select<Error = EsdicawtSpecError>>(payload: T) -> (SdCwtIssuedTagged<T, sha2::Sha256>, ed25519_dalek::SigningKey) {
         let mut csprng = rand_chacha::ChaCha20Rng::from_entropy();
 
         let issuer_signing_key = p256::ecdsa::SigningKey::random(&mut csprng);
@@ -251,6 +303,24 @@ mod tests {
             holder_confirmation_key: (&holder_signing_key.verifying_key()).try_into().unwrap(),
             now: None,
         };
-        issuer.issue_cwt(&mut csprng, issue_params).unwrap()
+        let sd_cwt = issuer.issue_cwt(&mut csprng, issue_params).unwrap();
+        (sd_cwt, holder_signing_key)
+    }
+
+    fn present<T: Select<Error = EsdicawtSpecError>>(sd_cwt: &[u8], holder_signing_key: ed25519_dalek::SigningKey) -> KbtCwtTagged<T, sha2::Sha256> {
+        let holder = Ed25519Holder::new(holder_signing_key);
+
+        let holder_params = HolderParams {
+            presentation: Presentation::Full,
+            audience: "",
+            expiry: None,
+            with_not_before: false,
+            leeway: Default::default(),
+            now: None,
+            extra_kbt_protected: None,
+            extra_kbt_unprotected: None,
+            extra_kbt_payload: None,
+        };
+        holder.new_presentation(sd_cwt, holder_params).unwrap()
     }
 }
