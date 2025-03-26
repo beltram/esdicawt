@@ -2,9 +2,8 @@ use crate::lookup::TokenQuery;
 use ciborium::Value;
 use coset::iana::CwtClaimName;
 use esdicawt_spec::{
-    ClaimName, CustomClaims, Select,
-    blinded_claims::{Salted, SaltedClaim},
-    issuance::{SdCwtIssuedTagged, SdInnerPayload},
+    CustomClaims, Select,
+    issuance::SdCwtIssuedTagged,
     key_binding::KbtCwtTagged,
     reexports::{coset, coset::iana::EnumI64},
 };
@@ -16,42 +15,28 @@ pub trait SdCwtRead: TokenQuery {
 
     // TODO: pending optional vs mandatory claims is settled. tl;dr: it should be required
     fn iss(&mut self) -> EsdicawtReadResult<Option<Cow<str>>> {
-        self.maybe_std_str_claim(CwtClaimName::Iss.to_i64().into(), |payload| Some(&*payload.issuer))
+        Ok(self.query(vec![CwtClaimName::Iss.to_i64().into()].into())?.as_ref().map(Value::deserialized).transpose()?)
     }
 
     fn sub(&mut self) -> EsdicawtReadResult<Option<Cow<str>>> {
-        self.maybe_std_str_claim(CwtClaimName::Sub.to_i64().into(), |payload| payload.subject.as_deref())
+        Ok(self.query(vec![CwtClaimName::Sub.to_i64().into()].into())?.as_ref().map(Value::deserialized).transpose()?)
     }
 
     fn aud(&mut self) -> EsdicawtReadResult<Option<Cow<str>>> {
-        self.maybe_std_str_claim(CwtClaimName::Aud.to_i64().into(), |payload| payload.audience.as_deref())
+        Ok(self.query(vec![CwtClaimName::Aud.to_i64().into()].into())?.as_ref().map(Value::deserialized).transpose()?)
     }
 
     fn exp(&mut self) -> EsdicawtReadResult<Option<i64>> {
-        self.maybe_std_int_claim(CwtClaimName::Exp.to_i64().into(), |payload| payload.expiration)
+        Ok(self.query(vec![CwtClaimName::Exp.to_i64().into()].into())?.as_ref().map(Value::deserialized).transpose()?)
     }
 
     fn nbf(&mut self) -> EsdicawtReadResult<Option<i64>> {
-        self.maybe_std_int_claim(CwtClaimName::Nbf.to_i64().into(), |payload| payload.not_before)
+        Ok(self.query(vec![CwtClaimName::Nbf.to_i64().into()].into())?.as_ref().map(Value::deserialized).transpose()?)
     }
 
     fn iat(&mut self) -> EsdicawtReadResult<Option<i64>> {
-        self.maybe_std_int_claim(CwtClaimName::Iat.to_i64().into(), |payload| payload.issued_at)
+        Ok(self.query(vec![CwtClaimName::Iat.to_i64().into()].into())?.as_ref().map(Value::deserialized).transpose()?)
     }
-
-    fn maybe_std_claim<'a, T: serde::Serialize + 'a>(
-        &'a mut self,
-        key: ClaimName,
-        extractor: impl FnOnce(&'a SdInnerPayload<Self::PayloadClaims>) -> Option<&'a T>,
-    ) -> EsdicawtReadResult<Option<Cow<'a, Value>>>;
-
-    fn maybe_std_str_claim<'a>(
-        &'a mut self,
-        key: ClaimName,
-        extractor: impl FnOnce(&'a SdInnerPayload<Self::PayloadClaims>) -> Option<&'a str>,
-    ) -> EsdicawtReadResult<Option<Cow<'a, str>>>;
-
-    fn maybe_std_int_claim<'a>(&'a mut self, key: ClaimName, extractor: impl FnOnce(&'a SdInnerPayload<Self::PayloadClaims>) -> Option<i64>) -> EsdicawtReadResult<Option<i64>>;
 }
 
 pub type EsdicawtReadResult<T> = Result<T, EsdicawtReadError>;
@@ -72,74 +57,6 @@ impl<IssuerPayloadClaims: Select, Hasher: digest::Digest + Clone, IssuerProtecte
     for SdCwtIssuedTagged<IssuerPayloadClaims, Hasher, IssuerProtectedClaims, IssuerUnprotectedClaims>
 {
     type PayloadClaims = IssuerPayloadClaims;
-
-    fn maybe_std_claim<'a, T: serde::Serialize + 'a>(
-        &'a mut self,
-        key: ClaimName,
-        extractor: impl FnOnce(&'a SdInnerPayload<Self::PayloadClaims>) -> Option<&'a T>,
-    ) -> EsdicawtReadResult<Option<Cow<'a, Value>>> {
-        let payload = self.0.payload.to_value()?;
-        let unredacted = extractor(&payload.inner);
-        let unredacted = unredacted.as_ref().map(Value::serialized).transpose()?;
-
-        if let Some(claim) = unredacted {
-            Ok(Some(Cow::Owned(claim)))
-        } else {
-            let disclosures = &mut self.0.sd_unprotected.sd_claims;
-            let redacted = disclosures
-                .iter()
-                .find_map(|s| match s {
-                    Ok(Salted::Claim(SaltedClaim { name, value, .. })) if *name == key => Some(value),
-                    _ => None,
-                })
-                .map(Cow::Borrowed);
-            Ok(redacted)
-        }
-    }
-
-    fn maybe_std_str_claim<'a>(
-        &'a mut self,
-        key: ClaimName,
-        extractor: impl FnOnce(&'a SdInnerPayload<Self::PayloadClaims>) -> Option<&'a str>,
-    ) -> EsdicawtReadResult<Option<Cow<'a, str>>> {
-        let payload = self.0.payload.to_value()?;
-        let unredacted = extractor(&payload.inner).map(Cow::Borrowed);
-
-        if let Some(claim) = unredacted {
-            Ok(Some(claim))
-        } else {
-            let disclosures = &mut self.0.sd_unprotected.sd_claims;
-            let redacted = disclosures
-                .iter()
-                .find_map(|s| match s {
-                    Ok(Salted::Claim(SaltedClaim { name, value: Value::Text(v), .. })) if *name == key => Some(v.as_str()),
-                    _ => None,
-                })
-                .map(Cow::Borrowed);
-            Ok(redacted)
-        }
-    }
-
-    fn maybe_std_int_claim<'a>(&'a mut self, key: ClaimName, extractor: impl FnOnce(&'a SdInnerPayload<Self::PayloadClaims>) -> Option<i64>) -> EsdicawtReadResult<Option<i64>> {
-        let payload = self.0.payload.to_value()?;
-        let unredacted = extractor(&payload.inner);
-
-        if let Some(claim) = unredacted {
-            Ok(Some(claim))
-        } else {
-            let disclosures = &mut self.0.sd_unprotected.sd_claims;
-            let redacted = disclosures
-                .iter()
-                .find_map(|s| match s {
-                    Ok(Salted::Claim(SaltedClaim {
-                        name, value: Value::Integer(v), ..
-                    })) if *name == key => Some((*v).try_into()),
-                    _ => None,
-                })
-                .transpose()?;
-            Ok(redacted)
-        }
-    }
 }
 
 impl<
@@ -153,78 +70,4 @@ impl<
 > SdCwtRead for KbtCwtTagged<IssuerPayloadClaims, Hasher, IssuerProtectedClaims, IssuerUnprotectedClaims, KbtProtectedClaims, KbtUnprotectedClaims, KbtPayloadClaims>
 {
     type PayloadClaims = IssuerPayloadClaims;
-
-    fn maybe_std_claim<'a, T: serde::Serialize + 'a>(
-        &'a mut self,
-        key: ClaimName,
-        extractor: impl FnOnce(&'a SdInnerPayload<Self::PayloadClaims>) -> Option<&'a T>,
-    ) -> EsdicawtReadResult<Option<Cow<'a, Value>>> {
-        let protected = self.0.protected.to_value_mut()?;
-        let sd_cwt = protected.kcwt.to_value_mut()?;
-        let sd_cwt_payload = sd_cwt.0.payload.to_value_mut()?;
-        let unredacted = extractor(&sd_cwt_payload.inner);
-        let unredacted = unredacted.as_ref().map(Value::serialized).transpose()?;
-
-        if let Some(claim) = unredacted {
-            Ok(Some(Cow::Owned(claim)))
-        } else {
-            let disclosures = &mut sd_cwt.0.sd_unprotected.sd_claims;
-            let redacted = disclosures
-                .iter()
-                .find_map(|s| match s {
-                    Ok(Salted::Claim(SaltedClaim { name, value, .. })) if *name == key => Some(value),
-                    _ => None,
-                })
-                .map(Cow::Borrowed);
-            Ok(redacted)
-        }
-    }
-
-    fn maybe_std_str_claim<'a>(
-        &'a mut self,
-        key: ClaimName,
-        extractor: impl FnOnce(&'a SdInnerPayload<Self::PayloadClaims>) -> Option<&'a str>,
-    ) -> EsdicawtReadResult<Option<Cow<'a, str>>> {
-        let protected = self.0.protected.to_value_mut()?;
-        let sd_cwt = protected.kcwt.to_value_mut()?;
-        let sd_cwt_payload = sd_cwt.0.payload.to_value_mut()?;
-        let unredacted = extractor(&sd_cwt_payload.inner).map(Cow::Borrowed);
-
-        if let Some(claim) = unredacted {
-            Ok(Some(claim))
-        } else {
-            let disclosures = &mut sd_cwt.0.sd_unprotected.sd_claims;
-            let redacted = disclosures
-                .iter()
-                .find_map(|s| match s {
-                    Ok(Salted::Claim(SaltedClaim { name, value: Value::Text(v), .. })) if *name == key => Some(v.as_str()),
-                    _ => None,
-                })
-                .map(Cow::Borrowed);
-            Ok(redacted)
-        }
-    }
-
-    fn maybe_std_int_claim<'a>(&'a mut self, key: ClaimName, extractor: impl FnOnce(&'a SdInnerPayload<Self::PayloadClaims>) -> Option<i64>) -> EsdicawtReadResult<Option<i64>> {
-        let protected = self.0.protected.to_value_mut()?;
-        let sd_cwt = protected.kcwt.to_value_mut()?;
-        let sd_cwt_payload = sd_cwt.0.payload.to_value_mut()?;
-        let unredacted = extractor(&sd_cwt_payload.inner);
-
-        if let Some(claim) = unredacted {
-            Ok(Some(claim))
-        } else {
-            let disclosures = &mut sd_cwt.0.sd_unprotected.sd_claims;
-            let redacted = disclosures
-                .iter()
-                .find_map(|s| match s {
-                    Ok(Salted::Claim(SaltedClaim {
-                        name, value: Value::Integer(v), ..
-                    })) if *name == key => Some((*v).try_into()),
-                    _ => None,
-                })
-                .transpose()?;
-            Ok(redacted)
-        }
-    }
 }

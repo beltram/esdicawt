@@ -69,22 +69,20 @@ impl<'de> serde::Deserialize<'de> for Payload {
 }
 
 impl Select for Payload {
-    type Error = EsdicawtSpecError;
-
-    fn select(self) -> Result<Value, <Self as Select>::Error> {
+    fn select(self) -> Result<Value, ciborium::value::Error> {
         let mut map = Vec::with_capacity(4);
 
         map.push((Value::Integer(500.into()), Value::Bool(self.most_recent_inspection_passed)));
 
         if let Some(inspector_license_number) = self.inspector_license_number {
-            map.push((sd(Value::Integer(501.into())), Value::Text(inspector_license_number)));
+            map.push((sd!(501), Value::Text(inspector_license_number)));
         }
 
         let inspection_dates = self
             .inspection_dates
             .iter()
             .enumerate()
-            .map(|(i, &d)| if i < 2 { sd(Value::Integer(d.into())) } else { Value::Integer(d.into()) })
+            .map(|(i, &d)| if i < 2 { sd!(d) } else { Value::Integer(d.into()) })
             .collect();
         map.push((Value::Integer(502.into()), Value::Array(inspection_dates)));
 
@@ -93,10 +91,10 @@ impl Select for Payload {
             inspection_location.push((Value::Integer(CWT_CLAIM_ADDRESS_COUNTRY.into()), Value::Text(country)));
         }
         if let Some(region) = self.inspection_location.region {
-            inspection_location.push((sd(Value::Integer(CWT_CLAIM_ADDRESS_REGION.into())), Value::Text(region)));
+            inspection_location.push((sd!(CWT_CLAIM_ADDRESS_REGION), Value::Text(region)));
         }
         if let Some(postal_code) = self.inspection_location.postal_code {
-            inspection_location.push((sd(Value::Integer(CWT_CLAIM_ADDRESS_POSTAL_CODE.into())), Value::Text(postal_code)));
+            inspection_location.push((sd!(CWT_CLAIM_ADDRESS_POSTAL_CODE), Value::Text(postal_code)));
         }
         map.push((Value::Integer(503.into()), Value::Map(inspection_location)));
 
@@ -108,14 +106,12 @@ impl Select for Payload {
 struct NestedPayload(Payload);
 
 impl Select for NestedPayload {
-    type Error = EsdicawtSpecError;
-
-    fn select(self) -> Result<Value, <Self as Select>::Error> {
+    fn select(self) -> Result<Value, ciborium::value::Error> {
         let mut map = self.0.select()?;
         for (k, _) in map.as_map_mut().unwrap() {
             match k {
                 Value::Integer(i) if i == &mut 502.into() => {
-                    *k = sd(k.clone());
+                    *k = sd!(k.clone());
                 }
                 _ => {}
             }
@@ -124,12 +120,12 @@ impl Select for NestedPayload {
     }
 }
 
-pub struct P384Issuer<T: Select<Error = EsdicawtSpecError>> {
+pub struct P384Issuer<T: Select> {
     signing_key: p384::ecdsa::SigningKey,
     _marker: core::marker::PhantomData<T>,
 }
 
-impl<T: Select<Error = EsdicawtSpecError>> Issuer for P384Issuer<T> {
+impl<T: Select> Issuer for P384Issuer<T> {
     type Error = EsdicawtSpecError;
     type Signer = p384::ecdsa::SigningKey;
     type Hasher = sha2::Sha256;
@@ -167,12 +163,12 @@ impl<T: Select<Error = EsdicawtSpecError>> Issuer for P384Issuer<T> {
     }
 }
 
-pub struct P256Holder<T: Select<Error = EsdicawtSpecError>> {
+pub struct P256Holder<T: Select> {
     signing_key: p256::ecdsa::SigningKey,
     _marker: core::marker::PhantomData<T>,
 }
 
-impl<T: Select<Error = EsdicawtSpecError>> Holder for P256Holder<T> {
+impl<T: Select> Holder for P256Holder<T> {
     type Error = EsdicawtSpecError;
     type Signature = p256::ecdsa::Signature;
     type Hasher = sha2::Sha256;
@@ -248,7 +244,7 @@ fn nested_test_vectors() {
     test_vectors::<NestedPayload>(NestedPayload(payload), spec_sd_cwt_bytes, spec_sd_kbt_bytes, true)
 }
 
-fn test_vectors<P: Select<Error = EsdicawtSpecError>>(payload: P, spec_sd_cwt_bytes: &[u8], spec_sd_kbt_bytes: &[u8], nested: bool) {
+fn test_vectors<P: Select>(payload: P, spec_sd_cwt_bytes: &[u8], spec_sd_kbt_bytes: &[u8], nested: bool) {
     // === Issuer ===
     let sd_issuer = P384Issuer::<P>::new(issuer_signing_key());
 
