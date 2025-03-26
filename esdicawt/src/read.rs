@@ -1,3 +1,4 @@
+use crate::lookup::TokenQuery;
 use ciborium::Value;
 use coset::iana::CwtClaimName;
 use esdicawt_spec::{
@@ -10,7 +11,7 @@ use esdicawt_spec::{
 use std::borrow::Cow;
 
 #[allow(dead_code)]
-pub trait SdCwtRead {
+pub trait SdCwtRead: TokenQuery {
     type PayloadClaims: CustomClaims;
 
     // TODO: pending optional vs mandatory claims is settled. tl;dr: it should be required
@@ -67,8 +68,8 @@ pub enum EsdicawtReadError {
     CustomError(#[from] Box<dyn core::error::Error + Send + Sync>),
 }
 
-impl<IssuerPayloadClaims: Select, IssuerProtectedClaims: CustomClaims, IssuerUnprotectedClaims: CustomClaims> SdCwtRead
-    for SdCwtIssuedTagged<IssuerPayloadClaims, IssuerProtectedClaims, IssuerUnprotectedClaims>
+impl<IssuerPayloadClaims: Select, Hasher: digest::Digest + Clone, IssuerProtectedClaims: CustomClaims, IssuerUnprotectedClaims: CustomClaims> SdCwtRead
+    for SdCwtIssuedTagged<IssuerPayloadClaims, Hasher, IssuerProtectedClaims, IssuerUnprotectedClaims>
 {
     type PayloadClaims = IssuerPayloadClaims;
 
@@ -142,13 +143,14 @@ impl<IssuerPayloadClaims: Select, IssuerProtectedClaims: CustomClaims, IssuerUnp
 }
 
 impl<
+    IssuerPayloadClaims: Select,
+    Hasher: digest::Digest + Clone,
     IssuerProtectedClaims: CustomClaims,
     IssuerUnprotectedClaims: CustomClaims,
-    IssuerPayloadClaims: Select,
     KbtProtectedClaims: CustomClaims,
     KbtUnprotectedClaims: CustomClaims,
     KbtPayloadClaims: CustomClaims,
-> SdCwtRead for KbtCwtTagged<IssuerPayloadClaims, IssuerProtectedClaims, IssuerUnprotectedClaims, KbtProtectedClaims, KbtUnprotectedClaims, KbtPayloadClaims>
+> SdCwtRead for KbtCwtTagged<IssuerPayloadClaims, Hasher, IssuerProtectedClaims, IssuerUnprotectedClaims, KbtProtectedClaims, KbtUnprotectedClaims, KbtPayloadClaims>
 {
     type PayloadClaims = IssuerPayloadClaims;
 

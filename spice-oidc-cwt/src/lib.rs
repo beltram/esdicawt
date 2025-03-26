@@ -27,21 +27,12 @@ pub const CWT_CLAIM_PHONE_NUMBER_VERIFIED: i64 = 186;
 pub const CWT_CLAIM_ADDRESS: i64 = 187;
 pub const CWT_CLAIM_UPDATED_AT: i64 = 188;
 
-// FIXME: for test-vectors
-pub const CWT_CLAIM_ADDRESS_FORMATTED: i64 = 6;
-pub const CWT_CLAIM_ADDRESS_STREET_ADDRESS: i64 = 5;
-pub const CWT_CLAIM_ADDRESS_LOCALITY: i64 = 4;
-pub const CWT_CLAIM_ADDRESS_REGION: i64 = 2;
-pub const CWT_CLAIM_ADDRESS_POSTAL_CODE: i64 = 3;
-pub const CWT_CLAIM_ADDRESS_COUNTRY: i64 = 1;
-
-// true values
-// pub const CWT_CLAIM_ADDRESS_FORMATTED: i64 = 1;
-// pub const CWT_CLAIM_ADDRESS_STREET_ADDRESS: i64 = 2;
-// pub const CWT_CLAIM_ADDRESS_LOCALITY: i64 = 3;
-// pub const CWT_CLAIM_ADDRESS_REGION: i64 = 4;
-// pub const CWT_CLAIM_ADDRESS_POSTAL_CODE: i64 = 5;
-// pub const CWT_CLAIM_ADDRESS_COUNTRY: i64 = 6;
+pub const CWT_CLAIM_ADDRESS_FORMATTED: i64 = 1;
+pub const CWT_CLAIM_ADDRESS_STREET_ADDRESS: i64 = 2;
+pub const CWT_CLAIM_ADDRESS_LOCALITY: i64 = 3;
+pub const CWT_CLAIM_ADDRESS_REGION: i64 = 4;
+pub const CWT_CLAIM_ADDRESS_POSTAL_CODE: i64 = 5;
+pub const CWT_CLAIM_ADDRESS_COUNTRY: i64 = 6;
 
 pub const OIDC_NAME: &str = "name";
 pub const OIDC_GIVEN_NAME: &str = "given_name";
@@ -166,71 +157,71 @@ impl<'de> serde::Deserialize<'de> for SpiceOidcClaims {
             fn visit_map<A: serde::de::MapAccess<'de>>(self, mut map: A) -> Result<Self::Value, A::Error> {
                 use serde::de::Error as _;
 
-                let mut address = SpiceOidcClaims::default();
+                let mut oidc = SpiceOidcClaims::default();
                 while let Some((k, v)) = map.next_entry::<Value, Value>()? {
                     match (k, v) {
                         (Value::Integer(i), Value::Text(s)) if i == CWT_CLAIM_NAME.into() => {
-                            address.name.replace(s);
+                            oidc.name.replace(s);
                         }
                         (Value::Integer(i), Value::Text(s)) if i == CWT_CLAIM_GIVEN_NAME.into() => {
-                            address.given_name.replace(s);
+                            oidc.given_name.replace(s);
                         }
                         (Value::Integer(i), Value::Text(s)) if i == CWT_CLAIM_FAMILY_NAME.into() => {
-                            address.family_name.replace(s);
+                            oidc.family_name.replace(s);
                         }
                         (Value::Integer(i), Value::Text(s)) if i == CWT_CLAIM_MIDDLE_NAME.into() => {
-                            address.middle_name.replace(s);
+                            oidc.middle_name.replace(s);
                         }
                         (Value::Integer(i), Value::Text(s)) if i == CWT_CLAIM_NICKNAME.into() => {
-                            address.nickname.replace(s);
+                            oidc.nickname.replace(s);
                         }
                         (Value::Integer(i), Value::Text(s)) if i == CWT_CLAIM_PREFERRED_USERNAME.into() => {
-                            address.preferred_username.replace(s);
+                            oidc.preferred_username.replace(s);
                         }
                         (Value::Integer(i), Value::Text(s)) if i == CWT_CLAIM_PROFILE.into() => {
-                            address.profile.replace(s.parse().map_err(A::Error::custom)?);
+                            oidc.profile.replace(s.parse().map_err(A::Error::custom)?);
                         }
                         (Value::Integer(i), Value::Text(s)) if i == CWT_CLAIM_PICTURE.into() => {
-                            address.picture.replace(s.parse().map_err(A::Error::custom)?);
+                            oidc.picture.replace(s.parse().map_err(A::Error::custom)?);
                         }
                         (Value::Integer(i), Value::Text(s)) if i == CWT_CLAIM_WEBSITE.into() => {
-                            address.website.replace(s.parse().map_err(A::Error::custom)?);
+                            oidc.website.replace(s.parse().map_err(A::Error::custom)?);
                         }
                         (Value::Integer(i), Value::Text(s)) if i == CWT_CLAIM_EMAIL.into() => {
-                            address.email.replace(s);
+                            oidc.email.replace(s);
                         }
                         (Value::Integer(i), Value::Bool(b)) if i == CWT_CLAIM_EMAIL_VERIFIED.into() => {
-                            address.email_verified.replace(b);
+                            oidc.email_verified.replace(b);
                         }
                         (Value::Integer(i), Value::Text(s)) if i == CWT_CLAIM_GENDER.into() => {
-                            address.gender.replace(s);
+                            oidc.gender.replace(s);
                         }
                         (Value::Integer(i), Value::Text(s)) if i == CWT_CLAIM_BIRTHDATE.into() => {
-                            address.birthdate.replace(s);
+                            oidc.birthdate.replace(s);
                         }
                         (Value::Integer(i), Value::Text(s)) if i == CWT_CLAIM_ZONEINFO.into() => {
-                            address.zoneinfo.replace(s);
+                            oidc.zoneinfo.replace(s);
                         }
                         (Value::Integer(i), Value::Text(s)) if i == CWT_CLAIM_LOCALE.into() => {
-                            address.locale.replace(s);
+                            oidc.locale.replace(s);
                         }
                         (Value::Integer(i), Value::Text(s)) if i == CWT_CLAIM_PHONE_NUMBER.into() => {
-                            address.phone_number.replace(s);
+                            oidc.phone_number.replace(s);
                         }
                         (Value::Integer(i), Value::Bool(b)) if i == CWT_CLAIM_PHONE_NUMBER_VERIFIED.into() => {
-                            address.phone_number_verified.replace(b);
+                            oidc.phone_number_verified.replace(b);
                         }
                         (Value::Integer(i), value @ Value::Map(_)) if i == CWT_CLAIM_ADDRESS.into() => {
-                            address.address.replace(Value::deserialized(&value).map_err(A::Error::custom)?);
+                            oidc.address.replace(Value::deserialized(&value).map_err(A::Error::custom)?);
                         }
                         (Value::Integer(i), Value::Integer(u)) if i == CWT_CLAIM_UPDATED_AT.into() => {
-                            address.updated_at.replace(u.try_into().map_err(A::Error::custom)?);
+                            oidc.updated_at.replace(u.try_into().map_err(A::Error::custom)?);
                         }
                         _ => return Err(A::Error::custom("invalid claim in an OIDC payload")),
                     }
                 }
 
-                Ok(address)
+                Ok(oidc)
             }
         }
 
@@ -372,8 +363,8 @@ pub trait SpiceOidcSdCwtRead {
     fn updated_at(&mut self) -> EsdicawtReadResult<Option<i64>>;
 }
 
-impl<PayloadClaims: Select, IssuerProtectedClaims: CustomClaims, IssuerUnprotectedClaims: CustomClaims> SpiceOidcSdCwtRead
-    for SdCwtIssuedTagged<PayloadClaims, IssuerProtectedClaims, IssuerUnprotectedClaims>
+impl<PayloadClaims: Select, Hasher: digest::Digest + Clone, IssuerProtectedClaims: CustomClaims, IssuerUnprotectedClaims: CustomClaims> SpiceOidcSdCwtRead
+    for SdCwtIssuedTagged<PayloadClaims, Hasher, IssuerProtectedClaims, IssuerUnprotectedClaims>
 where
     for<'a> &'a PayloadClaims: Into<&'a SpiceOidcClaims>,
 {
@@ -490,13 +481,14 @@ where
 }
 
 impl<
+    IssuerPayloadClaims: Select,
+    Hasher: digest::Digest + Clone,
     IssuerProtectedClaims: CustomClaims,
     IssuerUnprotectedClaims: CustomClaims,
-    IssuerPayloadClaims: Select,
     KbtProtectedClaims: CustomClaims,
     KbtUnprotectedClaims: CustomClaims,
     KbtPayloadClaims: CustomClaims,
-> SpiceOidcSdCwtRead for KbtCwtTagged<IssuerPayloadClaims, IssuerProtectedClaims, IssuerUnprotectedClaims, KbtProtectedClaims, KbtUnprotectedClaims, KbtPayloadClaims>
+> SpiceOidcSdCwtRead for KbtCwtTagged<IssuerPayloadClaims, Hasher, IssuerProtectedClaims, IssuerUnprotectedClaims, KbtProtectedClaims, KbtUnprotectedClaims, KbtPayloadClaims>
 where
     for<'a> &'a IssuerPayloadClaims: Into<&'a SpiceOidcClaims>,
 {
@@ -686,7 +678,12 @@ mod tests {
         assert_eq!(preferred_username, "alice".to_string());
     }
 
-    fn issue_oidc_claim(issuer: &Ed25519Issuer, claims: SpiceOidcClaims, holder_pk: &ed25519_dalek::VerifyingKey, subject: &str) -> SdCwtIssuedTagged<SpiceOidcClaims> {
+    fn issue_oidc_claim(
+        issuer: &Ed25519Issuer,
+        claims: SpiceOidcClaims,
+        holder_pk: &ed25519_dalek::VerifyingKey,
+        subject: &str,
+    ) -> SdCwtIssuedTagged<SpiceOidcClaims, sha2::Sha256> {
         issuer
             .issue_cwt(
                 &mut rand::thread_rng(),

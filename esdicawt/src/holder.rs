@@ -17,7 +17,7 @@ pub trait Holder {
     type Error: core::error::Error + Send + Sync;
 
     type Signature;
-    type Hasher: digest::Digest;
+    type Hasher: digest::Digest + Clone;
 
     #[cfg(not(any(feature = "pem", feature = "der")))]
     type Signer: Signer<Self::Signature>;
@@ -75,6 +75,7 @@ pub trait Holder {
     ) -> Result<
         KbtCwtTagged<
             Self::IssuerPayloadClaims,
+            Self::Hasher,
             Self::IssuerProtectedClaims,
             Self::IssuerUnprotectedClaims,
             Self::KbtProtectedClaims,
@@ -103,7 +104,7 @@ pub trait Holder {
 
         // --- protected ---
         let alg = coset::Algorithm::Assigned(self.cwt_algorithm());
-        let protected = KbtProtected::<Self::IssuerPayloadClaims, Self::IssuerProtectedClaims, Self::IssuerUnprotectedClaims, Self::KbtProtectedClaims> {
+        let protected = KbtProtected::<Self::IssuerPayloadClaims, Self::Hasher, Self::IssuerProtectedClaims, Self::IssuerUnprotectedClaims, Self::KbtProtectedClaims> {
             alg: alg.into(),
             kcwt: sd_cwt_issued.into(),
             extra: params.extra_kbt_protected,
@@ -212,8 +213,8 @@ mod tests {
         let mut sd_cwt_kbt = holder.new_presentation(&sd_cwt, presentation_params).unwrap();
 
         let sd_cwt_kbt_2 = sd_cwt_kbt.to_cbor_bytes().unwrap();
-        let sd_cwt_kbt_2 = KbtCwtTagged::from_cbor_bytes(&sd_cwt_kbt_2).unwrap();
-        assert_eq!(sd_cwt_kbt, sd_cwt_kbt_2);
+        let sd_cwt_kbt_2 = KbtCwtTagged::<CustomTokenClaims, sha2::Sha256>::from_cbor_bytes(&sd_cwt_kbt_2).unwrap();
+        assert_eq!(sd_cwt_kbt.to_cbor_bytes().unwrap(), sd_cwt_kbt_2.to_cbor_bytes().unwrap());
 
         let disclosable_claims = sd_cwt_kbt.0.walk_disclosed_claims().unwrap().collect::<Vec<_>>();
         assert_eq!(disclosable_claims.len(), 1);

@@ -43,13 +43,13 @@ pub struct KbtCwtProtectedVerified<IssuerPayloadClaims: Select, IssuerProtectedC
     pub claims: Option<Extra>,
 }
 
-impl<IssuerPayloadClaims: Select, IssuerProtectedClaims: CustomClaims, IssuerUnprotectedClaims: CustomClaims, Extra: CustomClaims>
-    TryFrom<KbtProtected<IssuerPayloadClaims, IssuerProtectedClaims, IssuerUnprotectedClaims, Extra>>
+impl<IssuerPayloadClaims: Select, Hasher: digest::Digest + Clone, IssuerProtectedClaims: CustomClaims, IssuerUnprotectedClaims: CustomClaims, Extra: CustomClaims>
+    TryFrom<KbtProtected<IssuerPayloadClaims, Hasher, IssuerProtectedClaims, IssuerUnprotectedClaims, Extra>>
     for KbtCwtProtectedVerified<IssuerPayloadClaims, IssuerProtectedClaims, IssuerUnprotectedClaims, Extra>
 {
     type Error = EsdicawtSpecError;
 
-    fn try_from(v: KbtProtected<IssuerPayloadClaims, IssuerProtectedClaims, IssuerUnprotectedClaims, Extra>) -> Result<Self, Self::Error> {
+    fn try_from(v: KbtProtected<IssuerPayloadClaims, Hasher, IssuerProtectedClaims, IssuerUnprotectedClaims, Extra>) -> Result<Self, Self::Error> {
         Ok(Self {
             alg: v.alg,
             issuer_sd_cwt: v.kcwt.try_into_value()?.0.try_into()?,
@@ -66,12 +66,12 @@ pub struct SdIssuedVerified<PayloadClaims: CustomClaims, ProtectedClaims: Custom
     pub payload: SdInnerPayload<PayloadClaims>,
 }
 
-impl<PayloadClaims: Select, ProtectedClaims: CustomClaims, UnprotectedClaims: CustomClaims> TryFrom<SdCwtIssued<PayloadClaims, ProtectedClaims, UnprotectedClaims>>
-    for SdIssuedVerified<PayloadClaims, ProtectedClaims, UnprotectedClaims>
+impl<PayloadClaims: Select, Hasher: digest::Digest + Clone, ProtectedClaims: CustomClaims, UnprotectedClaims: CustomClaims>
+    TryFrom<SdCwtIssued<PayloadClaims, Hasher, ProtectedClaims, UnprotectedClaims>> for SdIssuedVerified<PayloadClaims, ProtectedClaims, UnprotectedClaims>
 {
     type Error = EsdicawtSpecError;
 
-    fn try_from(v: SdCwtIssued<PayloadClaims, ProtectedClaims, UnprotectedClaims>) -> Result<Self, Self::Error> {
+    fn try_from(v: SdCwtIssued<PayloadClaims, Hasher, ProtectedClaims, UnprotectedClaims>) -> Result<Self, Self::Error> {
         Ok(Self {
             protected: v.protected.try_into_value()?,
             sd_unprotected: v.sd_unprotected.into(),
