@@ -5,7 +5,7 @@ mod sd_payload_codec;
 mod sd_protected_codec;
 mod sd_unprotected_codec;
 
-#[derive(Debug, Clone, PartialEq, derive_builder::Builder)]
+#[derive(Debug, Clone, derive_builder::Builder)]
 #[builder(pattern = "mutable")]
 pub struct SdCwtIssued<PayloadClaims: Select, Hasher: digest::Digest + Clone, ProtectedClaims: CustomClaims = NoClaims, UnprotectedClaims: CustomClaims = NoClaims> {
     pub protected: InlinedCbor<SdProtected<ProtectedClaims>>,
@@ -14,6 +14,14 @@ pub struct SdCwtIssued<PayloadClaims: Select, Hasher: digest::Digest + Clone, Pr
     pub signature: Vec<u8>,
     #[builder(default)]
     _marker: core::marker::PhantomData<Hasher>,
+}
+
+impl<PayloadClaims: Select, Hasher: digest::Digest + Clone, ProtectedClaims: CustomClaims, UnprotectedClaims: CustomClaims> PartialEq
+    for SdCwtIssued<PayloadClaims, Hasher, ProtectedClaims, UnprotectedClaims>
+{
+    fn eq(&self, other: &Self) -> bool {
+        self.protected.eq(&other.protected) && self.sd_unprotected.eq(&other.sd_unprotected) && self.payload.eq(&other.payload) && self.signature.eq(&other.signature)
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, derive_builder::Builder)]
@@ -76,5 +84,18 @@ impl<PayloadClaims: Select, Hasher: digest::Digest + Clone, ProtectedClaims: Cus
 
     pub fn disclosures_mut(&mut self) -> &mut SaltedArray {
         &mut self.sd_unprotected.sd_claims
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[allow(dead_code)]
+    fn should_be_comparable<PayloadClaims: Select, Hasher: digest::Digest + Clone, ProtectedClaims: CustomClaims, UnprotectedClaims: CustomClaims>(
+        a: SdCwtIssuedTagged<PayloadClaims, Hasher, ProtectedClaims, UnprotectedClaims>,
+        b: SdCwtIssuedTagged<PayloadClaims, Hasher, ProtectedClaims, UnprotectedClaims>,
+    ) -> bool {
+        a == b
     }
 }

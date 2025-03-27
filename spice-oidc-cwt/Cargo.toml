@@ -10,8 +10,11 @@ esdicawt.workspace = true
 esdicawt-spec.workspace = true
 serde = { workspace = true, features = ["derive"] }
 serde_json = { workspace = true, features = ["preserve_order"] }
+serde_repr.workspace = true
 url = { workspace = true, features = ["serde"] }
 digest.workspace = true
+ciborium.workspace = true
+enum-variants-strings.workspace = true
 
 [dev-dependencies]
 esdicawt = { workspace = true, features = ["test-utils", "test-vectors", "ed25519", "p256", "p384"] }

@@ -1,7 +1,8 @@
 #![allow(clippy::borrow_interior_mutable_const, clippy::declare_interior_mutable_const, dead_code)]
 
 use ciborium::Value;
-use esdicawt::{Holder, HolderParams, Issuer, IssuerParams};
+use ciborium::value::Integer;
+use esdicawt::{Holder, HolderParams, Issuer, IssuerParams, cwt_label};
 use esdicawt_spec::{
     CwtAny, EsdicawtSpecError, NoClaims, SdHashAlg, Select,
     reexports::{coset, coset::iana::Algorithm},
@@ -10,7 +11,7 @@ use esdicawt_spec::{
 use pkcs8::DecodePrivateKey;
 use rand_core::{CryptoRng, Error, RngCore};
 use serde::ser::SerializeMap;
-use spice_oidc_cwt::{CWT_CLAIM_ADDRESS_COUNTRY, CWT_CLAIM_ADDRESS_POSTAL_CODE, CWT_CLAIM_ADDRESS_REGION, OidcAddressClaim};
+use spice_oidc_cwt::{CwtOidcAddressLabel, OidcAddressClaim};
 use std::{
     io::Write,
     sync::atomic::{AtomicU32, Ordering},
@@ -27,16 +28,26 @@ struct Payload {
     pub inspection_location: OidcAddressClaim,
 }
 
+#[derive(Debug, Copy, Clone, serde_repr::Serialize_repr, serde_repr::Deserialize_repr)]
+#[repr(i64)]
+pub enum CwtLabel {
+    MostRecentInspectionPassed = 500,
+    InspectorLicenseNumber = 501,
+    InspectionDates = 502,
+    InspectionLocation = 503,
+}
+cwt_label!(CwtLabel);
+
 impl serde::Serialize for Payload {
     fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
         use serde::ser::Error as _;
 
         let mut map = serializer.serialize_map(Some(4))?;
-        map.serialize_entry(&500, &self.most_recent_inspection_passed)?;
-        map.serialize_entry(&501, &self.inspector_license_number)?;
-        map.serialize_entry(&502, &self.inspection_dates)?;
+        map.serialize_entry(&CwtLabel::MostRecentInspectionPassed, &self.most_recent_inspection_passed)?;
+        map.serialize_entry(&CwtLabel::InspectorLicenseNumber, &self.inspector_license_number)?;
+        map.serialize_entry(&CwtLabel::InspectionDates, &self.inspection_dates)?;
         let location = Value::serialized(&self.inspection_location).map_err(S::Error::custom)?;
-        map.serialize_entry(&503, &location)?;
+        map.serialize_entry(&CwtLabel::InspectionLocation, &location)?;
         map.end()
     }
 }
@@ -53,13 +64,13 @@ impl<'de> serde::Deserialize<'de> for Payload {
 
         for entry in values {
             match entry {
-                (Value::Integer(i), Value::Bool(b)) if i == 500.into() => builder.most_recent_inspection_passed(b),
-                (Value::Integer(i), Value::Text(s)) if i == 501.into() => builder.inspector_license_number(s),
-                (Value::Integer(i), Value::Array(values)) if i == 502.into() => {
+                (Value::Integer(i), Value::Bool(b)) if i == CwtLabel::MostRecentInspectionPassed => builder.most_recent_inspection_passed(b),
+                (Value::Integer(i), Value::Text(s)) if i == CwtLabel::InspectorLicenseNumber => builder.inspector_license_number(s),
+                (Value::Integer(i), Value::Array(values)) if i == CwtLabel::InspectionDates => {
                     let values = values.into_iter().filter(|v| !matches!(v, Value::Tag(_, _))).collect::<Vec<_>>();
                     builder.inspection_dates(Value::Array(values).deserialized().map_err(D::Error::custom)?)
                 }
-                (Value::Integer(i), value) if i == 503.into() => builder.inspection_location(value.deserialized().map_err(D::Error::custom)?),
+                (Value::Integer(i), value) if i == CwtLabel::InspectionLocation => builder.inspection_location(value.deserialized().map_err(D::Error::custom)?),
                 _ => unreachable!("Unexpected claim"),
             };
         }
@@ -88,13 +99,13 @@ impl Select for Payload {
 
         let mut inspection_location = Vec::with_capacity(3);
         if let Some(country) = self.inspection_location.country {
-            inspection_location.push((Value::Integer(CWT_CLAIM_ADDRESS_COUNTRY.into()), Value::Text(country)));
+            inspection_location.push((CwtOidcAddressLabel::Country.into(), Value::Text(country)));
         }
         if let Some(region) = self.inspection_location.region {
-            inspection_location.push((sd!(CWT_CLAIM_ADDRESS_REGION), Value::Text(region)));
+            inspection_location.push((sd!(CwtOidcAddressLabel::Region), Value::Text(region)));
         }
         if let Some(postal_code) = self.inspection_location.postal_code {
-            inspection_location.push((sd!(CWT_CLAIM_ADDRESS_POSTAL_CODE), Value::Text(postal_code)));
+            inspection_location.push((sd!(CwtOidcAddressLabel::PostalCode), Value::Text(postal_code)));
         }
         map.push((Value::Integer(503.into()), Value::Map(inspection_location)));
 
@@ -110,7 +121,7 @@ impl Select for NestedPayload {
         let mut map = self.0.select()?;
         for (k, _) in map.as_map_mut().unwrap() {
             match k {
-                Value::Integer(i) if i == &mut 502.into() => {
+                Value::Integer(i) if i == &mut CwtLabel::InspectionDates => {
                     *k = sd!(k.clone());
                 }
                 _ => {}
@@ -304,7 +315,7 @@ fn test_vectors<P: Select>(payload: P, spec_sd_cwt_bytes: &[u8], spec_sd_kbt_byt
     assert_eq!(spec_sd_claims.len(), esdicawt_sd_claims.len());
 
     let claim = |map: &Vec<(Value, Value)>, i: i64| {
-        let found = map.iter().find_map(|(k, v)| matches!(k, Value::Integer(int) if *int == i.into()).then_some(v));
+        let found = map.iter().find_map(|(k, v)| matches!(k, Value::Integer(int) if *int == Integer::from(i)).then_some(v));
         found.cloned()
     };
     let assert_claim = |i: i64| {
