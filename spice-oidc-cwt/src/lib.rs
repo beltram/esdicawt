@@ -1,5 +1,6 @@
+use enum_variants_strings::EnumVariantsStrings;
 use esdicawt::{
-    EsdicawtReadResult, TokenQuery,
+    EsdicawtReadResult, TokenQuery, cwt_label,
     spec::{
         ClaimName, CustomClaims, Select, Value,
         issuance::{SdCwtIssued, SdCwtIssuedTagged},
@@ -10,52 +11,44 @@ use serde::ser::SerializeMap;
 use std::{borrow::Cow, collections::HashMap, sync::LazyLock};
 use url::Url;
 
-pub const CWT_CLAIM_NAME: i64 = 170;
-pub const CWT_CLAIM_GIVEN_NAME: i64 = 171;
-pub const CWT_CLAIM_FAMILY_NAME: i64 = 172;
-pub const CWT_CLAIM_MIDDLE_NAME: i64 = 173;
-pub const CWT_CLAIM_NICKNAME: i64 = 174;
-pub const CWT_CLAIM_PREFERRED_USERNAME: i64 = 175;
-pub const CWT_CLAIM_PROFILE: i64 = 176;
-pub const CWT_CLAIM_PICTURE: i64 = 177;
-pub const CWT_CLAIM_WEBSITE: i64 = 178;
-pub const CWT_CLAIM_EMAIL: i64 = 179;
-pub const CWT_CLAIM_EMAIL_VERIFIED: i64 = 180;
-pub const CWT_CLAIM_GENDER: i64 = 181;
-pub const CWT_CLAIM_BIRTHDATE: i64 = 182;
-pub const CWT_CLAIM_ZONEINFO: i64 = 183;
-pub const CWT_CLAIM_LOCALE: i64 = 184;
-pub const CWT_CLAIM_PHONE_NUMBER: i64 = 185;
-pub const CWT_CLAIM_PHONE_NUMBER_VERIFIED: i64 = 186;
-pub const CWT_CLAIM_ADDRESS: i64 = 187;
-pub const CWT_CLAIM_UPDATED_AT: i64 = 188;
+#[derive(Debug, Copy, Clone, serde_repr::Serialize_repr, serde_repr::Deserialize_repr, enum_variants_strings::EnumVariantsStrings)]
+#[enum_variants_strings_transform(transform = "snake_case")]
+#[repr(i64)]
+pub enum CwtOidcLabel {
+    Name = 170,
+    GivenName = 171,
+    FamilyName = 172,
+    MiddleName = 173,
+    Nickname = 174,
+    PreferredUsername = 175,
+    Profile = 176,
+    Picture = 177,
+    Website = 178,
+    Email = 179,
+    EmailVerified = 180,
+    Gender = 181,
+    Birthdate = 182,
+    ZoneInfo = 183,
+    Locale = 184,
+    PhoneNumber = 185,
+    PhoneNumberVerified = 186,
+    Address = 187,
+    UpdatedAt = 188,
+}
+cwt_label!(CwtOidcLabel);
 
-pub const CWT_CLAIM_ADDRESS_FORMATTED: i64 = 1;
-pub const CWT_CLAIM_ADDRESS_STREET_ADDRESS: i64 = 2;
-pub const CWT_CLAIM_ADDRESS_LOCALITY: i64 = 3;
-pub const CWT_CLAIM_ADDRESS_REGION: i64 = 4;
-pub const CWT_CLAIM_ADDRESS_POSTAL_CODE: i64 = 5;
-pub const CWT_CLAIM_ADDRESS_COUNTRY: i64 = 6;
-
-pub const OIDC_NAME: &str = "name";
-pub const OIDC_GIVEN_NAME: &str = "given_name";
-pub const OIDC_FAMILY_NAME: &str = "family_name";
-pub const OIDC_MIDDLE_NAME: &str = "middle_name";
-pub const OIDC_NICKNAME: &str = "nickname";
-pub const OIDC_PREFERRED_USERNAME: &str = "preferred_username";
-pub const OIDC_PROFILE: &str = "profile";
-pub const OIDC_PICTURE: &str = "picture";
-pub const OIDC_WEBSITE: &str = "website";
-pub const OIDC_EMAIL: &str = "email";
-pub const OIDC_EMAIL_VERIFIED: &str = "email_verified";
-pub const OIDC_GENDER: &str = "gender";
-pub const OIDC_BIRTHDATE: &str = "birthdate";
-pub const OIDC_ZONEINFO: &str = "zoneinfo";
-pub const OIDC_LOCALE: &str = "locale";
-pub const OIDC_PHONE_NUMBER: &str = "phone_number";
-pub const OIDC_PHONE_NUMBER_VERIFIED: &str = "phone_number_verified";
-pub const OIDC_ADDRESS: &str = "address";
-pub const OIDC_UPDATED_AT: &str = "updated_at";
+#[derive(Debug, Copy, Clone, serde_repr::Serialize_repr, serde_repr::Deserialize_repr, enum_variants_strings::EnumVariantsStrings)]
+#[enum_variants_strings_transform(transform = "snake_case")]
+#[repr(i64)]
+pub enum CwtOidcAddressLabel {
+    Formatted = 1,
+    StreetAddress = 2,
+    Locality = 3,
+    Region = 4,
+    PostalCode = 5,
+    Country = 6,
+}
+cwt_label!(CwtOidcAddressLabel);
 
 #[derive(Debug, Clone, Default, PartialEq, Eq, PartialOrd, Ord)]
 pub struct SpiceOidcClaims {
@@ -84,63 +77,63 @@ impl serde::Serialize for SpiceOidcClaims {
     fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
         let mut map = serializer.serialize_map(None)?;
         if let Some(name) = &self.name {
-            map.serialize_entry(&CWT_CLAIM_NAME, name)?;
+            map.serialize_entry(&CwtOidcLabel::Name, name)?;
         }
         if let Some(given_name) = &self.given_name {
-            map.serialize_entry(&CWT_CLAIM_GIVEN_NAME, given_name)?;
+            map.serialize_entry(&CwtOidcLabel::GivenName, given_name)?;
         }
         if let Some(family_name) = &self.family_name {
-            map.serialize_entry(&CWT_CLAIM_FAMILY_NAME, family_name)?;
+            map.serialize_entry(&CwtOidcLabel::FamilyName, family_name)?;
         }
         if let Some(middle_name) = &self.middle_name {
-            map.serialize_entry(&CWT_CLAIM_MIDDLE_NAME, middle_name)?;
+            map.serialize_entry(&CwtOidcLabel::MiddleName, middle_name)?;
         }
         if let Some(nickname) = &self.nickname {
-            map.serialize_entry(&CWT_CLAIM_NICKNAME, nickname)?;
+            map.serialize_entry(&CwtOidcLabel::Nickname, nickname)?;
         }
         if let Some(preferred_username) = &self.preferred_username {
-            map.serialize_entry(&CWT_CLAIM_PREFERRED_USERNAME, preferred_username)?;
+            map.serialize_entry(&CwtOidcLabel::PreferredUsername, preferred_username)?;
         }
         if let Some(profile) = &self.profile {
-            map.serialize_entry(&CWT_CLAIM_PROFILE, profile.as_str())?;
+            map.serialize_entry(&CwtOidcLabel::Profile, profile.as_str())?;
         }
         if let Some(picture) = &self.picture {
-            map.serialize_entry(&CWT_CLAIM_PICTURE, picture.as_str())?;
+            map.serialize_entry(&CwtOidcLabel::Picture, picture.as_str())?;
         }
         if let Some(website) = &self.website {
-            map.serialize_entry(&CWT_CLAIM_WEBSITE, website.as_str())?;
+            map.serialize_entry(&CwtOidcLabel::Website, website.as_str())?;
         }
         if let Some(email) = &self.email {
-            map.serialize_entry(&CWT_CLAIM_EMAIL, email)?;
+            map.serialize_entry(&CwtOidcLabel::Email, email)?;
         }
         if let Some(email_verified) = &self.email_verified {
-            map.serialize_entry(&CWT_CLAIM_EMAIL_VERIFIED, email_verified)?;
+            map.serialize_entry(&CwtOidcLabel::EmailVerified, email_verified)?;
         }
         if let Some(gender) = &self.gender {
-            map.serialize_entry(&CWT_CLAIM_GENDER, gender)?;
+            map.serialize_entry(&CwtOidcLabel::Gender, gender)?;
         }
         if let Some(birthdate) = &self.birthdate {
-            map.serialize_entry(&CWT_CLAIM_BIRTHDATE, birthdate)?;
+            map.serialize_entry(&CwtOidcLabel::Birthdate, birthdate)?;
         }
         if let Some(zoneinfo) = &self.zoneinfo {
-            map.serialize_entry(&CWT_CLAIM_ZONEINFO, zoneinfo)?;
+            map.serialize_entry(&CwtOidcLabel::ZoneInfo, zoneinfo)?;
         }
         if let Some(locale) = &self.locale {
-            map.serialize_entry(&CWT_CLAIM_LOCALE, locale)?;
+            map.serialize_entry(&CwtOidcLabel::Locale, locale)?;
         }
         if let Some(phone_number) = &self.phone_number {
-            map.serialize_entry(&CWT_CLAIM_PHONE_NUMBER, phone_number)?;
+            map.serialize_entry(&CwtOidcLabel::PhoneNumber, phone_number)?;
         }
         if let Some(phone_number_verified) = &self.phone_number_verified {
-            map.serialize_entry(&CWT_CLAIM_PHONE_NUMBER_VERIFIED, phone_number_verified)?;
+            map.serialize_entry(&CwtOidcLabel::PhoneNumberVerified, phone_number_verified)?;
         }
         if let Some(address) = &self.address {
             if let Ok(address_json) = serde_json::to_string(&address) {
-                map.serialize_entry(&CWT_CLAIM_ADDRESS, &address_json)?;
+                map.serialize_entry(&CwtOidcLabel::Address, &address_json)?;
             }
         }
         if let Some(updated_at) = &self.updated_at {
-            map.serialize_entry(&CWT_CLAIM_UPDATED_AT, updated_at)?;
+            map.serialize_entry(&CwtOidcLabel::UpdatedAt, updated_at)?;
         }
         map.end()
     }
@@ -163,61 +156,61 @@ impl<'de> serde::Deserialize<'de> for SpiceOidcClaims {
                 let mut oidc = SpiceOidcClaims::default();
                 while let Some((k, v)) = map.next_entry::<Value, Value>()? {
                     match (k, v) {
-                        (Value::Integer(i), Value::Text(s)) if i == CWT_CLAIM_NAME.into() => {
+                        (Value::Integer(i), Value::Text(s)) if i == CwtOidcLabel::Name => {
                             oidc.name.replace(s);
                         }
-                        (Value::Integer(i), Value::Text(s)) if i == CWT_CLAIM_GIVEN_NAME.into() => {
+                        (Value::Integer(i), Value::Text(s)) if i == CwtOidcLabel::GivenName => {
                             oidc.given_name.replace(s);
                         }
-                        (Value::Integer(i), Value::Text(s)) if i == CWT_CLAIM_FAMILY_NAME.into() => {
+                        (Value::Integer(i), Value::Text(s)) if i == CwtOidcLabel::FamilyName => {
                             oidc.family_name.replace(s);
                         }
-                        (Value::Integer(i), Value::Text(s)) if i == CWT_CLAIM_MIDDLE_NAME.into() => {
+                        (Value::Integer(i), Value::Text(s)) if i == CwtOidcLabel::MiddleName => {
                             oidc.middle_name.replace(s);
                         }
-                        (Value::Integer(i), Value::Text(s)) if i == CWT_CLAIM_NICKNAME.into() => {
+                        (Value::Integer(i), Value::Text(s)) if i == CwtOidcLabel::Nickname => {
                             oidc.nickname.replace(s);
                         }
-                        (Value::Integer(i), Value::Text(s)) if i == CWT_CLAIM_PREFERRED_USERNAME.into() => {
+                        (Value::Integer(i), Value::Text(s)) if i == CwtOidcLabel::PreferredUsername => {
                             oidc.preferred_username.replace(s);
                         }
-                        (Value::Integer(i), Value::Text(s)) if i == CWT_CLAIM_PROFILE.into() => {
+                        (Value::Integer(i), Value::Text(s)) if i == CwtOidcLabel::Profile => {
                             oidc.profile.replace(s.parse().map_err(A::Error::custom)?);
                         }
-                        (Value::Integer(i), Value::Text(s)) if i == CWT_CLAIM_PICTURE.into() => {
+                        (Value::Integer(i), Value::Text(s)) if i == CwtOidcLabel::Picture => {
                             oidc.picture.replace(s.parse().map_err(A::Error::custom)?);
                         }
-                        (Value::Integer(i), Value::Text(s)) if i == CWT_CLAIM_WEBSITE.into() => {
+                        (Value::Integer(i), Value::Text(s)) if i == CwtOidcLabel::Website => {
                             oidc.website.replace(s.parse().map_err(A::Error::custom)?);
                         }
-                        (Value::Integer(i), Value::Text(s)) if i == CWT_CLAIM_EMAIL.into() => {
+                        (Value::Integer(i), Value::Text(s)) if i == CwtOidcLabel::Email => {
                             oidc.email.replace(s);
                         }
-                        (Value::Integer(i), Value::Bool(b)) if i == CWT_CLAIM_EMAIL_VERIFIED.into() => {
+                        (Value::Integer(i), Value::Bool(b)) if i == CwtOidcLabel::EmailVerified => {
                             oidc.email_verified.replace(b);
                         }
-                        (Value::Integer(i), Value::Text(s)) if i == CWT_CLAIM_GENDER.into() => {
+                        (Value::Integer(i), Value::Text(s)) if i == CwtOidcLabel::Gender => {
                             oidc.gender.replace(s);
                         }
-                        (Value::Integer(i), Value::Text(s)) if i == CWT_CLAIM_BIRTHDATE.into() => {
+                        (Value::Integer(i), Value::Text(s)) if i == CwtOidcLabel::Birthdate => {
                             oidc.birthdate.replace(s);
                         }
-                        (Value::Integer(i), Value::Text(s)) if i == CWT_CLAIM_ZONEINFO.into() => {
+                        (Value::Integer(i), Value::Text(s)) if i == CwtOidcLabel::ZoneInfo => {
                             oidc.zoneinfo.replace(s);
                         }
-                        (Value::Integer(i), Value::Text(s)) if i == CWT_CLAIM_LOCALE.into() => {
+                        (Value::Integer(i), Value::Text(s)) if i == CwtOidcLabel::Locale => {
                             oidc.locale.replace(s);
                         }
-                        (Value::Integer(i), Value::Text(s)) if i == CWT_CLAIM_PHONE_NUMBER.into() => {
+                        (Value::Integer(i), Value::Text(s)) if i == CwtOidcLabel::PhoneNumber => {
                             oidc.phone_number.replace(s);
                         }
-                        (Value::Integer(i), Value::Bool(b)) if i == CWT_CLAIM_PHONE_NUMBER_VERIFIED.into() => {
+                        (Value::Integer(i), Value::Bool(b)) if i == CwtOidcLabel::PhoneNumberVerified => {
                             oidc.phone_number_verified.replace(b);
                         }
-                        (Value::Integer(i), value @ Value::Map(_)) if i == CWT_CLAIM_ADDRESS.into() => {
+                        (Value::Integer(i), value @ Value::Map(_)) if i == CwtOidcLabel::Address => {
                             oidc.address.replace(Value::deserialized(&value).map_err(A::Error::custom)?);
                         }
-                        (Value::Integer(i), Value::Integer(u)) if i == CWT_CLAIM_UPDATED_AT.into() => {
+                        (Value::Integer(i), Value::Integer(u)) if i == CwtOidcLabel::UpdatedAt => {
                             oidc.updated_at.replace(u.try_into().map_err(A::Error::custom)?);
                         }
                         _ => {}
@@ -234,25 +227,25 @@ impl<'de> serde::Deserialize<'de> for SpiceOidcClaims {
 
 pub(crate) static CLAIM_MAP: LazyLock<HashMap<&'static str, ClaimName>> = LazyLock::new(|| {
     [
-        (OIDC_NAME, CWT_CLAIM_NAME.into()),
-        (OIDC_GIVEN_NAME, CWT_CLAIM_GIVEN_NAME.into()),
-        (OIDC_FAMILY_NAME, CWT_CLAIM_FAMILY_NAME.into()),
-        (OIDC_MIDDLE_NAME, CWT_CLAIM_MIDDLE_NAME.into()),
-        (OIDC_NAME, CWT_CLAIM_NICKNAME.into()),
-        (OIDC_PREFERRED_USERNAME, CWT_CLAIM_PREFERRED_USERNAME.into()),
-        (OIDC_PROFILE, CWT_CLAIM_PROFILE.into()),
-        (OIDC_PICTURE, CWT_CLAIM_PICTURE.into()),
-        (OIDC_WEBSITE, CWT_CLAIM_WEBSITE.into()),
-        (OIDC_EMAIL, CWT_CLAIM_EMAIL.into()),
-        (OIDC_EMAIL_VERIFIED, CWT_CLAIM_EMAIL_VERIFIED.into()),
-        (OIDC_GENDER, CWT_CLAIM_GENDER.into()),
-        (OIDC_BIRTHDATE, CWT_CLAIM_BIRTHDATE.into()),
-        (OIDC_ZONEINFO, CWT_CLAIM_ZONEINFO.into()),
-        (OIDC_LOCALE, CWT_CLAIM_LOCALE.into()),
-        (OIDC_PHONE_NUMBER, CWT_CLAIM_PHONE_NUMBER.into()),
-        (OIDC_PHONE_NUMBER_VERIFIED, CWT_CLAIM_PHONE_NUMBER_VERIFIED.into()),
-        (OIDC_ADDRESS, CWT_CLAIM_ADDRESS.into()),
-        (OIDC_UPDATED_AT, CWT_CLAIM_UPDATED_AT.into()),
+        (CwtOidcLabel::Name.to_str(), CwtOidcLabel::Name.into()),
+        (CwtOidcLabel::GivenName.to_str(), CwtOidcLabel::GivenName.into()),
+        (CwtOidcLabel::FamilyName.to_str(), CwtOidcLabel::FamilyName.into()),
+        (CwtOidcLabel::MiddleName.to_str(), CwtOidcLabel::MiddleName.into()),
+        (CwtOidcLabel::Name.to_str(), CwtOidcLabel::Nickname.into()),
+        (CwtOidcLabel::PreferredUsername.to_str(), CwtOidcLabel::PreferredUsername.into()),
+        (CwtOidcLabel::Profile.to_str(), CwtOidcLabel::Profile.into()),
+        (CwtOidcLabel::Picture.to_str(), CwtOidcLabel::Picture.into()),
+        (CwtOidcLabel::Website.to_str(), CwtOidcLabel::Website.into()),
+        (CwtOidcLabel::Email.to_str(), CwtOidcLabel::Email.into()),
+        (CwtOidcLabel::EmailVerified.to_str(), CwtOidcLabel::EmailVerified.into()),
+        (CwtOidcLabel::Gender.to_str(), CwtOidcLabel::Gender.into()),
+        (CwtOidcLabel::Birthdate.to_str(), CwtOidcLabel::Birthdate.into()),
+        (CwtOidcLabel::ZoneInfo.to_str(), CwtOidcLabel::ZoneInfo.into()),
+        (CwtOidcLabel::Locale.to_str(), CwtOidcLabel::Locale.into()),
+        (CwtOidcLabel::PhoneNumber.to_str(), CwtOidcLabel::PhoneNumber.into()),
+        (CwtOidcLabel::PhoneNumberVerified.to_str(), CwtOidcLabel::PhoneNumberVerified.into()),
+        (CwtOidcLabel::Address.to_str(), CwtOidcLabel::Address.into()),
+        (CwtOidcLabel::UpdatedAt.to_str(), CwtOidcLabel::UpdatedAt.into()),
     ]
     .into_iter()
     .collect()
@@ -278,22 +271,22 @@ impl serde::Serialize for OidcAddressClaim {
     fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
         let mut map = serializer.serialize_map(None)?;
         if let Some(formatted) = &self.formatted {
-            map.serialize_entry(&CWT_CLAIM_ADDRESS_FORMATTED, formatted)?;
+            map.serialize_entry(&CwtOidcAddressLabel::Formatted, formatted)?;
         }
         if let Some(street_address) = &self.street_address {
-            map.serialize_entry(&CWT_CLAIM_ADDRESS_STREET_ADDRESS, street_address)?;
+            map.serialize_entry(&CwtOidcAddressLabel::StreetAddress, street_address)?;
         }
         if let Some(locality) = &self.locality {
-            map.serialize_entry(&CWT_CLAIM_ADDRESS_LOCALITY, locality)?;
+            map.serialize_entry(&CwtOidcAddressLabel::Locality, locality)?;
         }
         if let Some(region) = &self.region {
-            map.serialize_entry(&CWT_CLAIM_ADDRESS_REGION, region)?;
+            map.serialize_entry(&CwtOidcAddressLabel::Region, region)?;
         }
         if let Some(postal_code) = &self.postal_code {
-            map.serialize_entry(&CWT_CLAIM_ADDRESS_POSTAL_CODE, postal_code)?;
+            map.serialize_entry(&CwtOidcAddressLabel::PostalCode, postal_code)?;
         }
         if let Some(country) = &self.country {
-            map.serialize_entry(&CWT_CLAIM_ADDRESS_COUNTRY, country)?;
+            map.serialize_entry(&CwtOidcAddressLabel::Country, country)?;
         }
         map.end()
     }
@@ -314,22 +307,22 @@ impl<'de> serde::Deserialize<'de> for OidcAddressClaim {
                 let mut address = OidcAddressClaim::default();
                 while let Some((k, v)) = map.next_entry::<Value, Value>()? {
                     match (k, v) {
-                        (Value::Integer(i), Value::Text(s)) if i == CWT_CLAIM_ADDRESS_FORMATTED.into() => {
+                        (Value::Integer(i), Value::Text(s)) if i == CwtOidcAddressLabel::Formatted => {
                             address.formatted.replace(s);
                         }
-                        (Value::Integer(i), Value::Text(s)) if i == CWT_CLAIM_ADDRESS_STREET_ADDRESS.into() => {
+                        (Value::Integer(i), Value::Text(s)) if i == CwtOidcAddressLabel::StreetAddress => {
                             address.street_address.replace(s);
                         }
-                        (Value::Integer(i), Value::Text(s)) if i == CWT_CLAIM_ADDRESS_LOCALITY.into() => {
+                        (Value::Integer(i), Value::Text(s)) if i == CwtOidcAddressLabel::Locality => {
                             address.locality.replace(s);
                         }
-                        (Value::Integer(i), Value::Text(s)) if i == CWT_CLAIM_ADDRESS_REGION.into() => {
+                        (Value::Integer(i), Value::Text(s)) if i == CwtOidcAddressLabel::Region => {
                             address.region.replace(s);
                         }
-                        (Value::Integer(i), Value::Text(s)) if i == CWT_CLAIM_ADDRESS_POSTAL_CODE.into() => {
+                        (Value::Integer(i), Value::Text(s)) if i == CwtOidcAddressLabel::PostalCode => {
                             address.postal_code.replace(s);
                         }
-                        (Value::Integer(i), Value::Text(s)) if i == CWT_CLAIM_ADDRESS_COUNTRY.into() => {
+                        (Value::Integer(i), Value::Text(s)) if i == CwtOidcAddressLabel::Country => {
                             address.country.replace(s);
                         }
                         _ => {}
@@ -372,87 +365,87 @@ where
     for<'a> &'a PayloadClaims: Into<&'a SpiceOidcClaims>,
 {
     fn name(&mut self) -> EsdicawtReadResult<Option<Cow<str>>> {
-        Ok(self.query(vec![CWT_CLAIM_NAME.into()].into())?.as_ref().map(Value::deserialized).transpose()?)
+        Ok(self.query(vec![CwtOidcLabel::Name.into()].into())?.as_ref().map(Value::deserialized).transpose()?)
     }
 
     fn given_name(&mut self) -> EsdicawtReadResult<Option<Cow<str>>> {
-        Ok(self.query(vec![CWT_CLAIM_GIVEN_NAME.into()].into())?.as_ref().map(Value::deserialized).transpose()?)
+        Ok(self.query(vec![CwtOidcLabel::GivenName.into()].into())?.as_ref().map(Value::deserialized).transpose()?)
     }
 
     fn family_name(&mut self) -> EsdicawtReadResult<Option<Cow<str>>> {
-        Ok(self.query(vec![CWT_CLAIM_FAMILY_NAME.into()].into())?.as_ref().map(Value::deserialized).transpose()?)
+        Ok(self.query(vec![CwtOidcLabel::FamilyName.into()].into())?.as_ref().map(Value::deserialized).transpose()?)
     }
 
     fn middle_name(&mut self) -> EsdicawtReadResult<Option<Cow<str>>> {
-        Ok(self.query(vec![CWT_CLAIM_MIDDLE_NAME.into()].into())?.as_ref().map(Value::deserialized).transpose()?)
+        Ok(self.query(vec![CwtOidcLabel::MiddleName.into()].into())?.as_ref().map(Value::deserialized).transpose()?)
     }
 
     fn nickname(&mut self) -> EsdicawtReadResult<Option<Cow<str>>> {
-        Ok(self.query(vec![CWT_CLAIM_NICKNAME.into()].into())?.as_ref().map(Value::deserialized).transpose()?)
+        Ok(self.query(vec![CwtOidcLabel::Nickname.into()].into())?.as_ref().map(Value::deserialized).transpose()?)
     }
 
     fn preferred_username(&mut self) -> EsdicawtReadResult<Option<Cow<str>>> {
         Ok(self
-            .query(vec![CWT_CLAIM_PREFERRED_USERNAME.into()].into())?
+            .query(vec![CwtOidcLabel::PreferredUsername.into()].into())?
             .as_ref()
             .map(Value::deserialized)
             .transpose()?)
     }
 
     fn profile(&mut self) -> EsdicawtReadResult<Option<Url>> {
-        Ok(self.query(vec![CWT_CLAIM_PROFILE.into()].into())?.as_ref().map(Value::deserialized).transpose()?)
+        Ok(self.query(vec![CwtOidcLabel::Profile.into()].into())?.as_ref().map(Value::deserialized).transpose()?)
     }
 
     fn picture(&mut self) -> EsdicawtReadResult<Option<Url>> {
-        Ok(self.query(vec![CWT_CLAIM_PICTURE.into()].into())?.as_ref().map(Value::deserialized).transpose()?)
+        Ok(self.query(vec![CwtOidcLabel::Picture.into()].into())?.as_ref().map(Value::deserialized).transpose()?)
     }
 
     fn website(&mut self) -> EsdicawtReadResult<Option<Url>> {
-        Ok(self.query(vec![CWT_CLAIM_WEBSITE.into()].into())?.as_ref().map(Value::deserialized).transpose()?)
+        Ok(self.query(vec![CwtOidcLabel::Website.into()].into())?.as_ref().map(Value::deserialized).transpose()?)
     }
 
     fn email(&mut self) -> EsdicawtReadResult<Option<Cow<str>>> {
-        Ok(self.query(vec![CWT_CLAIM_EMAIL.into()].into())?.as_ref().map(Value::deserialized).transpose()?)
+        Ok(self.query(vec![CwtOidcLabel::Email.into()].into())?.as_ref().map(Value::deserialized).transpose()?)
     }
 
     fn email_verified(&mut self) -> EsdicawtReadResult<Option<bool>> {
-        Ok(self.query(vec![CWT_CLAIM_EMAIL_VERIFIED.into()].into())?.as_ref().map(Value::deserialized).transpose()?)
+        Ok(self.query(vec![CwtOidcLabel::EmailVerified.into()].into())?.as_ref().map(Value::deserialized).transpose()?)
     }
 
     fn gender(&mut self) -> EsdicawtReadResult<Option<Cow<str>>> {
-        Ok(self.query(vec![CWT_CLAIM_GENDER.into()].into())?.as_ref().map(Value::deserialized).transpose()?)
+        Ok(self.query(vec![CwtOidcLabel::Gender.into()].into())?.as_ref().map(Value::deserialized).transpose()?)
     }
 
     fn birthdate(&mut self) -> EsdicawtReadResult<Option<Cow<str>>> {
-        Ok(self.query(vec![CWT_CLAIM_BIRTHDATE.into()].into())?.as_ref().map(Value::deserialized).transpose()?)
+        Ok(self.query(vec![CwtOidcLabel::Birthdate.into()].into())?.as_ref().map(Value::deserialized).transpose()?)
     }
 
     fn zoneinfo(&mut self) -> EsdicawtReadResult<Option<Cow<str>>> {
-        Ok(self.query(vec![CWT_CLAIM_ZONEINFO.into()].into())?.as_ref().map(Value::deserialized).transpose()?)
+        Ok(self.query(vec![CwtOidcLabel::ZoneInfo.into()].into())?.as_ref().map(Value::deserialized).transpose()?)
     }
 
     fn locale(&mut self) -> EsdicawtReadResult<Option<Cow<str>>> {
-        Ok(self.query(vec![CWT_CLAIM_LOCALE.into()].into())?.as_ref().map(Value::deserialized).transpose()?)
+        Ok(self.query(vec![CwtOidcLabel::Locale.into()].into())?.as_ref().map(Value::deserialized).transpose()?)
     }
 
     fn phone_number(&mut self) -> EsdicawtReadResult<Option<Cow<str>>> {
-        Ok(self.query(vec![CWT_CLAIM_PHONE_NUMBER.into()].into())?.as_ref().map(Value::deserialized).transpose()?)
+        Ok(self.query(vec![CwtOidcLabel::PhoneNumber.into()].into())?.as_ref().map(Value::deserialized).transpose()?)
     }
 
     fn phone_number_verified(&mut self) -> EsdicawtReadResult<Option<bool>> {
         Ok(self
-            .query(vec![CWT_CLAIM_PHONE_NUMBER_VERIFIED.into()].into())?
+            .query(vec![CwtOidcLabel::PhoneNumberVerified.into()].into())?
             .as_ref()
             .map(Value::deserialized)
             .transpose()?)
     }
 
     fn address(&mut self) -> EsdicawtReadResult<Option<OidcAddressClaim>> {
-        Ok(self.query(vec![CWT_CLAIM_ADDRESS.into()].into())?.as_ref().map(Value::deserialized).transpose()?)
+        Ok(self.query(vec![CwtOidcLabel::Address.into()].into())?.as_ref().map(Value::deserialized).transpose()?)
     }
 
     fn updated_at(&mut self) -> EsdicawtReadResult<Option<i64>> {
-        Ok(self.query(vec![CWT_CLAIM_UPDATED_AT.into()].into())?.as_ref().map(Value::deserialized).transpose()?)
+        Ok(self.query(vec![CwtOidcLabel::UpdatedAt.into()].into())?.as_ref().map(Value::deserialized).transpose()?)
     }
 }
 
@@ -551,87 +544,87 @@ where
     for<'a> &'a IssuerPayloadClaims: Into<&'a SpiceOidcClaims>,
 {
     fn name(&mut self) -> EsdicawtReadResult<Option<Cow<str>>> {
-        Ok(self.query(vec![CWT_CLAIM_NAME.into()].into())?.as_ref().map(Value::deserialized).transpose()?)
+        Ok(self.query(vec![CwtOidcLabel::Name.into()].into())?.as_ref().map(Value::deserialized).transpose()?)
     }
 
     fn given_name(&mut self) -> EsdicawtReadResult<Option<Cow<str>>> {
-        Ok(self.query(vec![CWT_CLAIM_GIVEN_NAME.into()].into())?.as_ref().map(Value::deserialized).transpose()?)
+        Ok(self.query(vec![CwtOidcLabel::GivenName.into()].into())?.as_ref().map(Value::deserialized).transpose()?)
     }
 
     fn family_name(&mut self) -> EsdicawtReadResult<Option<Cow<str>>> {
-        Ok(self.query(vec![CWT_CLAIM_FAMILY_NAME.into()].into())?.as_ref().map(Value::deserialized).transpose()?)
+        Ok(self.query(vec![CwtOidcLabel::FamilyName.into()].into())?.as_ref().map(Value::deserialized).transpose()?)
     }
 
     fn middle_name(&mut self) -> EsdicawtReadResult<Option<Cow<str>>> {
-        Ok(self.query(vec![CWT_CLAIM_MIDDLE_NAME.into()].into())?.as_ref().map(Value::deserialized).transpose()?)
+        Ok(self.query(vec![CwtOidcLabel::MiddleName.into()].into())?.as_ref().map(Value::deserialized).transpose()?)
     }
 
     fn nickname(&mut self) -> EsdicawtReadResult<Option<Cow<str>>> {
-        Ok(self.query(vec![CWT_CLAIM_NICKNAME.into()].into())?.as_ref().map(Value::deserialized).transpose()?)
+        Ok(self.query(vec![CwtOidcLabel::Nickname.into()].into())?.as_ref().map(Value::deserialized).transpose()?)
     }
 
     fn preferred_username(&mut self) -> EsdicawtReadResult<Option<Cow<str>>> {
         Ok(self
-            .query(vec![CWT_CLAIM_PREFERRED_USERNAME.into()].into())?
+            .query(vec![CwtOidcLabel::PreferredUsername.into()].into())?
             .as_ref()
             .map(Value::deserialized)
             .transpose()?)
     }
 
     fn profile(&mut self) -> EsdicawtReadResult<Option<Url>> {
-        Ok(self.query(vec![CWT_CLAIM_PROFILE.into()].into())?.as_ref().map(Value::deserialized).transpose()?)
+        Ok(self.query(vec![CwtOidcLabel::Profile.into()].into())?.as_ref().map(Value::deserialized).transpose()?)
     }
 
     fn picture(&mut self) -> EsdicawtReadResult<Option<Url>> {
-        Ok(self.query(vec![CWT_CLAIM_PICTURE.into()].into())?.as_ref().map(Value::deserialized).transpose()?)
+        Ok(self.query(vec![CwtOidcLabel::Picture.into()].into())?.as_ref().map(Value::deserialized).transpose()?)
     }
 
     fn website(&mut self) -> EsdicawtReadResult<Option<Url>> {
-        Ok(self.query(vec![CWT_CLAIM_WEBSITE.into()].into())?.as_ref().map(Value::deserialized).transpose()?)
+        Ok(self.query(vec![CwtOidcLabel::Website.into()].into())?.as_ref().map(Value::deserialized).transpose()?)
     }
 
     fn email(&mut self) -> EsdicawtReadResult<Option<Cow<str>>> {
-        Ok(self.query(vec![CWT_CLAIM_EMAIL.into()].into())?.as_ref().map(Value::deserialized).transpose()?)
+        Ok(self.query(vec![CwtOidcLabel::Email.into()].into())?.as_ref().map(Value::deserialized).transpose()?)
     }
 
     fn email_verified(&mut self) -> EsdicawtReadResult<Option<bool>> {
-        Ok(self.query(vec![CWT_CLAIM_EMAIL_VERIFIED.into()].into())?.as_ref().map(Value::deserialized).transpose()?)
+        Ok(self.query(vec![CwtOidcLabel::EmailVerified.into()].into())?.as_ref().map(Value::deserialized).transpose()?)
     }
 
     fn gender(&mut self) -> EsdicawtReadResult<Option<Cow<str>>> {
-        Ok(self.query(vec![CWT_CLAIM_GENDER.into()].into())?.as_ref().map(Value::deserialized).transpose()?)
+        Ok(self.query(vec![CwtOidcLabel::Gender.into()].into())?.as_ref().map(Value::deserialized).transpose()?)
     }
 
     fn birthdate(&mut self) -> EsdicawtReadResult<Option<Cow<str>>> {
-        Ok(self.query(vec![CWT_CLAIM_BIRTHDATE.into()].into())?.as_ref().map(Value::deserialized).transpose()?)
+        Ok(self.query(vec![CwtOidcLabel::Birthdate.into()].into())?.as_ref().map(Value::deserialized).transpose()?)
     }
 
     fn zoneinfo(&mut self) -> EsdicawtReadResult<Option<Cow<str>>> {
-        Ok(self.query(vec![CWT_CLAIM_ZONEINFO.into()].into())?.as_ref().map(Value::deserialized).transpose()?)
+        Ok(self.query(vec![CwtOidcLabel::ZoneInfo.into()].into())?.as_ref().map(Value::deserialized).transpose()?)
     }
 
     fn locale(&mut self) -> EsdicawtReadResult<Option<Cow<str>>> {
-        Ok(self.query(vec![CWT_CLAIM_LOCALE.into()].into())?.as_ref().map(Value::deserialized).transpose()?)
+        Ok(self.query(vec![CwtOidcLabel::Locale.into()].into())?.as_ref().map(Value::deserialized).transpose()?)
     }
 
     fn phone_number(&mut self) -> EsdicawtReadResult<Option<Cow<str>>> {
-        Ok(self.query(vec![CWT_CLAIM_PHONE_NUMBER.into()].into())?.as_ref().map(Value::deserialized).transpose()?)
+        Ok(self.query(vec![CwtOidcLabel::PhoneNumber.into()].into())?.as_ref().map(Value::deserialized).transpose()?)
     }
 
     fn phone_number_verified(&mut self) -> EsdicawtReadResult<Option<bool>> {
         Ok(self
-            .query(vec![CWT_CLAIM_PHONE_NUMBER_VERIFIED.into()].into())?
+            .query(vec![CwtOidcLabel::PhoneNumberVerified.into()].into())?
             .as_ref()
             .map(Value::deserialized)
             .transpose()?)
     }
 
     fn address(&mut self) -> EsdicawtReadResult<Option<OidcAddressClaim>> {
-        Ok(self.query(vec![CWT_CLAIM_ADDRESS.into()].into())?.as_ref().map(Value::deserialized).transpose()?)
+        Ok(self.query(vec![CwtOidcLabel::Address.into()].into())?.as_ref().map(Value::deserialized).transpose()?)
     }
 
     fn updated_at(&mut self) -> EsdicawtReadResult<Option<i64>> {
-        Ok(self.query(vec![CWT_CLAIM_UPDATED_AT.into()].into())?.as_ref().map(Value::deserialized).transpose()?)
+        Ok(self.query(vec![CwtOidcLabel::UpdatedAt.into()].into())?.as_ref().map(Value::deserialized).transpose()?)
     }
 }
 
@@ -760,14 +753,11 @@ mod tests {
         assert_eq!(preferred_username, "alice".to_string());
 
         let presentation = Presentation::Path(Box::new(|path| {
-            matches!(
-                path,
-                [CborPath::Int(CWT_CLAIM_NAME), ..]
-                    | [CborPath::Int(CWT_CLAIM_GIVEN_NAME), ..]
-                    | [CborPath::Int(CWT_CLAIM_FAMILY_NAME), ..]
-                    | [CborPath::Int(CWT_CLAIM_NICKNAME), ..]
-                    | [CborPath::Int(CWT_CLAIM_PREFERRED_USERNAME), ..]
-            )
+            matches!(path, [CborPath::Int(i)] if *i == CwtOidcLabel::Name
+                     || *i == CwtOidcLabel::GivenName
+                     || *i == CwtOidcLabel::FamilyName
+                     || *i == CwtOidcLabel::Nickname
+                     || *i == CwtOidcLabel::PreferredUsername)
         }));
         let mut alice_kbt = alice_holder
             .new_presentation(

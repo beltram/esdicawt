@@ -18,7 +18,7 @@ use esdicawt_spec::{
 use signature::{Keypair, Signer};
 
 pub trait Issuer {
-    type Error: core::error::Error + Send + Sync + From<ciborium::value::Error>;
+    type Error: core::error::Error + Send + Sync;
     type Hasher: digest::Digest + Clone;
 
     type Signature;

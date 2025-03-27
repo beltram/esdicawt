@@ -11,7 +11,7 @@ mod kbt_payload_codec;
 mod kbt_protected_codec;
 mod kbt_unprotected_codec;
 
-#[derive(Debug, Clone, PartialEq, derive_builder::Builder)]
+#[derive(Debug, Clone, derive_builder::Builder)]
 #[builder(pattern = "mutable")]
 pub struct KbtCwt<
     IssuerPayloadClaims: Select,
@@ -28,7 +28,22 @@ pub struct KbtCwt<
     pub signature: Vec<u8>,
 }
 
-#[derive(Debug, Clone, PartialEq, derive_builder::Builder)]
+impl<
+    IssuerPayloadClaims: Select,
+    Hasher: digest::Digest + Clone,
+    IssuerProtectedClaims: CustomClaims,
+    IssuerUnprotectedClaims: CustomClaims,
+    ProtectedClaims: CustomClaims,
+    UnprotectedClaims: CustomClaims,
+    PayloadClaims: CustomClaims,
+> PartialEq for KbtCwt<IssuerPayloadClaims, Hasher, IssuerProtectedClaims, IssuerUnprotectedClaims, ProtectedClaims, UnprotectedClaims, PayloadClaims>
+{
+    fn eq(&self, other: &Self) -> bool {
+        self.protected.eq(&other.protected) && self.unprotected.eq(&other.unprotected) && self.payload.eq(&other.payload) && self.signature.eq(&other.signature)
+    }
+}
+
+#[derive(Debug, Clone, derive_builder::Builder)]
 #[builder(pattern = "mutable", setter(into, strip_option))]
 pub struct KbtProtected<
     IssuerPayloadClaims: Select,
@@ -42,6 +57,16 @@ pub struct KbtProtected<
     pub kcwt: InlinedCbor<SdCwtIssuedTagged<IssuerPayloadClaims, Hasher, IssuerProtectedClaims, IssuerUnprotectedClaims>>,
     #[builder(default)]
     pub extra: Option<Extra>,
+}
+
+impl<IssuerPayloadClaims: Select, Hasher: digest::Digest + Clone, IssuerProtectedClaims: CustomClaims, IssuerUnprotectedClaims: CustomClaims, Extra: CustomClaims> PartialEq
+    for KbtProtected<IssuerPayloadClaims, Hasher, IssuerProtectedClaims, IssuerUnprotectedClaims, Extra>
+{
+    fn eq(&self, other: &Self) -> bool {
+        let Ok(self_kcwt) = self.kcwt.as_bytes() else { return false };
+        let Ok(other_kcwt) = other.kcwt.as_bytes() else { return false };
+        self.alg.eq(&other.alg) && self_kcwt.eq(&other_kcwt) && self.extra.eq(&other.extra)
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
@@ -119,5 +144,26 @@ impl<
         let protected = self.protected.to_value_mut()?;
         let issuer_sd_cwt = protected.kcwt.to_value_mut()?;
         Ok(issuer_sd_cwt.0.sd_unprotected.sd_claims.iter())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[allow(dead_code)]
+    fn should_be_comparable<
+        IssuerPayloadClaims: Select,
+        Hasher: digest::Digest + Clone,
+        IssuerProtectedClaims: CustomClaims,
+        IssuerUnprotectedClaims: CustomClaims,
+        ProtectedClaims: CustomClaims,
+        UnprotectedClaims: CustomClaims,
+        PayloadClaims: CustomClaims,
+    >(
+        a: KbtCwtTagged<IssuerPayloadClaims, Hasher, IssuerProtectedClaims, IssuerUnprotectedClaims, ProtectedClaims, UnprotectedClaims, PayloadClaims>,
+        b: KbtCwtTagged<IssuerPayloadClaims, Hasher, IssuerProtectedClaims, IssuerUnprotectedClaims, ProtectedClaims, UnprotectedClaims, PayloadClaims>,
+    ) -> bool {
+        a == b
     }
 }

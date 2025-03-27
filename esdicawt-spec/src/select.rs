@@ -3,7 +3,7 @@ use ciborium::Value;
 
 /// To be implemented on a serializable struct to select the claims the Issuer will redact.
 /// Claims (or array elements) to redact must be wrapped in a tag, use `sd!` macro for that.
-pub trait Select: std::fmt::Debug + CwtAny + Clone {
+pub trait Select: std::fmt::Debug + PartialEq + CwtAny + Clone {
     fn select(self) -> Result<Value, ciborium::value::Error> {
         self.select_none()
     }
@@ -62,4 +62,15 @@ macro_rules! sd {
     ($v:expr) => {
         ciborium::Value::Tag(58, Box::new($v.into()))
     };
+}
+
+/// Redact in place a label or an array element
+pub trait Redact {
+    fn redact(&mut self);
+}
+
+impl Redact for &mut Value {
+    fn redact(&mut self) {
+        **self = Value::Tag(crate::TO_BE_REDACTED_TAG, Box::new(self.clone()));
+    }
 }
