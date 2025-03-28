@@ -1,9 +1,9 @@
 use crate::{SdCwtHolderResult, holder::traverse::traverse_disclosures};
 use ciborium::Value;
-use esdicawt_spec::{ClaimName, CustomClaims, blinded_claims::SaltedArray};
+use esdicawt_spec::{ClaimName, CustomClaims, NoClaims, blinded_claims::SaltedArray};
 
 #[derive(Debug)]
-pub struct HolderParams<'a, KbtProtectedClaims: CustomClaims, KbtUnprotectedClaims: CustomClaims, KbtPayloadClaims: CustomClaims> {
+pub struct HolderParams<'a, KbtProtectedClaims: CustomClaims = NoClaims, KbtUnprotectedClaims: CustomClaims = NoClaims, KbtPayloadClaims: CustomClaims = NoClaims> {
     pub presentation: Presentation,
     /// Subject, see https://www.rfc-editor.org/rfc/rfc8392.html#section-3.1.3
     pub audience: &'a str,
