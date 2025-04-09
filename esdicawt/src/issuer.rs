@@ -10,6 +10,7 @@ use ciborium::Value;
 use esdicawt_spec::{
     COSE_SD_CLAIMS, CWT_CLAIM_AUDIENCE, CWT_CLAIM_CNONCE, CWT_CLAIM_CTI, CWT_CLAIM_EXPIRES_AT, CWT_CLAIM_ISSUED_AT, CWT_CLAIM_ISSUER, CWT_CLAIM_KEY_CONFIRMATION,
     CWT_CLAIM_NOT_BEFORE, CWT_CLAIM_SD_ALG, CWT_CLAIM_SUBJECT, CWT_MEDIATYPE, CustomClaims, CwtAny, MEDIATYPE_SD_CWT, SdHashAlg, Select,
+    blinded_claims::SaltedArray,
     issuance::SdCwtIssuedTagged,
     reexports::coset::{
         TaggedCborSerializable, {self},
@@ -96,67 +97,72 @@ pub trait Issuer {
 
         let protected = protected_builder.build();
 
-        let mut payload_claims = params.payload.map(|c| c.select()).transpose()?;
+        let mut to_be_redacted_payload = params.payload.map(Self::PayloadClaims::select).transpose()?;
 
-        let mut unprotected_builder = coset::HeaderBuilder::new();
+        let salted_array = to_be_redacted_payload
+            .as_mut()
+            .map(|tbr| redact::<Self::Error, Self::Hasher>(csprng, tbr))
+            .transpose()?
+            // FIXME: pending turning sd_claims optional
+            .unwrap_or_else(|| SaltedArray::with_capacity(0));
+        let mut unprotected_builder = coset::HeaderBuilder::new().value(COSE_SD_CLAIMS, salted_array.to_cbor_value()?);
 
-        let payload = if let Some(sd) = payload_claims.as_mut() {
-            let sd_claims = redact::<Self::Error, Self::Hasher>(csprng, sd)?;
-
-            unprotected_builder = unprotected_builder.value(COSE_SD_CLAIMS, Value::serialized(&sd_claims)?);
-
-            if let Some(unprotected_claims) = params.unprotected_claims {
-                let unprotected_extra_claims = Value::serialized(&unprotected_claims)?.into_map()?;
-                for (k, v) in unprotected_extra_claims {
-                    unprotected_builder = match k {
-                        Value::Integer(i) => unprotected_builder.value(i.try_into()?, v),
-                        Value::Text(label) => unprotected_builder.text_value(label, v),
-                        _ => unprotected_builder,
-                    };
-                }
+        if let Some(unprotected_claims) = params.unprotected_claims {
+            let unprotected_extra_claims = Value::serialized(&unprotected_claims)?.into_map()?;
+            for (k, v) in unprotected_extra_claims {
+                unprotected_builder = match k {
+                    Value::Integer(i) => unprotected_builder.value(i.try_into()?, v),
+                    Value::Text(label) => unprotected_builder.text_value(label, v),
+                    _ => unprotected_builder,
+                };
             }
+        }
 
-            let payload = sd.as_map_mut().ok_or(SdCwtIssuerError::InputError)?;
+        let mut payload = Vec::with_capacity(1);
 
-            payload.push((Value::Integer(CWT_CLAIM_ISSUER.into()), params.issuer.into()));
-            if let Some(sub) = params.subject {
-                payload.push((Value::Integer(CWT_CLAIM_SUBJECT.into()), sub.into()));
-            }
-            if let Some(aud) = params.audience {
-                payload.push((Value::Integer(CWT_CLAIM_AUDIENCE.into()), aud.into()));
-            }
-            if let Some(cti) = params.cti {
-                payload.push((Value::Integer(CWT_CLAIM_CTI.into()), cti.into()));
-            }
-            if let Some(cnonce) = params.cnonce {
-                payload.push((Value::Integer(CWT_CLAIM_CNONCE.into()), cnonce.into()));
-            }
+        payload.push((Value::Integer(CWT_CLAIM_ISSUER.into()), params.issuer.into()));
+        if let Some(sub) = params.subject {
+            payload.push((Value::Integer(CWT_CLAIM_SUBJECT.into()), sub.into()));
+        }
+        if let Some(aud) = params.audience {
+            payload.push((Value::Integer(CWT_CLAIM_AUDIENCE.into()), aud.into()));
+        }
+        if let Some(cti) = params.cti {
+            payload.push((Value::Integer(CWT_CLAIM_CTI.into()), cti.into()));
+        }
+        if let Some(cnonce) = params.cnonce {
+            payload.push((Value::Integer(CWT_CLAIM_CNONCE.into()), cnonce.into()));
+        }
 
-            if params.expiry.is_some() || params.with_issued_at || params.with_not_before {
-                #[cfg(feature = "test-vectors")]
-                let now = params.now.map(|d| d.as_secs()).unwrap_or_else(now);
-                #[cfg(not(feature = "test-vectors"))]
-                let now = now();
-                if let Some(expiry) = params.expiry {
-                    let expiry = now + expiry.as_secs();
-                    payload.push((Value::Integer(CWT_CLAIM_EXPIRES_AT.into()), expiry.into()));
-                }
-                if params.with_not_before {
-                    let nbf = now - params.leeway.as_secs();
-                    payload.push((Value::Integer(CWT_CLAIM_NOT_BEFORE.into()), nbf.into()));
-                }
-                if params.with_issued_at {
-                    let iat = now;
-                    payload.push((Value::Integer(CWT_CLAIM_ISSUED_AT.into()), iat.into()));
-                }
+        if params.expiry.is_some() || params.with_issued_at || params.with_not_before {
+            #[cfg(feature = "test-vectors")]
+            let now = params.now.map(|d| d.as_secs()).unwrap_or_else(now);
+            #[cfg(not(feature = "test-vectors"))]
+            let now = now();
+
+            if let Some(expiry) = params.expiry {
+                let expiry = now + expiry.as_secs();
+                payload.push((Value::Integer(CWT_CLAIM_EXPIRES_AT.into()), expiry.into()));
             }
+            if params.with_not_before {
+                let nbf = now - params.leeway.as_secs();
+                payload.push((Value::Integer(CWT_CLAIM_NOT_BEFORE.into()), nbf.into()));
+            }
+            if params.with_issued_at {
+                let iat = now;
+                payload.push((Value::Integer(CWT_CLAIM_ISSUED_AT.into()), iat.into()));
+            }
+        }
 
-            payload.push((Value::Integer(CWT_CLAIM_KEY_CONFIRMATION.into()), Value::serialized(&params.holder_confirmation_key)?));
+        payload.push((Value::Integer(CWT_CLAIM_KEY_CONFIRMATION.into()), params.holder_confirmation_key.to_cbor_value()?));
 
-            Value::Map(payload.clone())
-        } else {
-            Value::Bytes(vec![])
-        };
+        if let Some(payload_claims) = to_be_redacted_payload.map(Value::into_map).transpose()? {
+            for (k, v) in payload_claims {
+                payload.push((k, v));
+            }
+        }
+
+        let payload = Value::Map(payload);
 
         let unprotected = unprotected_builder.build();
 
@@ -177,19 +183,21 @@ pub trait Issuer {
 
 #[cfg(test)]
 mod tests {
-    use super::{claims::CustomTokenClaims, test_utils::Ed25519IssuerClaims};
+    use super::{claims::CustomTokenClaims, test_utils::Ed25519Issuer};
     use crate::{
         Issuer, IssuerParams,
+        coset::CoseSign1,
         spec::{
             blinded_claims::{Salted, SaltedClaim, SaltedElement},
             sd,
         },
     };
-    use ciborium::value::Error;
     use ciborium::{Value, cbor};
     use digest::Digest as _;
+    use esdicawt::coset::TaggedCborSerializable;
     use esdicawt_spec::{ClaimName, CwtAny, NoClaims, Select, SelectExt, issuance::SdCwtIssuedTagged};
     use rand_core::SeedableRng;
+    use std::collections::HashMap;
 
     wasm_bindgen_test::wasm_bindgen_test_configure!(run_in_browser);
 
@@ -197,11 +205,14 @@ mod tests {
     #[wasm_bindgen_test::wasm_bindgen_test]
     fn should_generate_sd_cwt() {
         let payload = CustomTokenClaims { name: Some("Alice Smith".into()) };
-        let mut sd_cwt = issue(payload);
+        let mut sd_cwt = issue(Some(payload));
 
-        let cwt_cbor = sd_cwt.to_cbor_bytes().unwrap();
-        let sd_cwt_2 = SdCwtIssuedTagged::<CustomTokenClaims, sha2::Sha256>::from_cbor_bytes(&cwt_cbor).unwrap();
+        let sd_cwt_bytes = sd_cwt.to_cbor_bytes().unwrap();
+        let sd_cwt_2 = SdCwtIssuedTagged::<CustomTokenClaims, sha2::Sha256>::from_cbor_bytes(&sd_cwt_bytes).unwrap();
         assert_eq!(sd_cwt.to_cbor_bytes().unwrap(), sd_cwt_2.to_cbor_bytes().unwrap());
+
+        // is a valid CWT
+        CoseSign1::from_tagged_slice(&sd_cwt_bytes).unwrap();
 
         // should have 'redacted_claim_keys' in the payload
         let mut payload = sd_cwt.0.payload.clone();
@@ -229,7 +240,7 @@ mod tests {
     fn should_issue_complex_types() {
         let verify_issuance = |value: Value, expected: (Option<ClaimName>, Result<Value, ciborium::value::Error>)| {
             let payload = cbor!({ "___claim" => value }).unwrap().select_all().unwrap();
-            let mut sd_cwt = issue(payload);
+            let mut sd_cwt = issue(Some(payload));
 
             let disclosable_claims = sd_cwt.0.disclosures_mut().iter().map(|d| d.unwrap()).collect::<Vec<_>>();
 
@@ -273,6 +284,7 @@ mod tests {
             pub name: Option<String>,
             pub age: Option<u64>,
             pub numbers: Vec<u64>,
+            pub inner: HashMap<String, String>,
         }
 
         impl<'de> serde::Deserialize<'de> for Model {
@@ -292,6 +304,13 @@ mod tests {
                             // filter out tags
                             let numbers = numbers.iter().filter_map(|n| n.as_integer()).map(|i| u64::try_from(i).unwrap()).collect::<Vec<_>>();
                             model.numbers.extend(numbers);
+                        }
+                        (Value::Text(label), Value::Map(inner)) if &label == "inner" => {
+                            model.inner = inner
+                                .into_iter()
+                                .filter(|(k, _)| !k.is_simple())
+                                .map(|(k, v)| (k.into_text().unwrap(), v.into_text().unwrap()))
+                                .collect();
                         }
                         _ => unreachable!(),
                     }
@@ -319,6 +338,10 @@ mod tests {
                     })
                     .collect();
                 map.push((Value::Text("numbers".into()), Value::Array(numbers)));
+
+                let inner = self.inner.clone().into_iter().map(|(k, v)| (sd!(Value::from(k)), v.into())).collect();
+                map.push((Value::Text("inner".into()), Value::Map(inner)));
+
                 Ok(Value::Map(map))
             }
         }
@@ -327,8 +350,9 @@ mod tests {
             name: Some("Alice Smith".to_string()),
             age: Some(42),
             numbers: vec![0, 1, 2],
+            inner: HashMap::from_iter([("a".into(), "b".into())]),
         };
-        let mut sd_cwt = issue(model);
+        let mut sd_cwt = issue(Some(model));
 
         let mut payload = sd_cwt.0.payload.clone();
         let payload = payload.to_value().unwrap().clone();
@@ -338,20 +362,23 @@ mod tests {
         assert_eq!(model.age, Some(42));
         assert!(model.name.is_none());
         assert_eq!(model.numbers, vec![0, 2]);
+        assert!(model.inner.is_empty());
 
         let disclosures = sd_cwt.0.disclosures_mut().iter().map(|d| d.unwrap()).collect::<Vec<_>>();
-        assert_eq!(disclosures.len(), 2);
+        assert_eq!(disclosures.len(), 3);
 
-        let d0 = disclosures.first().unwrap();
-        let Salted::Claim(SaltedClaim { name, value, .. }) = d0 else { unreachable!() };
-
+        let [d0, d1, d2] = disclosures.try_into().unwrap();
+        let Salted::Claim(SaltedClaim { name, value, .. }) = &d0 else { unreachable!() };
         // verify content of disclosure
-        assert_eq!(name, &ClaimName::Text("name".into()));
+        assert_eq!(*name, ClaimName::Text("name".into()));
         assert_eq!(value, &cbor!("Alice Smith").unwrap());
 
-        let d1 = disclosures.get(1).unwrap();
         let Salted::Element(SaltedElement { value, .. }) = d1 else { unreachable!() };
         assert_eq!(value, &cbor!(1).unwrap());
+
+        let Salted::Claim(SaltedClaim { name, value, .. }) = &d2 else { unreachable!() };
+        assert_eq!(*name, ClaimName::Text("a".into()));
+        assert_eq!(value, &cbor!("b").unwrap());
     }
 
     #[test]
@@ -364,7 +391,7 @@ mod tests {
         }
 
         impl Select for ModelPublic {
-            fn select(self) -> Result<Value, Error> {
+            fn select(self) -> Result<Value, ciborium::value::Error> {
                 self.select_none()
             }
         }
@@ -373,7 +400,7 @@ mod tests {
             name: Some("Alice".to_string()),
             age: Some(42),
         };
-        let mut sd_cwt = issue(model);
+        let mut sd_cwt = issue(Some(model));
 
         let mut payload = sd_cwt.0.payload.clone();
         let payload = payload.to_value().unwrap().clone();
@@ -387,12 +414,18 @@ mod tests {
         assert!(disclosures.next().is_none());
     }
 
-    fn issue<T: Select>(payload: T) -> SdCwtIssuedTagged<T, sha2::Sha256> {
+    #[test]
+    #[wasm_bindgen_test::wasm_bindgen_test]
+    fn should_support_empty_payload() {
+        issue(None::<Value>);
+    }
+
+    fn issue<T: Select>(payload: Option<T>) -> SdCwtIssuedTagged<T, sha2::Sha256> {
         let mut csprng = rand_chacha::ChaCha20Rng::from_entropy();
 
         let holder_signing_key = ed25519_dalek::SigningKey::generate(&mut csprng);
         let issuer_signing_key = ed25519_dalek::SigningKey::generate(&mut csprng);
-        let issuer = Ed25519IssuerClaims::new(issuer_signing_key);
+        let issuer = Ed25519Issuer::new(issuer_signing_key);
 
         issuer
             .issue_cwt(
@@ -400,7 +433,7 @@ mod tests {
                 IssuerParams {
                     protected_claims: None,
                     unprotected_claims: None,
-                    payload: Some(payload),
+                    payload,
                     issuer: "mimi://example.com/i/acme.io",
                     subject: Some("mimi://example.com/alice.smith"),
                     audience: Default::default(),
@@ -461,12 +494,12 @@ pub mod test_utils {
     use super::*;
     use esdicawt_spec::{EsdicawtSpecError, NoClaims, Select};
 
-    pub struct Ed25519IssuerClaims<T: Select> {
+    pub struct Ed25519Issuer<T: Select> {
         signing_key: ed25519_dalek::SigningKey,
         _marker: core::marker::PhantomData<T>,
     }
 
-    impl<T: Select> Issuer for Ed25519IssuerClaims<T> {
+    impl<T: Select> Issuer for Ed25519Issuer<T> {
         type Error = EsdicawtSpecError;
         type Signer = ed25519_dalek::SigningKey;
         type Hasher = sha2::Sha256;
@@ -504,12 +537,12 @@ pub mod test_utils {
         }
     }
 
-    pub struct P256IssuerClaims<T: Select> {
+    pub struct P256Issuer<T: Select> {
         signing_key: p256::ecdsa::SigningKey,
         _marker: core::marker::PhantomData<T>,
     }
 
-    impl<T: Select> Issuer for P256IssuerClaims<T> {
+    impl<T: Select> Issuer for P256Issuer<T> {
         type Error = EsdicawtSpecError;
         type Signer = p256::ecdsa::SigningKey;
         type Hasher = sha2::Sha256;

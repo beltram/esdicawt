@@ -2,6 +2,7 @@ use super::{ClaimName, CwtAny, Salt};
 use crate::{EsdicawtSpecResult, inlined_cbor::InlinedCbor};
 use ciborium::Value;
 use serde::ser::SerializeSeq;
+use std::{borrow::Cow, collections::HashMap};
 
 #[derive(Clone, Eq, PartialEq, serde_tuple::Serialize_tuple, serde_tuple::Deserialize_tuple)]
 pub struct SaltedElement<T: CwtAny> {
@@ -36,9 +37,9 @@ pub struct SaltedClaim<T: CwtAny> {
 impl<T: CwtAny> std::fmt::Debug for SaltedClaim<T> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         if let Ok(value) = Value::serialized(&self.value) {
-            write!(f, "{:?}: {value:?}", self.name)
+            write!(f, "{:?}: {value:?} ({:?})", self.name, self.salt)
         } else {
-            write!(f, "{:?}: ???", self.name)
+            write!(f, "{:?}: ??? ({:?})", self.name, self.salt)
         }
     }
 }
@@ -98,6 +99,13 @@ impl<T: CwtAny> Salted<T> {
         match self {
             Self::Claim(SaltedClaim { value, .. }) | Self::Element(SaltedElement { value, .. }) => Some(value),
             Self::Decoy(_) => None,
+        }
+    }
+
+    pub fn name(&self) -> Option<&ClaimName> {
+        match self {
+            Self::Claim(SaltedClaim { name, .. }) => Some(name),
+            _ => None,
         }
     }
 }
@@ -236,7 +244,7 @@ impl SaltedArray {
 
     /// Adds the item to the array and return a reference to it in order to hash it later
     pub fn push_ref<'a, T: CwtAny + 'a>(&'a mut self, salted: impl Into<SaltedRef<'a, T>>) -> EsdicawtSpecResult<Value> {
-        self.0.push(InlinedCbor::Value(Salted::from(salted.into()).upcast()?, None));
+        self.0.push(Salted::from(salted.into()).upcast()?.into());
         // SAFETY: we just inserted the item in the array so '.last_mut()' cannot fail
         Ok(self.0.last_mut().map(InlinedCbor::to_value).transpose()?.map(Value::serialized).transpose()?.unwrap())
     }
@@ -259,6 +267,19 @@ impl SaltedArray {
 
     pub fn iter_mut(&mut self) -> impl Iterator<Item = EsdicawtSpecResult<&mut Salted<Value>>> + '_ {
         self.0.iter_mut().map(InlinedCbor::to_value_mut)
+    }
+
+    pub fn digested<Hasher: digest::Digest>(&self) -> EsdicawtSpecResult<HashMap<Vec<u8>, Cow<Salted<Value>>>> {
+        self.as_iter()
+            .map(|d| match d {
+                Ok(salted) => {
+                    let bytes = salted.to_cbor_bytes()?;
+                    let digest = Hasher::digest(&bytes[..]).to_vec();
+                    Ok((digest, salted))
+                }
+                Err(e) => Err(e),
+            })
+            .collect::<EsdicawtSpecResult<HashMap<_, _>>>()
     }
 
     pub fn is_empty(&self) -> bool {

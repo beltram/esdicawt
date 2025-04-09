@@ -1,14 +1,14 @@
 pub mod error;
 pub mod params;
-mod time;
 mod walk;
 
 use crate::{
     VerifierParams,
+    time::verify_time_claims,
     verifier::error::{SdCwtVerifierError, SdCwtVerifierResult},
 };
 use ::time::OffsetDateTime;
-use ciborium::Value;
+use ciborium::{Value, value::Integer};
 use cose_key_confirmation::{KeyConfirmation, error::CoseKeyConfirmationError};
 use esdicawt_spec::{
     CWT_CLAIM_KEY_CONFIRMATION, CustomClaims, CwtAny, SdHashAlg, Select,
@@ -107,14 +107,15 @@ pub trait Verifier {
         // whole thing. We should at some point only clone the required parts
         let mut kbt = kbt.clone();
 
-        let kbt_value = Value::serialized(&kbt.0)?;
+        let kbt_value = kbt.0.to_cbor_value()?;
+
         let kbt_protected = kbt.0.protected.to_value_mut()?;
         let (sd_cwt, sd_cwt_bytes) = kbt_protected.kcwt.to_pair_mut()?;
         let key_confirmation = &sd_cwt.0.payload.to_value()?.cnf;
 
         let holder_confirmation_key: Self::HolderVerifier = key_confirmation.try_into()?;
 
-        let now = params.current_timestamp.unwrap_or_else(|| OffsetDateTime::now_utc().unix_timestamp());
+        let now = params.artificial_time.unwrap_or_else(|| OffsetDateTime::now_utc().unix_timestamp());
 
         // First the Verifier must validate the SD-KBT as described in Section 7.2 of [RFC8392].
         // verifying signature
@@ -134,7 +135,7 @@ pub trait Verifier {
 
         // verify time claims
         let kbt_payload = kbt.0.payload.to_value()?;
-        time::verify_time_claims(now, params.leeway, Some(kbt_payload.issued_at), kbt_payload.expiration, kbt_payload.not_before)?;
+        verify_time_claims(now, params.leeway, Some(kbt_payload.issued_at), kbt_payload.expiration, kbt_payload.not_before)?;
 
         // TODO: verify revocation status w/ Status List
 
@@ -151,7 +152,7 @@ pub trait Verifier {
         let sd_cwt_payload = sd_cwt.0.payload.to_value_mut()?;
 
         // verify time claims
-        time::verify_time_claims(
+        verify_time_claims(
             now,
             params.leeway,
             sd_cwt_payload.inner.issued_at,
@@ -184,11 +185,11 @@ pub trait Verifier {
             return Err(SdCwtVerifierError::DisclosureHashCollision);
         }
 
-        let mut payload = Value::serialized(&sd_cwt_payload)?;
+        let mut payload = sd_cwt_payload.to_cbor_value()?;
         walk::walk_payload(&mut payload, &mut disclosures)?;
 
         if let Some(map) = payload.as_map_mut() {
-            map.retain(|(k, _)| !matches!(k, Value::Integer(i) if i == &CWT_CLAIM_KEY_CONFIRMATION.into()));
+            map.retain(|(k, _)| !matches!(k, Value::Integer(i) if *i == Integer::from(CWT_CLAIM_KEY_CONFIRMATION)));
         }
 
         // TODO: this might fail if `Self::DisclosedClaims` does not support unknown claims (serde flatten etc..)
@@ -212,7 +213,7 @@ mod tests {
     use crate::{
         HolderParams, Issuer, IssuerParams, Presentation, Verifier, VerifierParams,
         holder::Holder,
-        test_utils::{Ed25519Holder, P256IssuerClaims},
+        test_utils::{Ed25519Holder, Ed25519Issuer},
         verifier::test_utils::HybridVerifier,
     };
     use ciborium::{Value, cbor};
@@ -266,25 +267,25 @@ mod tests {
     fn verify<T: Select>(payload: T) -> KbtCwtVerified<T> {
         let (issuer_signing_key, holder_signing_key, sd_kbt) = generate(payload);
         let verifier = HybridVerifier::<T> {
-            issuer_verifying_key: *issuer_signing_key.verifying_key(),
+            issuer_verifying_key: issuer_signing_key.verifying_key(),
             holder_verifying_key: holder_signing_key.verifying_key(),
             _marker: Default::default(),
         };
         let verifier_params = VerifierParams {
-            current_timestamp: None,
-            leeway: 0,
+            artificial_time: None,
+            leeway: Default::default(),
         };
         verifier.verify_sd_kbt(&sd_kbt, verifier_params).unwrap()
     }
 
     #[allow(clippy::type_complexity)]
-    fn generate<T: Select>(payload: T) -> (p256::ecdsa::SigningKey, ed25519_dalek::SigningKey, KbtCwtTagged<T, sha2::Sha256>) {
+    fn generate<T: Select>(payload: T) -> (ed25519_dalek::SigningKey, ed25519_dalek::SigningKey, KbtCwtTagged<T, sha2::Sha256>) {
         let mut csprng = rand_chacha::ChaCha20Rng::from_entropy();
 
-        let issuer_signing_key = p256::ecdsa::SigningKey::random(&mut csprng);
+        let issuer_signing_key = ed25519_dalek::SigningKey::generate(&mut csprng);
         let holder_signing_key = ed25519_dalek::SigningKey::generate(&mut csprng);
 
-        let issuer = P256IssuerClaims::new(issuer_signing_key.clone());
+        let issuer = Ed25519Issuer::new(issuer_signing_key.clone());
 
         let issue_params = IssuerParams {
             protected_claims: None,
@@ -304,7 +305,6 @@ mod tests {
             now: None,
         };
         let sd_cwt = issuer.issue_cwt(&mut csprng, issue_params).unwrap().to_cbor_bytes().unwrap();
-
         let holder = Ed25519Holder::new(holder_signing_key.clone());
         let presentation_params = HolderParams {
             presentation: Presentation::Full,
@@ -317,8 +317,8 @@ mod tests {
             extra_kbt_payload: None,
             now: None,
         };
-
-        let sd_kbt = holder.new_presentation(&sd_cwt, presentation_params).unwrap();
+        let sd_cwt = holder.verify_sd_cwt(&sd_cwt, Default::default(), &issuer_signing_key.verifying_key()).unwrap();
+        let sd_kbt = holder.new_presentation(sd_cwt, presentation_params).unwrap();
         (issuer_signing_key, holder_signing_key, sd_kbt)
     }
 
@@ -370,16 +370,17 @@ pub mod test_utils {
     use super::*;
     use esdicawt_spec::NoClaims;
 
+    // TODO: turn generic again
     pub struct HybridVerifier<DisclosedClaims: CustomClaims> {
-        pub issuer_verifying_key: p256::ecdsa::VerifyingKey,
+        pub issuer_verifying_key: ed25519_dalek::VerifyingKey,
         pub holder_verifying_key: ed25519_dalek::VerifyingKey,
         pub _marker: core::marker::PhantomData<DisclosedClaims>,
     }
 
     impl<T: Select> Verifier for HybridVerifier<T> {
         type Error = std::convert::Infallible;
-        type IssuerSignature = p256::ecdsa::Signature;
-        type IssuerVerifier = p256::ecdsa::VerifyingKey;
+        type IssuerSignature = ed25519_dalek::Signature;
+        type IssuerVerifier = ed25519_dalek::VerifyingKey;
         type HolderSignature = ed25519_dalek::Signature;
         type HolderVerifier = ed25519_dalek::VerifyingKey;
         type Hasher = sha2::Sha256;
@@ -391,7 +392,7 @@ pub mod test_utils {
         type KbtPayloadClaims = NoClaims;
 
         fn deserialize_issuer_signature(&self, bytes: &[u8]) -> Result<Self::IssuerSignature, Self::Error> {
-            Ok(p256::ecdsa::Signature::try_from(bytes).unwrap())
+            Ok(ed25519_dalek::Signature::try_from(bytes).unwrap())
         }
 
         fn deserialize_holder_signature(&self, bytes: &[u8]) -> Result<Self::HolderSignature, Self::Error> {

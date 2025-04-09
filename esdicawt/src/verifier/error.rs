@@ -1,3 +1,5 @@
+use crate::time::CwtTimeError;
+
 pub type SdCwtVerifierResult<T, CustomError> = Result<T, SdCwtVerifierError<CustomError>>;
 
 #[derive(Debug, thiserror::Error)]
@@ -16,6 +18,8 @@ pub enum SdCwtVerifierError<CustomError: Send + Sync> {
     SpecError(#[from] esdicawt_spec::EsdicawtSpecError),
     #[error(transparent)]
     KeyConfirmationError(#[from] cose_key_confirmation::error::CoseKeyConfirmationError),
+    #[error(transparent)]
+    TimeError(#[from] CwtTimeError),
     #[error("The type of Key Confirmation in the SD-CWT is not supported")]
     UnsupportedKeyConfirmation,
     #[error("The Key Confirmation in the SD-KBT is not the expected one")]

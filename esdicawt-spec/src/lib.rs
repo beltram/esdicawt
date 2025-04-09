@@ -235,7 +235,6 @@ impl<'de> serde::Deserialize<'de> for ClaimName {
                 Value::Integer(i) => Self::TaggedInteger(tag, i.try_into().map_err(D::Error::custom)?),
                 Value::Text(s) => Self::TaggedText(tag, s),
                 _ => {
-                    println!("!!! {tag:?} => {v:?}");
                     return Err(D::Error::custom("Only String, integers in tags at the root of a CWT payload"));
                 }
             },
@@ -300,10 +299,16 @@ impl<'de> serde::Deserialize<'de> for NoClaims {
     }
 }
 
-#[derive(Debug, Clone, Copy, Eq, PartialEq, serde::Serialize, serde::Deserialize)]
+#[derive(Clone, Copy, Eq, PartialEq, serde::Serialize, serde::Deserialize)]
 #[repr(transparent)]
 #[serde(transparent)]
 pub struct Salt(#[serde(with = "serde_bytes")] pub [u8; Salt::SIZE]);
+
+impl std::fmt::Debug for Salt {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{:x?}", self.0)
+    }
+}
 
 impl Salt {
     pub const SIZE: usize = 16;
