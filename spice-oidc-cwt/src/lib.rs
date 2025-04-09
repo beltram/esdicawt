@@ -732,10 +732,13 @@ mod tests {
     #[test]
     #[wasm_bindgen_test::wasm_bindgen_test]
     fn can_issue_and_present_oidc_claim_token() {
-        let issuer = Ed25519Issuer::new(ed25519_dalek::SigningKey::generate(&mut rand::thread_rng()));
-        let alice_holder = Ed25519Holder::new(ed25519_dalek::SigningKey::generate(&mut rand::thread_rng()));
+        let mut rng = rand::thread_rng();
+        let issuer_signing_key = ed25519_dalek::SigningKey::generate(&mut rng);
+        let issuer = Ed25519Issuer::new(issuer_signing_key.clone());
+        let holder_signing_key = ed25519_dalek::SigningKey::generate(&mut rng);
+        let alice_holder = Ed25519Holder::new(holder_signing_key);
 
-        let _bob_holder = Ed25519Holder::new(ed25519_dalek::SigningKey::generate(&mut rand::thread_rng()));
+        let _bob_holder = Ed25519Holder::new(ed25519_dalek::SigningKey::generate(&mut rng));
 
         let alice = get_alice();
         let alice_subject = alice.preferred_username.clone().unwrap();
@@ -759,9 +762,13 @@ mod tests {
                      || *i == CwtOidcLabel::Nickname
                      || *i == CwtOidcLabel::PreferredUsername)
         }));
+
+        let alice_sd_cwt = alice_sd_cwt.to_cbor_bytes().unwrap();
+        let alice_sd_cwt = alice_holder.verify_sd_cwt(&alice_sd_cwt, Default::default(), &issuer_signing_key.verifying_key()).unwrap();
+
         let mut alice_kbt = alice_holder
             .new_presentation(
-                &alice_sd_cwt.to_cbor_bytes().unwrap(),
+                alice_sd_cwt,
                 esdicawt::HolderParams {
                     presentation,
                     audience: "bob",
@@ -893,23 +900,33 @@ mod ed25519 {
 
     pub struct Ed25519Holder {
         signing_key: ed25519_dalek::SigningKey,
+        verifying_key: ed25519_dalek::VerifyingKey,
     }
 
     impl Holder for Ed25519Holder {
         type Error = std::convert::Infallible;
         type Signer = ed25519_dalek::SigningKey;
-        type Signature = ed25519_dalek::Signature;
-        type Hasher = sha2::Sha256;
 
+        type Signature = ed25519_dalek::Signature;
+        type Verifier = ed25519_dalek::VerifyingKey;
+
+        type IssuerSignature = ed25519_dalek::Signature;
+        type IssuerVerifier = ed25519_dalek::VerifyingKey;
+
+        type Hasher = sha2::Sha256;
         type IssuerProtectedClaims = NoClaims;
         type IssuerUnprotectedClaims = NoClaims;
         type IssuerPayloadClaims = SpiceOidcClaims;
         type KbtUnprotectedClaims = NoClaims;
         type KbtProtectedClaims = NoClaims;
+
         type KbtPayloadClaims = NoClaims;
 
         fn new(signing_key: Self::Signer) -> Self {
-            Self { signing_key }
+            Self {
+                verifying_key: signing_key.verifying_key(),
+                signing_key,
+            }
         }
 
         fn signer(&self) -> &Self::Signer {
@@ -920,12 +937,20 @@ mod ed25519 {
             coset::iana::Algorithm::EdDSA
         }
 
-        fn hash_algorithm(&self) -> SdHashAlg {
-            SdHashAlg::Sha256
-        }
-
         fn serialize_signature(&self, signature: &ed25519_dalek::Signature) -> Result<Vec<u8>, Self::Error> {
             Ok(ed25519_dalek::Signature::to_bytes(signature).into())
+        }
+
+        fn supported_hash_alg(&self) -> &[SdHashAlg] {
+            &[SdHashAlg::Sha256]
+        }
+
+        fn verifier(&self) -> &Self::Verifier {
+            &self.verifying_key
+        }
+
+        fn deserialize_issuer_signature(&self, bytes: &[u8]) -> Result<Self::IssuerSignature, Self::Error> {
+            Ok(ed25519_dalek::Signature::try_from(bytes).unwrap())
         }
     }
 }

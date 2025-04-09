@@ -1,3 +1,4 @@
+use crate::SdCwtHolderValidationError;
 use esdicawt_spec::{EsdicawtSpecError, reexports::coset};
 
 pub type SdCwtHolderResult<T, CustomError> = Result<T, SdCwtHolderError<CustomError>>;
@@ -21,6 +22,12 @@ pub enum SdCwtHolderError<CustomError: Send + Sync> {
     IntError(#[from] core::num::TryFromIntError),
     #[error(transparent)]
     SpecError(#[from] EsdicawtSpecError),
+    #[error(transparent)]
+    TimeError(#[from] crate::time::CwtTimeError),
+    #[error(transparent)]
+    KeyConfirmationError(#[from] cose_key_confirmation::error::CoseKeyConfirmationError),
+    #[error(transparent)]
+    ValidationError(#[from] SdCwtHolderValidationError<CustomError>),
     #[error("The issuer is not using an algorithm IANA registered")]
     UnregisteredAlgorithm,
     #[error("This hash algorithm is not supported")]

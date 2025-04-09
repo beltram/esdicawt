@@ -1,6 +1,7 @@
 use cose_key_confirmation::KeyConfirmation;
 use esdicawt_spec::{CustomClaims, NoClaims, Select};
 
+#[derive(Debug, Clone)]
 pub struct IssuerParams<'a, PayloadClaims: Select, ProtectedClaims: CustomClaims = NoClaims, UnprotectedClaims: CustomClaims = NoClaims> {
     /// Extra claims in the protected header of the sd-cwt
     pub protected_claims: Option<ProtectedClaims>,

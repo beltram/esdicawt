@@ -1,34 +1,34 @@
 #![doc = include_str!("../../README.md")]
 
-pub use {
-    cose_key_confirmation::*,
-    esdicawt_spec as spec,
-    holder::{
-        Holder,
-        error::{SdCwtHolderError, SdCwtHolderResult},
-        params::{CborPath, HolderParams, Presentation},
-    },
-    issuer::{
-        Issuer,
-        error::{SdCwtIssuerError, SdCwtIssuerResult},
-        params::IssuerParams,
-    },
-    lookup::*,
-    read::{EsdicawtReadError, EsdicawtReadResult, SdCwtRead},
-    signature::Keypair,
-    spec::reexports::*,
-    spec::*,
-    verifier::{
-        Verifier,
-        error::{SdCwtVerifierError, SdCwtVerifierResult},
-        params::VerifierParams,
-    },
+pub use cose_key_confirmation::*;
+pub use esdicawt_spec as spec;
+pub use holder::{
+    Holder,
+    error::{SdCwtHolderError, SdCwtHolderResult},
+    params::{CborPath, HolderParams, Presentation},
+    validation::{HolderValidationParams, SdCwtHolderValidationError},
+};
+pub use issuer::{
+    Issuer,
+    error::{SdCwtIssuerError, SdCwtIssuerResult},
+    params::IssuerParams,
+};
+pub use lookup::*;
+pub use read::{EsdicawtReadError, EsdicawtReadResult, SdCwtRead};
+pub use signature::Keypair;
+pub use spec::{reexports::*, *};
+pub use time::CwtTimeError;
+pub use verifier::{
+    Verifier,
+    error::{SdCwtVerifierError, SdCwtVerifierResult},
+    params::VerifierParams,
 };
 
 mod holder;
 mod issuer;
 mod lookup;
 mod read;
+pub(crate) mod time;
 mod verifier;
 
 #[cfg(feature = "test-utils")]

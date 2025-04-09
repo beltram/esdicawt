@@ -199,15 +199,15 @@ mod tests {
     use crate::{
         Holder, HolderParams, Issuer, IssuerParams, Presentation,
         key_binding::KbtCwtTagged,
-        test_utils::{Ed25519Holder, P256IssuerClaims},
+        test_utils::{Ed25519Holder, Ed25519Issuer},
     };
 
     #[test]
     fn can_query_top_level_claim() {
         let test = |payload: Result<Value, ciborium::value::Error>, a_redacted: bool| {
             let payload = payload.unwrap().select_none().unwrap();
-            let (mut sd_cwt, holder_signing_key) = generate(payload);
-            let mut kbt = present::<Value>(&sd_cwt.to_cbor_bytes().unwrap()[..], holder_signing_key);
+            let (mut sd_cwt, holder_signing_key, issuer_verifying_key) = generate(payload);
+            let mut kbt = present::<Value>(&sd_cwt.to_cbor_bytes().unwrap()[..], holder_signing_key, issuer_verifying_key);
             assert_eq!(sd_cwt.query(vec!["a".into()].into()).unwrap(), Some("b".into()));
             assert_eq!(sd_cwt.query(vec!["c".into()].into()).unwrap(), Some("d".into()));
             assert_eq!(kbt.query(vec!["a".into()].into()).unwrap(), Some("b".into()));
@@ -235,8 +235,8 @@ mod tests {
     fn can_query_lower_level_claim() {
         let test = |payload: Result<Value, ciborium::value::Error>| {
             let payload = payload.unwrap().select_none().unwrap();
-            let (mut sd_cwt, holder_signing_key) = generate(payload);
-            let mut kbt = present::<Value>(&sd_cwt.to_cbor_bytes().unwrap()[..], holder_signing_key);
+            let (mut sd_cwt, holder_signing_key, issuer_verifying_key) = generate(payload);
+            let mut kbt = present::<Value>(&sd_cwt.to_cbor_bytes().unwrap()[..], holder_signing_key, issuer_verifying_key);
             assert_eq!(sd_cwt.query(vec!["a".into(), "b".into()].into()).unwrap(), Some("c".into()));
             assert_eq!(kbt.query(vec!["a".into(), "b".into()].into()).unwrap(), Some("c".into()));
         };
@@ -249,8 +249,8 @@ mod tests {
     fn can_query_top_level_array_index() {
         let test = |payload: Result<Value, ciborium::value::Error>| {
             let payload = payload.unwrap().select_none().unwrap();
-            let (mut sd_cwt, holder_signing_key) = generate(payload);
-            let mut kbt = present::<Value>(&sd_cwt.to_cbor_bytes().unwrap()[..], holder_signing_key);
+            let (mut sd_cwt, holder_signing_key, issuer_verifying_key) = generate(payload);
+            let mut kbt = present::<Value>(&sd_cwt.to_cbor_bytes().unwrap()[..], holder_signing_key, issuer_verifying_key);
             assert_eq!(sd_cwt.query(vec!["a".into(), 2usize.into()].into()).unwrap(), Some("d".into()));
             assert_eq!(kbt.query(vec!["a".into(), 2usize.into()].into()).unwrap(), Some("d".into()));
         };
@@ -263,8 +263,8 @@ mod tests {
     fn can_query_inside_array_index() {
         let test = |payload: Result<Value, ciborium::value::Error>| {
             let payload = payload.unwrap().select_none().unwrap();
-            let (mut sd_cwt, holder_signing_key) = generate(payload);
-            let mut kbt = present::<Value>(&sd_cwt.to_cbor_bytes().unwrap()[..], holder_signing_key);
+            let (mut sd_cwt, holder_signing_key, issuer_verifying_key) = generate(payload);
+            let mut kbt = present::<Value>(&sd_cwt.to_cbor_bytes().unwrap()[..], holder_signing_key, issuer_verifying_key);
             assert_eq!(sd_cwt.query(vec!["a".into(), 1usize.into(), "b".into()].into()).unwrap(), Some("d".into()));
             assert_eq!(kbt.query(vec!["a".into(), 1usize.into(), "b".into()].into()).unwrap(), Some("d".into()));
         };
@@ -273,13 +273,13 @@ mod tests {
         test(cbor!({"a" => [{"b" => "c"}, {sd!("b") => "d", "e" => "f"}], "b" => 1234})); // assert redacted
     }
 
-    fn generate<T: Select>(payload: T) -> (SdCwtIssuedTagged<T, sha2::Sha256>, ed25519_dalek::SigningKey) {
+    fn generate<T: Select>(payload: T) -> (SdCwtIssuedTagged<T, sha2::Sha256>, ed25519_dalek::SigningKey, ed25519_dalek::VerifyingKey) {
         let mut csprng = rand_chacha::ChaCha20Rng::from_entropy();
 
-        let issuer_signing_key = p256::ecdsa::SigningKey::random(&mut csprng);
+        let issuer_signing_key = ed25519_dalek::SigningKey::generate(&mut csprng);
         let holder_signing_key = ed25519_dalek::SigningKey::generate(&mut csprng);
 
-        let issuer = P256IssuerClaims::new(issuer_signing_key);
+        let issuer = Ed25519Issuer::new(issuer_signing_key.clone());
 
         let issue_params = IssuerParams {
             protected_claims: None,
@@ -299,10 +299,10 @@ mod tests {
             now: None,
         };
         let sd_cwt = issuer.issue_cwt(&mut csprng, issue_params).unwrap();
-        (sd_cwt, holder_signing_key)
+        (sd_cwt, holder_signing_key, *issuer_signing_key.as_ref())
     }
 
-    fn present<T: Select>(sd_cwt: &[u8], holder_signing_key: ed25519_dalek::SigningKey) -> KbtCwtTagged<T, sha2::Sha256> {
+    fn present<T: Select>(sd_cwt: &[u8], holder_signing_key: ed25519_dalek::SigningKey, issuer_verifying_key: ed25519_dalek::VerifyingKey) -> KbtCwtTagged<T, sha2::Sha256> {
         let holder = Ed25519Holder::new(holder_signing_key);
 
         let holder_params = HolderParams {
@@ -316,6 +316,7 @@ mod tests {
             extra_kbt_unprotected: None,
             extra_kbt_payload: None,
         };
+        let sd_cwt = holder.verify_sd_cwt(sd_cwt, Default::default(), &issuer_verifying_key).unwrap();
         holder.new_presentation(sd_cwt, holder_params).unwrap()
     }
 }
