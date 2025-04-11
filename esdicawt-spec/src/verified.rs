@@ -18,7 +18,7 @@ pub struct KbtCwtVerified<
     pub protected: KbtCwtProtectedVerified<IssuerPayloadClaims, IssuerProtectedClaims, IssuerUnprotectedClaims, KbtProtectedClaims>,
     pub unprotected: KbtUnprotected<KbtUnprotectedClaims>,
     pub payload: KbtPayload<KbtPayloadClaims>,
-    pub claimset: IssuerPayloadClaims,
+    pub claimset: Option<IssuerPayloadClaims>,
 }
 
 impl<

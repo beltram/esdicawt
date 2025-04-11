@@ -124,6 +124,14 @@ mod ed25519 {
         }
     }
 
+    impl TryFrom<&ed25519_dalek::SigningKey> for KeyConfirmation {
+        type Error = error::CoseKeyConfirmationError;
+
+        fn try_from(sk: &ed25519_dalek::SigningKey) -> Result<Self, Self::Error> {
+            (&sk.verifying_key()).try_into()
+        }
+    }
+
     /// Only when [KeyConfirmation] is a [KeyConfirmation::CoseKey]
     impl TryFrom<&KeyConfirmation> for ed25519_dalek::VerifyingKey {
         type Error = error::CoseKeyConfirmationError;
@@ -155,6 +163,14 @@ mod ec_p256 {
 
         fn try_from(vk: &p256::ecdsa::VerifyingKey) -> Result<Self, Self::Error> {
             Self::try_from(&p256::PublicKey::from(vk))
+        }
+    }
+
+    impl TryFrom<&p256::ecdsa::SigningKey> for KeyConfirmation {
+        type Error = error::CoseKeyConfirmationError;
+
+        fn try_from(sk: &p256::ecdsa::SigningKey) -> Result<Self, Self::Error> {
+            sk.as_ref().try_into()
         }
     }
 
@@ -197,6 +213,14 @@ mod ec_p384 {
 
         fn try_from(vk: &p384::ecdsa::VerifyingKey) -> Result<Self, Self::Error> {
             Self::try_from(&p384::PublicKey::from(vk))
+        }
+    }
+
+    impl TryFrom<&p384::ecdsa::SigningKey> for KeyConfirmation {
+        type Error = error::CoseKeyConfirmationError;
+
+        fn try_from(sk: &p384::ecdsa::SigningKey) -> Result<Self, Self::Error> {
+            sk.as_ref().try_into()
         }
     }
 

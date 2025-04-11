@@ -4,6 +4,16 @@ pub type SdCwtVerifierResult<T, CustomError> = Result<T, SdCwtVerifierError<Cust
 
 #[derive(Debug, thiserror::Error)]
 pub enum SdCwtVerifierError<CustomError: Send + Sync> {
+    #[error("Expected sub to be '{expected}' but was '{actual}'")]
+    SubMismatch { expected: String, actual: String },
+    #[error("Expected issuer to be '{expected}' but was '{actual}'")]
+    IssuerMismatch { expected: String, actual: String },
+    #[error("Expected audience to be '{expected}' but was '{actual}'")]
+    AudienceMismatch { expected: String, actual: String },
+    #[error("Expected SD-KBT audience to be '{expected}' but was '{actual}'")]
+    KbtAudienceMismatch { expected: String, actual: String },
+    #[error("Expected cnonce to be '{expected:x?}' but was '{actual:x?}'")]
+    CnonceMismatch { expected: Vec<u8>, actual: Vec<u8> },
     #[error("Signature verification error: {0}")]
     SignatureError(#[from] signature::Error),
     #[error(transparent)]
