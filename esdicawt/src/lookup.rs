@@ -296,7 +296,7 @@ mod tests {
             leeway: core::time::Duration::from_secs(1),
             key_location: "https://auth.proton.me/issuer.cwk",
             holder_confirmation_key: (&holder_signing_key.verifying_key()).try_into().unwrap(),
-            now: None,
+            artificial_time: None,
         };
         let sd_cwt = issuer.issue_cwt(&mut csprng, issue_params).unwrap();
         (sd_cwt, holder_signing_key, *issuer_signing_key.as_ref())

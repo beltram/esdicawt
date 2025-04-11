@@ -8,13 +8,13 @@ use crate::{
 };
 use ciborium::Value;
 use esdicawt_spec::{
-    COSE_SD_CLAIMS, CWT_CLAIM_AUDIENCE, CWT_CLAIM_CNONCE, CWT_CLAIM_CTI, CWT_CLAIM_EXPIRES_AT, CWT_CLAIM_ISSUED_AT, CWT_CLAIM_ISSUER, CWT_CLAIM_KEY_CONFIRMATION,
-    CWT_CLAIM_NOT_BEFORE, CWT_CLAIM_SD_ALG, CWT_CLAIM_SUBJECT, CWT_MEDIATYPE, CustomClaims, CwtAny, MEDIATYPE_SD_CWT, SdHashAlg, Select,
-    blinded_claims::SaltedArray,
-    issuance::SdCwtIssuedTagged,
-    reexports::coset::{
+    blinded_claims::SaltedArray, issuance::SdCwtIssuedTagged, reexports::coset::{
         TaggedCborSerializable, {self},
-    },
+    }, CustomClaims, CwtAny, SdHashAlg, Select, COSE_SD_CLAIMS,
+    CWT_CLAIM_AUDIENCE, CWT_CLAIM_CNONCE, CWT_CLAIM_CTI, CWT_CLAIM_EXPIRES_AT, CWT_CLAIM_ISSUED_AT, CWT_CLAIM_ISSUER, CWT_CLAIM_KEY_CONFIRMATION, CWT_CLAIM_NOT_BEFORE, CWT_CLAIM_SD_ALG,
+    CWT_CLAIM_SUBJECT,
+    CWT_MEDIATYPE,
+    MEDIATYPE_SD_CWT,
 };
 use signature::{Keypair, Signer};
 
@@ -136,7 +136,7 @@ pub trait Issuer {
 
         if params.expiry.is_some() || params.with_issued_at || params.with_not_before {
             #[cfg(feature = "test-vectors")]
-            let now = params.now.map(|d| d.as_secs()).unwrap_or_else(now);
+            let now = params.artificial_time.map(|d| d.as_secs()).unwrap_or_else(now);
             #[cfg(not(feature = "test-vectors"))]
             let now = now();
 
@@ -185,19 +185,21 @@ pub trait Issuer {
 mod tests {
     use super::{claims::CustomTokenClaims, test_utils::Ed25519Issuer};
     use crate::{
-        Issuer, IssuerParams,
-        coset::CoseSign1,
-        spec::{
+        coset, coset::CoseSign1, spec::{
             blinded_claims::{Salted, SaltedClaim, SaltedElement},
             sd,
         },
+        Issuer,
+        IssuerParams,
     };
-    use ciborium::{Value, cbor};
+    use ciborium::{cbor, Value};
+    use coset::iana::CwtClaimName;
     use digest::Digest as _;
     use esdicawt::coset::TaggedCborSerializable;
-    use esdicawt_spec::{ClaimName, CwtAny, NoClaims, Select, SelectExt, issuance::SdCwtIssuedTagged};
+    use esdicawt_spec::{issuance::SdCwtIssuedTagged, ClaimName, CwtAny, NoClaims, Select, SelectExt};
     use rand_core::SeedableRng;
     use std::collections::HashMap;
+    use esdicawt_spec::redacted_claims::RedactedClaimKeys;
 
     wasm_bindgen_test::wasm_bindgen_test_configure!(run_in_browser);
 
@@ -233,6 +235,54 @@ mod tests {
         // verify digest of disclosure in 'redacted_key_claims'
         let digest = sha2::Sha256::digest(d0.to_cbor_bytes().unwrap()).to_vec();
         assert_eq!(digest, rck_name.to_vec());
+    }
+
+    #[test]
+    #[wasm_bindgen_test::wasm_bindgen_test]
+    fn should_generate_valid_sd_cwt() {
+        let mut csprng = rand_chacha::ChaCha20Rng::from_entropy();
+
+        let holder_signing_key = ed25519_dalek::SigningKey::generate(&mut csprng);
+        let issuer_signing_key = ed25519_dalek::SigningKey::generate(&mut csprng);
+        let issuer = Ed25519Issuer::new(issuer_signing_key);
+
+        let params = IssuerParams {
+            protected_claims: None,
+            unprotected_claims: None,
+            payload: None::<Value>,
+            issuer: "mimi://example.com/i/acme.io",
+            subject: Some("mimi://example.com/alice.smith"),
+            audience: Some("mimi://example.com/r/party"),
+            cti: Some(b"cti"),
+            cnonce: Some(b"cnonce"),
+            expiry: Some(core::time::Duration::from_secs(90)),
+            with_not_before: true,
+            with_issued_at: true,
+            leeway: core::time::Duration::from_secs(1),
+            key_location: "https://auth.acme.io/issuer.cwk",
+            holder_confirmation_key: (&holder_signing_key.verifying_key()).try_into().unwrap(),
+            artificial_time: None,
+        };
+
+        let sd_cwt_bytes = issuer.issue_cwt(&mut csprng, params).unwrap().to_cbor_bytes().unwrap();
+        let raw_sd_cwt = CoseSign1::from_tagged_slice(&sd_cwt_bytes).unwrap();
+        let payload = Value::from_cbor_bytes(&raw_sd_cwt.payload.unwrap()).unwrap().into_map().unwrap();
+
+        for entry in payload {
+            match entry {
+                (Value::Integer(label), Value::Text(issuer)) if label == (CwtClaimName::Iss as i64).into() => assert_eq!(&issuer, "mimi://example.com/i/acme.io"),
+                (Value::Integer(label), Value::Text(sub)) if label == (CwtClaimName::Sub as i64).into() => assert_eq!(&sub, "mimi://example.com/alice.smith"),
+                (Value::Integer(label), Value::Text(aud)) if label == (CwtClaimName::Aud as i64).into() => assert_eq!(&aud, "mimi://example.com/r/party"),
+                (Value::Integer(label), Value::Integer(_)) if label == (CwtClaimName::Exp as i64).into() => {}
+                (Value::Integer(label), Value::Integer(_)) if label == (CwtClaimName::Iat as i64).into() => {}
+                (Value::Integer(label), Value::Integer(_)) if label == (CwtClaimName::Nbf as i64).into() => {}
+                (Value::Integer(label), Value::Bytes(cti)) if label == (CwtClaimName::Cti as i64).into() => assert_eq!(cti, b"cti"),
+                (Value::Integer(label), Value::Bytes(cnonce)) if label == (CwtClaimName::CNonce as i64).into() => assert_eq!(cnonce, b"cnonce"),
+                (Value::Integer(label), Value::Map(cnf)) if label == (CwtClaimName::Cnf as i64).into() => {},
+                (Value::Simple(label), Value::Bytes(rcks)) if label == RedactedClaimKeys::CWT_LABEL => {},
+                e => panic!("unexpected: {e:?}")
+            }
+        }
     }
 
     #[test]
@@ -445,7 +495,7 @@ mod tests {
                     leeway: core::time::Duration::from_secs(1),
                     key_location: "https://auth.acme.io/issuer.cwk",
                     holder_confirmation_key: (&holder_signing_key.verifying_key()).try_into().unwrap(),
-                    now: None,
+                    artificial_time: None,
                 },
             )
             .unwrap()
@@ -471,7 +521,7 @@ mod tests {
 #[cfg(any(test, feature = "test-utils"))]
 pub mod claims {
     use ciborium::Value;
-    use esdicawt_spec::{Select, sd};
+    use esdicawt_spec::{sd, Select};
 
     #[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
     pub(super) struct CustomTokenClaims {

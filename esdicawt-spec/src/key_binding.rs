@@ -25,7 +25,7 @@ pub struct KbtCwt<
     pub protected: InlinedCbor<KbtProtected<IssuerPayloadClaims, Hasher, IssuerProtectedClaims, IssuerUnprotectedClaims, ProtectedClaims>>,
     pub unprotected: KbtUnprotected<UnprotectedClaims>,
     pub payload: InlinedCbor<KbtPayload<PayloadClaims>>,
-    pub signature: Vec<u8>,
+    pub signature: serde_bytes::ByteBuf,
 }
 
 impl<
@@ -87,7 +87,7 @@ pub struct KbtPayload<Extra: CustomClaims> {
     pub not_before: Option<i64>,
     pub issued_at: i64,
     #[builder(default)]
-    pub cnonce: Option<Vec<u8>>,
+    pub cnonce: Option<serde_bytes::ByteBuf>,
     #[builder(default)]
     pub extra: Option<Extra>,
 }

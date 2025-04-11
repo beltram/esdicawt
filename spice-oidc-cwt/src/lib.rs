@@ -818,7 +818,7 @@ mod tests {
                     leeway: Duration::from_secs(1),
                     key_location: "",
                     holder_confirmation_key: holder_pk.try_into().unwrap(),
-                    now: None,
+                    artificial_time: None,
                     with_issued_at: false,
                 },
             )
