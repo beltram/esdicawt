@@ -12,7 +12,7 @@ impl<Extra: CustomClaims> serde::Serialize for SdUnprotected<Extra> {
         let mut extra = self
             .extra
             .as_ref()
-            .map(|extra| Value::serialized(extra).map_err(S::Error::custom))
+            .map(|extra| extra.to_cbor_value().map_err(S::Error::custom))
             .transpose()?
             .map(|v| v.into_map().map_err(|_| S::Error::custom("should have been a mapping")))
             .transpose()?;

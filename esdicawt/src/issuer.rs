@@ -85,7 +85,7 @@ pub trait Issuer {
             .key_id(params.key_location.as_bytes().into());
 
         if let Some(protected_claims) = params.protected_claims {
-            let protected_extra_claims = Value::serialized(&protected_claims)?.into_map()?;
+            let protected_extra_claims = protected_claims.to_cbor_value()?.into_map()?;
             for (k, v) in protected_extra_claims {
                 protected_builder = match k {
                     Value::Integer(i) => protected_builder.value(i.try_into()?, v),
@@ -108,7 +108,7 @@ pub trait Issuer {
         let mut unprotected_builder = coset::HeaderBuilder::new().value(COSE_SD_CLAIMS, salted_array.to_cbor_value()?);
 
         if let Some(unprotected_claims) = params.unprotected_claims {
-            let unprotected_extra_claims = Value::serialized(&unprotected_claims)?.into_map()?;
+            let unprotected_extra_claims = unprotected_claims.to_cbor_value()?.into_map()?;
             for (k, v) in unprotected_extra_claims {
                 unprotected_builder = match k {
                     Value::Integer(i) => unprotected_builder.value(i.try_into()?, v),

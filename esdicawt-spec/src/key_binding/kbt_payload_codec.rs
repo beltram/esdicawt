@@ -2,7 +2,6 @@ use super::KbtPayload;
 use crate::{
     CWT_CLAIM_AUDIENCE, CWT_CLAIM_CNONCE, CWT_CLAIM_EXPIRES_AT, CWT_CLAIM_ISSUED_AT, CWT_CLAIM_NOT_BEFORE, CustomClaims, KbtStandardClaim, key_binding::KbtPayloadBuilder,
 };
-use ciborium::Value;
 use serde::ser::SerializeMap;
 
 impl<Extra: CustomClaims> serde::Serialize for KbtPayload<Extra> {
@@ -27,7 +26,8 @@ impl<Extra: CustomClaims> serde::Serialize for KbtPayload<Extra> {
         }
 
         if let Some(extra) = &self.extra {
-            for (k, v) in Value::serialized(extra)
+            for (k, v) in extra
+                .to_cbor_value()
                 .map_err(S::Error::custom)?
                 .into_map()
                 .map_err(|_| S::Error::custom("should have been a mapping"))?

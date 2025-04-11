@@ -45,7 +45,7 @@ impl serde::Serialize for Payload {
         map.serialize_entry(&CwtLabel::MostRecentInspectionPassed, &self.most_recent_inspection_passed)?;
         map.serialize_entry(&CwtLabel::InspectorLicenseNumber, &self.inspector_license_number)?;
         map.serialize_entry(&CwtLabel::InspectionDates, &self.inspection_dates)?;
-        let location = Value::serialized(&self.inspection_location).map_err(S::Error::custom)?;
+        let location = self.inspection_location.to_cbor_value().map_err(S::Error::custom)?;
         map.serialize_entry(&CwtLabel::InspectionLocation, &location)?;
         map.end()
     }

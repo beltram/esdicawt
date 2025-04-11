@@ -115,7 +115,8 @@ fn serialize_sd_cwt_payload<Extra: CustomClaims, S: serde::Serializer>(p: &SdInn
     }
 
     if let Some(extra) = &p.extra {
-        for (k, v) in Value::serialized(extra)
+        for (k, v) in extra
+            .to_cbor_value()
             .map_err(S::Error::custom)?
             .into_map()
             .map_err(|_| S::Error::custom("should have been a mapping"))?

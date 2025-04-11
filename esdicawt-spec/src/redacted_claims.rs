@@ -1,6 +1,6 @@
 //! TODO: if teh RFC defines a finite subset of hash_alg, turn these into enums with stack allocated arrays of the exact size 💡
 
-use crate::{EsdicawtSpecResult, REDACTED_CLAIM_ELEMENT_TAG};
+use crate::{CwtAny, EsdicawtSpecResult, REDACTED_CLAIM_ELEMENT_TAG};
 use ciborium::Value;
 
 /// Digest of a claim in a CBOR Mapping represented by a [crate::blinded_claims::SaltedClaim] in the disclosures
@@ -59,7 +59,7 @@ impl RedactedClaimKeys {
 
     pub fn into_map_entry(self) -> EsdicawtSpecResult<(Value, Value)> {
         let k = Value::Simple(Self::CWT_LABEL);
-        let v = Value::serialized(&self)?;
+        let v = self.to_cbor_value()?;
         Ok((k, v))
     }
 }

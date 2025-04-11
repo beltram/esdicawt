@@ -12,7 +12,7 @@ pub struct SaltedElement<T: CwtAny> {
 
 impl<T: CwtAny> std::fmt::Debug for SaltedElement<T> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        if let Ok(value) = Value::serialized(&self.value) {
+        if let Ok(value) = self.value.to_cbor_value() {
             write!(f, "{value:?}")
         } else {
             write!(f, "???")
@@ -36,7 +36,7 @@ pub struct SaltedClaim<T: CwtAny> {
 
 impl<T: CwtAny> std::fmt::Debug for SaltedClaim<T> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        if let Ok(value) = Value::serialized(&self.value) {
+        if let Ok(value) = self.value.to_cbor_value() {
             write!(f, "{:?}: {value:?} ({:?})", self.name, self.salt)
         } else {
             write!(f, "{:?}: ??? ({:?})", self.name, self.salt)
@@ -77,12 +77,12 @@ impl<T: CwtAny> Salted<T> {
         Ok(match self {
             Self::Claim(SaltedClaim { salt, value, name }) => Salted::<Value>::Claim(SaltedClaim {
                 salt,
-                value: Value::serialized(&value)?,
+                value: value.to_cbor_value()?,
                 name,
             }),
             Self::Element(SaltedElement { salt, value }) => Salted::<Value>::Element(SaltedElement {
                 salt,
-                value: Value::serialized(&value)?,
+                value: value.to_cbor_value()?,
             }),
             Self::Decoy(salt) => Salted::<Value>::Decoy(salt),
         })

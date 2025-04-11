@@ -12,7 +12,7 @@ impl<Extra: CustomClaims> serde::Serialize for SdProtected<Extra> {
         let mut extra = self
             .extra
             .as_ref()
-            .map(|extra| Value::serialized(extra).map_err(S::Error::custom))
+            .map(|extra| extra.to_cbor_value().map_err(S::Error::custom))
             .transpose()?
             .map(|v| v.into_map().map_err(|_| S::Error::custom("should have been a mapping")))
             .transpose()?;
@@ -114,9 +114,10 @@ impl<Extra: CustomClaims> TryFrom<SdProtected<Extra>> for coset::Header {
         // map extra claims
         if let Some(claims) = sdp
             .extra
-            .map(|e| Value::serialized(&e))
+            .as_ref()
+            .map(Value::serialized)
             .transpose()?
-            .map(|v| v.into_map().map_err(|_| "should have been a maping"))
+            .map(|v| v.into_map().map_err(|_| "should have been a mapping"))
             .transpose()?
         {
             for (k, v) in claims {
