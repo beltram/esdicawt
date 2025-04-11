@@ -63,13 +63,13 @@ where
 {
     let value = match query.first() {
         Some(QueryElement::ClaimName(name)) => {
-            let name_key = Value::serialized(name)?;
+            let name_label = name.to_cbor_value()?;
             let Some(map) = payload.as_map() else {
                 return Ok(None);
             };
 
             // check the presence in the payload
-            match map.iter().find_map(|(k, v)| if k == &name_key { Some(v.clone()) } else { None }) {
+            match map.iter().find_map(|(k, v)| if k == &name_label { Some(v.clone()) } else { None }) {
                 Some(v) => v,
                 None => {
                     // if not in the payload, we will look in the salted array

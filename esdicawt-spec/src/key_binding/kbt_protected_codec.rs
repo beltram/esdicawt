@@ -4,7 +4,7 @@ use serde::ser::SerializeMap;
 
 use super::KbtProtected;
 use crate::{
-    COSE_HEADER_KCWT, CWT_CLAIM_ALG, CWT_MEDIATYPE, CustomClaims, MEDIATYPE_KB_CWT, Select, inlined_cbor::InlinedCbor, issuance::SdCwtIssuedTagged,
+    COSE_HEADER_KCWT, CWT_CLAIM_ALG, CWT_MEDIATYPE, CustomClaims, CwtAny, MEDIATYPE_KB_CWT, Select, inlined_cbor::InlinedCbor, issuance::SdCwtIssuedTagged,
     key_binding::KbtProtectedBuilder,
 };
 
@@ -16,7 +16,7 @@ impl<IssuerPayloadClaims: Select, Hasher: digest::Digest + Clone, IssuerProtecte
         let mut extra = self
             .extra
             .as_ref()
-            .map(|extra| Value::serialized(extra).map_err(S::Error::custom))
+            .map(|extra| extra.to_cbor_value().map_err(S::Error::custom))
             .transpose()?
             .map(|v| v.into_map().map_err(|_| S::Error::custom("should have been a mapping")))
             .transpose()?;
@@ -144,7 +144,7 @@ impl<IssuerPayloadClaims: Select, Hasher: digest::Digest + Clone, IssuerProtecte
         let builder = builder.value(CWT_MEDIATYPE, Value::Text(MEDIATYPE_KB_CWT.to_string()));
 
         // map sd_cwt_issued in kcwt
-        let builder = builder.value(COSE_HEADER_KCWT, Value::serialized(&kbtp.kcwt)?);
+        let builder = builder.value(COSE_HEADER_KCWT, kbtp.kcwt.to_cbor_value()?);
 
         Ok(builder.build())
     }

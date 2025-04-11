@@ -45,7 +45,7 @@ pub trait SelectExt: serde::Serialize {
     }
 
     fn select_none(&self) -> Result<Value, ciborium::value::Error> {
-        Value::serialized(&self)
+        Value::serialized(self)
     }
 }
 
