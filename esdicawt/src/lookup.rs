@@ -308,10 +308,11 @@ mod tests {
         let holder_params = HolderParams {
             presentation: Presentation::Full,
             audience: "",
+            cnonce: None,
             expiry: None,
             with_not_before: false,
             leeway: Default::default(),
-            now: None,
+            artificial_time: None,
             extra_kbt_protected: None,
             extra_kbt_unprotected: None,
             extra_kbt_payload: None,

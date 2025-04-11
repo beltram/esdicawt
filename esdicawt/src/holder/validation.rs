@@ -7,7 +7,7 @@ pub struct HolderValidationParams<'a> {
     pub expected_subject: Option<&'a str>,
     pub expected_issuer: Option<&'a str>,
     pub expected_audience: Option<&'a str>,
-    pub expected_cnonce: Option<&'a str>,
+    pub expected_cnonce: Option<&'a [u8]>,
     // to accommodate clock skews, applies to exp & nbf
     pub leeway: core::time::Duration,
     /// for testing
@@ -22,8 +22,8 @@ pub enum SdCwtHolderValidationError<CustomError: Send + Sync> {
     IssuerMismatch { expected: String, actual: String },
     #[error("Expected audience to be '{expected}' but was '{actual}'")]
     AudienceMismatch { expected: String, actual: String },
-    #[error("Expected cnonce to be '{expected}' but was '{actual}'")]
-    CnonceMismatch { expected: String, actual: String },
+    #[error("Expected cnonce to be '{expected:x?}' but was '{actual:x?}'")]
+    CnonceMismatch { expected: Vec<u8>, actual: Vec<u8> },
     #[error("Expected key confirmation mismatches")]
     VerifyingKeyMismatch,
     #[error("A disclosure in the payload is not mentioned in the unprotected header")]
@@ -136,6 +136,7 @@ mod tests {
         issuer_params.issuer = "iss-a";
         issuer_params.subject = Some("sub-a");
         issuer_params.audience = Some("aud-a");
+        issuer_params.cnonce = Some(b"cnonce-a");
 
         let sd_cwt = issuer.issue_cwt(&mut csprng, issuer_params.clone()).unwrap().to_cbor_bytes().unwrap();
 
@@ -143,7 +144,7 @@ mod tests {
             expected_subject: Some("sub-a"),
             expected_issuer: Some("iss-a"),
             expected_audience: Some("aud-a"),
-            expected_cnonce: Some("cnonce-a"),
+            expected_cnonce: Some(b"cnonce-a"),
             leeway: Default::default(),
             artificial_time: None,
         };
@@ -179,6 +180,16 @@ mod tests {
         ));
         // works with right expectation
         validation_params.expected_audience.replace("aud-a");
+        holder.verify_sd_cwt(&sd_cwt, validation_params.clone(), &issuer_verifying_key).unwrap();
+
+        // === cnonce mismatch ===
+        validation_params.expected_cnonce.replace(b"cnonce-b");
+        assert!(matches!(
+            holder.verify_sd_cwt(&sd_cwt, validation_params.clone(), &issuer_verifying_key),
+            Err(SdCwtHolderError::ValidationError(SdCwtHolderValidationError::CnonceMismatch { expected, actual })) if &expected == b"cnonce-b" && &actual == b"cnonce-a"
+        ));
+        // works with right expectation
+        validation_params.expected_cnonce.replace(b"cnonce-a");
         holder.verify_sd_cwt(&sd_cwt, validation_params.clone(), &issuer_verifying_key).unwrap();
 
         // === verifying key mismatch

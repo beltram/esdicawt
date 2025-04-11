@@ -7,6 +7,8 @@ pub struct HolderParams<'a, KbtProtectedClaims: CustomClaims = NoClaims, KbtUnpr
     pub presentation: Presentation,
     /// Subject, see https://www.rfc-editor.org/rfc/rfc8392.html#section-3.1.3
     pub audience: &'a str,
+    /// Client Nonce, see https://www.rfc-editor.org/rfc/rfc9200.html#section-5.3.1
+    pub cnonce: Option<&'a [u8]>,
     /// Expiry, see https://www.rfc-editor.org/rfc/rfc8392.html#section-3.1.4
     pub expiry: Option<core::time::Duration>,
     /// Whether to include a not_before, see https://www.rfc-editor.org/rfc/rfc8392.html#section-3.1.5
@@ -14,7 +16,7 @@ pub struct HolderParams<'a, KbtProtectedClaims: CustomClaims = NoClaims, KbtUnpr
     /// Dealing with clocks skew
     pub leeway: core::time::Duration,
     #[cfg(feature = "test-vectors")]
-    pub now: Option<core::time::Duration>,
+    pub artificial_time: Option<core::time::Duration>,
     pub extra_kbt_protected: Option<KbtProtectedClaims>,
     pub extra_kbt_unprotected: Option<KbtUnprotectedClaims>,
     pub extra_kbt_payload: Option<KbtPayloadClaims>,
