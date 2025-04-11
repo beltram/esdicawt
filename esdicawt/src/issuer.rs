@@ -196,9 +196,7 @@ mod tests {
     use coset::iana::CwtClaimName;
     use digest::Digest as _;
     use esdicawt::coset::TaggedCborSerializable;
-    use esdicawt_spec::redacted_claims::RedactedClaimKeys;
-    use esdicawt_spec::{ClaimName, CwtAny, NoClaims, Select, SelectExt, issuance::SdCwtIssuedTagged};
-    use rand_core::SeedableRng;
+    use esdicawt_spec::{ClaimName, CwtAny, NoClaims, Select, SelectExt, issuance::SdCwtIssuedTagged, redacted_claims::RedactedClaimKeys};
     use std::collections::HashMap;
 
     wasm_bindgen_test::wasm_bindgen_test_configure!(run_in_browser);
@@ -240,19 +238,17 @@ mod tests {
     #[test]
     #[wasm_bindgen_test::wasm_bindgen_test]
     fn should_generate_valid_sd_cwt() {
-        let mut csprng = rand_chacha::ChaCha20Rng::from_entropy();
-
-        let holder_signing_key = ed25519_dalek::SigningKey::generate(&mut csprng);
-        let issuer_signing_key = ed25519_dalek::SigningKey::generate(&mut csprng);
+        let holder_signing_key = ed25519_dalek::SigningKey::generate(&mut rand::thread_rng());
+        let issuer_signing_key = ed25519_dalek::SigningKey::generate(&mut rand::thread_rng());
         let issuer = Ed25519Issuer::new(issuer_signing_key);
 
         let params = IssuerParams {
             protected_claims: None,
             unprotected_claims: None,
             payload: None::<Value>,
-            issuer: "mimi://example.com/i/acme.io",
-            subject: Some("mimi://example.com/alice.smith"),
-            audience: Some("mimi://example.com/r/party"),
+            issuer: "https://example.com/i/acme.io",
+            subject: Some("https://example.com/alice.smith"),
+            audience: Some("https://example.com/r/party"),
             cti: Some(b"cti"),
             cnonce: Some(b"cnonce"),
             expiry: Some(core::time::Duration::from_secs(90)),
@@ -264,15 +260,15 @@ mod tests {
             artificial_time: None,
         };
 
-        let sd_cwt_bytes = issuer.issue_cwt(&mut csprng, params).unwrap().to_cbor_bytes().unwrap();
+        let sd_cwt_bytes = issuer.issue_cwt(&mut rand::thread_rng(), params).unwrap().to_cbor_bytes().unwrap();
         let raw_sd_cwt = CoseSign1::from_tagged_slice(&sd_cwt_bytes).unwrap();
         let payload = Value::from_cbor_bytes(&raw_sd_cwt.payload.unwrap()).unwrap().into_map().unwrap();
 
         for entry in payload {
             match entry {
-                (Value::Integer(label), Value::Text(issuer)) if label == (CwtClaimName::Iss as i64).into() => assert_eq!(&issuer, "mimi://example.com/i/acme.io"),
-                (Value::Integer(label), Value::Text(sub)) if label == (CwtClaimName::Sub as i64).into() => assert_eq!(&sub, "mimi://example.com/alice.smith"),
-                (Value::Integer(label), Value::Text(aud)) if label == (CwtClaimName::Aud as i64).into() => assert_eq!(&aud, "mimi://example.com/r/party"),
+                (Value::Integer(label), Value::Text(issuer)) if label == (CwtClaimName::Iss as i64).into() => assert_eq!(&issuer, "https://example.com/i/acme.io"),
+                (Value::Integer(label), Value::Text(sub)) if label == (CwtClaimName::Sub as i64).into() => assert_eq!(&sub, "https://example.com/alice.smith"),
+                (Value::Integer(label), Value::Text(aud)) if label == (CwtClaimName::Aud as i64).into() => assert_eq!(&aud, "https://example.com/r/party"),
                 (Value::Integer(label), Value::Integer(_)) if label == (CwtClaimName::Exp as i64).into() => {}
                 (Value::Integer(label), Value::Integer(_)) if label == (CwtClaimName::Iat as i64).into() => {}
                 (Value::Integer(label), Value::Integer(_)) if label == (CwtClaimName::Nbf as i64).into() => {}
@@ -471,21 +467,19 @@ mod tests {
     }
 
     fn issue<T: Select>(payload: Option<T>) -> SdCwtIssuedTagged<T, sha2::Sha256> {
-        let mut csprng = rand_chacha::ChaCha20Rng::from_entropy();
-
-        let holder_signing_key = ed25519_dalek::SigningKey::generate(&mut csprng);
-        let issuer_signing_key = ed25519_dalek::SigningKey::generate(&mut csprng);
+        let holder_signing_key = ed25519_dalek::SigningKey::generate(&mut rand::thread_rng());
+        let issuer_signing_key = ed25519_dalek::SigningKey::generate(&mut rand::thread_rng());
         let issuer = Ed25519Issuer::new(issuer_signing_key);
 
         issuer
             .issue_cwt(
-                &mut csprng,
+                &mut rand::thread_rng(),
                 IssuerParams {
                     protected_claims: None,
                     unprotected_claims: None,
                     payload,
-                    issuer: "mimi://example.com/i/acme.io",
-                    subject: Some("mimi://example.com/alice.smith"),
+                    issuer: "https://example.com/i/acme.io",
+                    subject: Some("https://example.com/alice.smith"),
                     audience: Default::default(),
                     cti: Default::default(),
                     cnonce: Default::default(),

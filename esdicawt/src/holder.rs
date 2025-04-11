@@ -138,7 +138,7 @@ pub trait Holder {
             expiration,
             not_before,
             issued_at,
-            cnonce: None,
+            cnonce: params.cnonce.map(|b| b.to_owned().into()),
             extra: params.extra_kbt_payload,
         };
 
@@ -269,7 +269,6 @@ mod tests {
         ClaimName, NoClaims,
         blinded_claims::{Salted, SaltedClaim},
     };
-    use rand_core::SeedableRng as _;
     use std::collections::HashMap;
 
     wasm_bindgen_test::wasm_bindgen_test_configure!(run_in_browser);
@@ -277,11 +276,9 @@ mod tests {
     #[test]
     #[wasm_bindgen_test::wasm_bindgen_test]
     fn should_succeed() {
-        let mut csprng = rand_chacha::ChaCha20Rng::from_entropy();
-
-        let holder_signing_key = ed25519_dalek::SigningKey::generate(&mut csprng);
+        let holder_signing_key = ed25519_dalek::SigningKey::generate(&mut rand::thread_rng());
         let holder_verifying_key = holder_signing_key.verifying_key();
-        let issuer_signing_key = ed25519_dalek::SigningKey::generate(&mut csprng);
+        let issuer_signing_key = ed25519_dalek::SigningKey::generate(&mut rand::thread_rng());
         let issuer = Ed25519Issuer::<CustomTokenClaims>::new(issuer_signing_key.clone());
 
         let payload = CustomTokenClaims {
@@ -294,8 +291,8 @@ mod tests {
             protected_claims: None,
             unprotected_claims: None,
             payload: Some(payload),
-            issuer: "mimi://example.com/i/acme.io",
-            subject: Some("mimi://example.com/u/alice.smith"),
+            issuer: "https://example.com/i/acme.io",
+            subject: Some("https://example.com/u/alice.smith"),
             audience: Default::default(),
             cti: Default::default(),
             cnonce: Default::default(),
@@ -307,7 +304,7 @@ mod tests {
             holder_confirmation_key: (&holder_verifying_key).try_into().unwrap(),
             artificial_time: None,
         };
-        let sd_cwt = issuer.issue_cwt(&mut csprng, issue_params).unwrap().to_cbor_bytes().unwrap();
+        let sd_cwt = issuer.issue_cwt(&mut rand::thread_rng(), issue_params).unwrap().to_cbor_bytes().unwrap();
 
         let holder = Ed25519Holder::<CustomTokenClaims>::new(holder_signing_key);
 
@@ -319,7 +316,7 @@ mod tests {
 
         let presentation_params = HolderParams {
             presentation,
-            audience: "mimi://example.com/r/alice-bob-group",
+            audience: "https://example.com/r/alice-bob-group",
             cnonce: None,
             expiry: Some(core::time::Duration::from_secs(90 * 24 * 3600)),
             with_not_before: false,
@@ -348,19 +345,17 @@ mod tests {
     #[test]
     #[wasm_bindgen_test::wasm_bindgen_test]
     fn should_generate_valid_sd_kbt() {
-        let mut csprng = rand_chacha::ChaCha20Rng::from_entropy();
-
-        let holder_signing_key = ed25519_dalek::SigningKey::generate(&mut csprng);
+        let holder_signing_key = ed25519_dalek::SigningKey::generate(&mut rand::thread_rng());
         let holder_verifying_key = holder_signing_key.verifying_key();
-        let issuer_signing_key = ed25519_dalek::SigningKey::generate(&mut csprng);
+        let issuer_signing_key = ed25519_dalek::SigningKey::generate(&mut rand::thread_rng());
         let issuer = Ed25519Issuer::<CustomTokenClaims>::new(issuer_signing_key.clone());
 
         let issue_params = IssuerParams {
             protected_claims: None,
             unprotected_claims: None,
             payload: None,
-            issuer: "mimi://example.com/i/acme.io",
-            subject: Some("mimi://example.com/u/alice.smith"),
+            issuer: "https://example.com/i/acme.io",
+            subject: Some("https://example.com/u/alice.smith"),
             audience: Default::default(),
             cti: Default::default(),
             cnonce: Default::default(),
@@ -372,12 +367,12 @@ mod tests {
             holder_confirmation_key: (&holder_verifying_key).try_into().unwrap(),
             artificial_time: None,
         };
-        let sd_cwt = issuer.issue_cwt(&mut csprng, issue_params).unwrap().to_cbor_bytes().unwrap();
+        let sd_cwt = issuer.issue_cwt(&mut rand::thread_rng(), issue_params).unwrap().to_cbor_bytes().unwrap();
 
         let holder = Ed25519Holder::<CustomTokenClaims>::new(holder_signing_key);
         let presentation_params = HolderParams {
             presentation: Presentation::Full,
-            audience: "mimi://example.com/r/alice-bob-group",
+            audience: "https://example.com/r/alice-bob-group",
             cnonce: Some(b"cnonce"),
             expiry: Some(core::time::Duration::from_secs(90 * 24 * 3600)),
             with_not_before: true,
@@ -394,7 +389,7 @@ mod tests {
 
         for entry in payload {
             match entry {
-                (Value::Integer(label), Value::Text(aud)) if label == (CwtClaimName::Aud as i64).into() => assert_eq!(&aud, "mimi://example.com/r/alice-bob-group"),
+                (Value::Integer(label), Value::Text(aud)) if label == (CwtClaimName::Aud as i64).into() => assert_eq!(&aud, "https://example.com/r/alice-bob-group"),
                 (Value::Integer(label), Value::Integer(_)) if label == (CwtClaimName::Exp as i64).into() => {}
                 (Value::Integer(label), Value::Integer(_)) if label == (CwtClaimName::Iat as i64).into() => {}
                 (Value::Integer(label), Value::Integer(_)) if label == (CwtClaimName::Nbf as i64).into() => {}

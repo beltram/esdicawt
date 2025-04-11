@@ -43,18 +43,25 @@ pub mod ed25519 {
     /// See https://datatracker.ietf.org/doc/html/rfc8152#section-8.2
     impl From<&ed25519_dalek::VerifyingKey> for CoseKey {
         fn from(pk: &ed25519_dalek::VerifyingKey) -> Self {
-            let key = coset::CoseKeyBuilder::new_okp_key()
-                .algorithm(iana::Algorithm::EdDSA)
-                .param(iana::OkpKeyParameter::X.to_i64(), ciborium::Value::Bytes(pk.as_bytes().into()))
-                .param(iana::OkpKeyParameter::Crv.to_i64(), ciborium::Value::Integer(iana::EllipticCurve::Ed25519.to_i64().into()))
-                .build();
-            Self(key)
+            Self(
+                coset::CoseKeyBuilder::new_okp_key()
+                    .algorithm(iana::Algorithm::EdDSA)
+                    .param(iana::OkpKeyParameter::X.to_i64(), ciborium::Value::Bytes(pk.as_bytes().into()))
+                    .param(iana::OkpKeyParameter::Crv.to_i64(), ciborium::Value::Integer(iana::EllipticCurve::Ed25519.to_i64().into()))
+                    .build(),
+            )
         }
     }
 
     impl From<ed25519_dalek::VerifyingKey> for CoseKey {
         fn from(pk: ed25519_dalek::VerifyingKey) -> Self {
             (&pk).into()
+        }
+    }
+
+    impl From<&ed25519_dalek::SigningKey> for CoseKey {
+        fn from(sk: &ed25519_dalek::SigningKey) -> Self {
+            sk.verifying_key().into()
         }
     }
 
@@ -152,6 +159,14 @@ pub mod ec_p256 {
 
         fn try_from(vk: p256::ecdsa::VerifyingKey) -> Result<Self, Self::Error> {
             (&vk).try_into()
+        }
+    }
+
+    impl TryFrom<&p256::ecdsa::SigningKey> for CoseKey {
+        type Error = CoseKeyError;
+
+        fn try_from(sk: &p256::ecdsa::SigningKey) -> Result<Self, Self::Error> {
+            sk.as_ref().try_into()
         }
     }
 
@@ -282,6 +297,14 @@ pub mod ec_p384 {
 
         fn try_from(vk: p384::ecdsa::VerifyingKey) -> Result<Self, Self::Error> {
             (&vk).try_into()
+        }
+    }
+
+    impl TryFrom<&p384::ecdsa::SigningKey> for CoseKey {
+        type Error = CoseKeyError;
+
+        fn try_from(sk: &p384::ecdsa::SigningKey) -> Result<Self, Self::Error> {
+            sk.as_ref().try_into()
         }
     }
 

@@ -82,7 +82,9 @@ impl<'de, Extra: CustomClaims> serde::Deserialize<'de> for KbtPayload<Extra> {
                                         sd_builder.issued_at(int);
                                     }
                                     KbtStandardClaim::Cnonce => {
-                                        let cnonce: Vec<u8> = v.deserialized().map_err(|value| A::Error::custom(format!("cnonce is not bstr: {value:?}")))?;
+                                        let cnonce = v
+                                            .deserialized::<serde_bytes::ByteBuf>()
+                                            .map_err(|value| A::Error::custom(format!("cnonce is not bstr: {value:?}")))?;
                                         sd_builder.cnonce(cnonce);
                                     }
                                 }
