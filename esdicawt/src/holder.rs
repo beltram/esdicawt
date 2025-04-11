@@ -295,7 +295,7 @@ mod tests {
             with_issued_at: false,
             leeway: core::time::Duration::from_secs(1),
             holder_confirmation_key: (&holder_verifying_key).try_into().unwrap(),
-            now: None,
+            artificial_time: None,
         };
         let sd_cwt = issuer.issue_cwt(&mut csprng, issue_params).unwrap().to_cbor_bytes().unwrap();
 

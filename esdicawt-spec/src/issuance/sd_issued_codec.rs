@@ -61,7 +61,7 @@ impl<'de, PayloadClaims: Select, Hasher: digest::Digest + Clone, ProtectedClaims
                             let bytes: serde_bytes::ByteBuf = element
                                 .deserialized()
                                 .map_err(|e| A::Error::custom(format!("Cannot deserialize element `signature`: {e}")))?;
-                            issued_builder.signature(bytes.into_vec());
+                            issued_builder.signature(bytes.into());
                         }
                         _ => break,
                     }
