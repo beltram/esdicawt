@@ -125,7 +125,7 @@ pub trait Holder {
 
         // --- payload ---
         #[cfg(feature = "test-vectors")]
-        let now = params.now.map(|d| d.as_secs()).unwrap_or_else(now);
+        let now = params.artificial_time.map(|d| d.as_secs()).unwrap_or_else(now);
         #[cfg(not(feature = "test-vectors"))]
         let now = now();
 
@@ -213,6 +213,16 @@ pub trait Holder {
             }
         }
 
+        // cnonce
+        if let Some((actual, expected)) = payload.inner.cnonce.as_ref().zip(params.expected_cnonce) {
+            if actual != expected {
+                return Err(SdCwtHolderError::ValidationError(SdCwtHolderValidationError::CnonceMismatch {
+                    actual: actual.to_vec(),
+                    expected: expected.to_owned(),
+                }));
+            }
+        }
+
         // key confirmation
         let expected = self.verifier();
         let actual: Self::Verifier = (&payload.cnf).try_into()?;
@@ -253,7 +263,7 @@ pub struct SdCwtVerified<PayloadClaims: Select, Hasher: digest::Digest + Clone, 
 #[cfg(test)]
 mod tests {
     use super::{claims::CustomTokenClaims, test_utils::Ed25519Holder, *};
-    use crate::{Issuer, IssuerParams, Presentation, holder::params::CborPath, issuer::test_utils::Ed25519Issuer};
+    use crate::{Issuer, IssuerParams, Presentation, coset::iana::CwtClaimName, holder::params::CborPath, issuer::test_utils::Ed25519Issuer};
     use ciborium::cbor;
     use esdicawt_spec::{
         ClaimName, NoClaims,
@@ -310,28 +320,88 @@ mod tests {
         let presentation_params = HolderParams {
             presentation,
             audience: "mimi://example.com/r/alice-bob-group",
+            cnonce: None,
             expiry: Some(core::time::Duration::from_secs(90 * 24 * 3600)),
             with_not_before: false,
             leeway: core::time::Duration::from_secs(3600),
             extra_kbt_unprotected: None,
             extra_kbt_protected: None,
             extra_kbt_payload: None,
-            now: None,
+            artificial_time: None,
         };
 
         let sd_cwt = holder.verify_sd_cwt(&sd_cwt, Default::default(), &issuer_signing_key.verifying_key()).unwrap();
 
-        let mut sd_cwt_kbt = holder.new_presentation(sd_cwt, presentation_params).unwrap();
+        let mut sd_kbt = holder.new_presentation(sd_cwt, presentation_params).unwrap();
 
-        let sd_cwt_kbt_2 = sd_cwt_kbt.to_cbor_bytes().unwrap();
-        let sd_cwt_kbt_2 = KbtCwtTagged::<CustomTokenClaims, sha2::Sha256>::from_cbor_bytes(&sd_cwt_kbt_2).unwrap();
-        assert_eq!(sd_cwt_kbt.to_cbor_bytes().unwrap(), sd_cwt_kbt_2.to_cbor_bytes().unwrap());
+        let sd_kbt_2 = sd_kbt.to_cbor_bytes().unwrap();
+        let sd_kbt_2 = KbtCwtTagged::<CustomTokenClaims, sha2::Sha256>::from_cbor_bytes(&sd_kbt_2).unwrap();
+        assert_eq!(sd_kbt.to_cbor_bytes().unwrap(), sd_kbt_2.to_cbor_bytes().unwrap());
 
-        let disclosable_claims = sd_cwt_kbt.0.walk_disclosed_claims().unwrap().collect::<Vec<_>>();
+        let disclosable_claims = sd_kbt.0.walk_disclosed_claims().unwrap().collect::<Vec<_>>();
         assert_eq!(disclosable_claims.len(), 1);
         let is_alice = |sc: &SaltedClaim<ciborium::Value>| sc.name == ClaimName::Text("name".into()) && sc.value == cbor!("Alice Smith").unwrap();
 
         assert!(disclosable_claims.into_iter().any(|c| { matches!(c.unwrap(), Salted::Claim(sc) if is_alice(sc)) }));
+    }
+
+    #[test]
+    #[wasm_bindgen_test::wasm_bindgen_test]
+    fn should_generate_valid_sd_kbt() {
+        let mut csprng = rand_chacha::ChaCha20Rng::from_entropy();
+
+        let holder_signing_key = ed25519_dalek::SigningKey::generate(&mut csprng);
+        let holder_verifying_key = holder_signing_key.verifying_key();
+        let issuer_signing_key = ed25519_dalek::SigningKey::generate(&mut csprng);
+        let issuer = Ed25519Issuer::<CustomTokenClaims>::new(issuer_signing_key.clone());
+
+        let issue_params = IssuerParams {
+            protected_claims: None,
+            unprotected_claims: None,
+            payload: None,
+            issuer: "mimi://example.com/i/acme.io",
+            subject: Some("mimi://example.com/u/alice.smith"),
+            audience: Default::default(),
+            cti: Default::default(),
+            cnonce: Default::default(),
+            key_location: "https://auth.acme.io/issuer.cwk",
+            expiry: Some(core::time::Duration::from_secs(90)),
+            with_not_before: false,
+            with_issued_at: false,
+            leeway: core::time::Duration::from_secs(1),
+            holder_confirmation_key: (&holder_verifying_key).try_into().unwrap(),
+            artificial_time: None,
+        };
+        let sd_cwt = issuer.issue_cwt(&mut csprng, issue_params).unwrap().to_cbor_bytes().unwrap();
+
+        let holder = Ed25519Holder::<CustomTokenClaims>::new(holder_signing_key);
+        let presentation_params = HolderParams {
+            presentation: Presentation::Full,
+            audience: "mimi://example.com/r/alice-bob-group",
+            cnonce: Some(b"cnonce"),
+            expiry: Some(core::time::Duration::from_secs(90 * 24 * 3600)),
+            with_not_before: true,
+            leeway: core::time::Duration::from_secs(3600),
+            extra_kbt_unprotected: None,
+            extra_kbt_protected: None,
+            extra_kbt_payload: None,
+            artificial_time: None,
+        };
+        let sd_cwt = holder.verify_sd_cwt(&sd_cwt, Default::default(), &issuer_signing_key.verifying_key()).unwrap();
+        let sd_kbt_bytes = holder.new_presentation(sd_cwt, presentation_params).unwrap().to_cbor_bytes().unwrap();
+        let raw_sd_kbt = CoseSign1::from_tagged_slice(&sd_kbt_bytes).unwrap();
+        let payload = Value::from_cbor_bytes(&raw_sd_kbt.payload.unwrap()).unwrap().into_map().unwrap();
+
+        for entry in payload {
+            match entry {
+                (Value::Integer(label), Value::Text(aud)) if label == (CwtClaimName::Aud as i64).into() => assert_eq!(&aud, "mimi://example.com/r/alice-bob-group"),
+                (Value::Integer(label), Value::Integer(_)) if label == (CwtClaimName::Exp as i64).into() => {}
+                (Value::Integer(label), Value::Integer(_)) if label == (CwtClaimName::Iat as i64).into() => {}
+                (Value::Integer(label), Value::Integer(_)) if label == (CwtClaimName::Nbf as i64).into() => {}
+                (Value::Integer(label), Value::Bytes(cnonce)) if label == (CwtClaimName::CNonce as i64).into() => assert_eq!(cnonce, b"cnonce"),
+                e => panic!("unexpected: {e:?}"),
+            }
+        }
     }
 
     #[allow(dead_code, unused_variables, clippy::type_complexity)]

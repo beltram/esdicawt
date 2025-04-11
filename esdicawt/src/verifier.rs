@@ -309,13 +309,14 @@ mod tests {
         let presentation_params = HolderParams {
             presentation: Presentation::Full,
             audience: "mimi://example.com/r/alice-bob-group",
+            cnonce: None,
             expiry: Some(core::time::Duration::from_secs(90 * 24 * 3600)),
             with_not_before: true,
             leeway: core::time::Duration::from_secs(3600),
             extra_kbt_unprotected: None,
             extra_kbt_protected: None,
             extra_kbt_payload: None,
-            now: None,
+            artificial_time: None,
         };
         let sd_cwt = holder.verify_sd_cwt(&sd_cwt, Default::default(), &issuer_signing_key.verifying_key()).unwrap();
         let sd_kbt = holder.new_presentation(sd_cwt, presentation_params).unwrap();

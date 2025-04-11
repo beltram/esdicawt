@@ -8,13 +8,13 @@ use crate::{
 };
 use ciborium::Value;
 use esdicawt_spec::{
-    blinded_claims::SaltedArray, issuance::SdCwtIssuedTagged, reexports::coset::{
+    COSE_SD_CLAIMS, CWT_CLAIM_AUDIENCE, CWT_CLAIM_CNONCE, CWT_CLAIM_CTI, CWT_CLAIM_EXPIRES_AT, CWT_CLAIM_ISSUED_AT, CWT_CLAIM_ISSUER, CWT_CLAIM_KEY_CONFIRMATION,
+    CWT_CLAIM_NOT_BEFORE, CWT_CLAIM_SD_ALG, CWT_CLAIM_SUBJECT, CWT_MEDIATYPE, CustomClaims, CwtAny, MEDIATYPE_SD_CWT, SdHashAlg, Select,
+    blinded_claims::SaltedArray,
+    issuance::SdCwtIssuedTagged,
+    reexports::coset::{
         TaggedCborSerializable, {self},
-    }, CustomClaims, CwtAny, SdHashAlg, Select, COSE_SD_CLAIMS,
-    CWT_CLAIM_AUDIENCE, CWT_CLAIM_CNONCE, CWT_CLAIM_CTI, CWT_CLAIM_EXPIRES_AT, CWT_CLAIM_ISSUED_AT, CWT_CLAIM_ISSUER, CWT_CLAIM_KEY_CONFIRMATION, CWT_CLAIM_NOT_BEFORE, CWT_CLAIM_SD_ALG,
-    CWT_CLAIM_SUBJECT,
-    CWT_MEDIATYPE,
-    MEDIATYPE_SD_CWT,
+    },
 };
 use signature::{Keypair, Signer};
 
@@ -185,21 +185,21 @@ pub trait Issuer {
 mod tests {
     use super::{claims::CustomTokenClaims, test_utils::Ed25519Issuer};
     use crate::{
-        coset, coset::CoseSign1, spec::{
+        Issuer, IssuerParams, coset,
+        coset::CoseSign1,
+        spec::{
             blinded_claims::{Salted, SaltedClaim, SaltedElement},
             sd,
         },
-        Issuer,
-        IssuerParams,
     };
-    use ciborium::{cbor, Value};
+    use ciborium::{Value, cbor};
     use coset::iana::CwtClaimName;
     use digest::Digest as _;
     use esdicawt::coset::TaggedCborSerializable;
-    use esdicawt_spec::{issuance::SdCwtIssuedTagged, ClaimName, CwtAny, NoClaims, Select, SelectExt};
+    use esdicawt_spec::redacted_claims::RedactedClaimKeys;
+    use esdicawt_spec::{ClaimName, CwtAny, NoClaims, Select, SelectExt, issuance::SdCwtIssuedTagged};
     use rand_core::SeedableRng;
     use std::collections::HashMap;
-    use esdicawt_spec::redacted_claims::RedactedClaimKeys;
 
     wasm_bindgen_test::wasm_bindgen_test_configure!(run_in_browser);
 
@@ -278,9 +278,9 @@ mod tests {
                 (Value::Integer(label), Value::Integer(_)) if label == (CwtClaimName::Nbf as i64).into() => {}
                 (Value::Integer(label), Value::Bytes(cti)) if label == (CwtClaimName::Cti as i64).into() => assert_eq!(cti, b"cti"),
                 (Value::Integer(label), Value::Bytes(cnonce)) if label == (CwtClaimName::CNonce as i64).into() => assert_eq!(cnonce, b"cnonce"),
-                (Value::Integer(label), Value::Map(cnf)) if label == (CwtClaimName::Cnf as i64).into() => {},
-                (Value::Simple(label), Value::Bytes(rcks)) if label == RedactedClaimKeys::CWT_LABEL => {},
-                e => panic!("unexpected: {e:?}")
+                (Value::Integer(label), Value::Map(_)) if label == (CwtClaimName::Cnf as i64).into() => {}
+                (Value::Simple(label), Value::Bytes(_)) if label == RedactedClaimKeys::CWT_LABEL => {}
+                e => panic!("unexpected: {e:?}"),
             }
         }
     }
@@ -521,7 +521,7 @@ mod tests {
 #[cfg(any(test, feature = "test-utils"))]
 pub mod claims {
     use ciborium::Value;
-    use esdicawt_spec::{sd, Select};
+    use esdicawt_spec::{Select, sd};
 
     #[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
     pub(super) struct CustomTokenClaims {
