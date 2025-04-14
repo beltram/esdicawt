@@ -154,8 +154,10 @@ impl<PayloadClaims: Select, Hasher: digest::Digest + Clone, ProtectedClaims: Cus
     for SdCwtIssued<PayloadClaims, Hasher, ProtectedClaims, UnprotectedClaims>
 {
     fn query(&mut self, token_query: Query) -> EsdicawtSpecResult<Option<Value>> {
-        let payload: Value = Value::from_cbor_bytes(self.payload.to_bytes()?)?;
-        query_inner::<Hasher>(self.disclosures_mut(), &payload, &token_query.elements)
+        let payload = Value::from_cbor_bytes(self.payload.to_bytes()?)?;
+        self.disclosures_mut()
+            .map(|d| query_inner::<Hasher>(d, &payload, &token_query.elements))
+            .unwrap_or(Ok(None))
     }
 }
 
@@ -213,7 +215,7 @@ mod tests {
             assert_eq!(kbt.query(vec!["c".into()].into()).unwrap(), Some("d".into()));
 
             if a_redacted {
-                let salted = &mut sd_cwt.0.sd_unprotected.sd_claims;
+                let salted = sd_cwt.0.disclosures_mut().unwrap();
                 salted
                     .0
                     .retain_mut(|cl| cl.to_value().unwrap().value().unwrap().as_array().map(|a| a[2] != "a".into()).unwrap_or_default());

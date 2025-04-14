@@ -221,7 +221,7 @@ mod tests {
         assert_eq!(rck.len(), 1);
         let rck_name = rck.first().unwrap();
 
-        let payload = sd_cwt.0.disclosures_mut().iter().collect::<Result<Vec<_>, _>>().unwrap();
+        let payload = sd_cwt.0.disclosures_mut().unwrap().iter().collect::<Result<Vec<_>, _>>().unwrap();
         assert_eq!(payload.len(), 1);
         let d0 = payload.first().unwrap();
         let Salted::Claim(SaltedClaim { name, value, .. }) = d0 else { unreachable!() };
@@ -288,7 +288,7 @@ mod tests {
             let payload = cbor!({ "___claim" => value }).unwrap().select_all().unwrap();
             let mut sd_cwt = issue(Some(payload));
 
-            let disclosable_claims = sd_cwt.0.disclosures_mut().iter().collect::<Result<Vec<_>, _>>().unwrap();
+            let disclosable_claims = sd_cwt.0.disclosures_mut().unwrap().iter().collect::<Result<Vec<_>, _>>().unwrap();
 
             let (expected_name, expected_value) = expected;
             let expected_value = expected_value.unwrap();
@@ -410,7 +410,7 @@ mod tests {
         assert_eq!(model.numbers, vec![0, 2]);
         assert!(model.inner.is_empty());
 
-        let disclosures = sd_cwt.0.disclosures_mut().iter().collect::<Result<Vec<_>, _>>().unwrap();
+        let disclosures = sd_cwt.0.disclosures_mut().unwrap().iter().collect::<Result<Vec<_>, _>>().unwrap();
         assert_eq!(disclosures.len(), 3);
 
         let [d0, d1, d2] = disclosures.try_into().unwrap();
@@ -456,7 +456,7 @@ mod tests {
         assert!(model.age.is_some());
         assert!(model.name.is_some());
 
-        let mut disclosures = sd_cwt.0.disclosures_mut().iter().map(|d| d.unwrap());
+        let mut disclosures = sd_cwt.0.disclosures_mut().unwrap().iter().map(|d| d.unwrap());
         assert!(disclosures.next().is_none());
     }
 
