@@ -4,6 +4,7 @@ mod walk;
 
 use crate::{
     VerifierParams,
+    signature_verifier::validate_signature,
     time::verify_time_claims,
     verifier::error::{SdCwtVerifierError, SdCwtVerifierResult},
 };
@@ -22,10 +23,7 @@ use time::OffsetDateTime;
 pub trait Verifier {
     type Error: core::error::Error + Send + Sync;
 
-    type IssuerSignature;
-    type IssuerVerifier: signature::Verifier<Self::IssuerSignature>;
-
-    type HolderSignature;
+    type HolderSignature: signature::SignatureEncoding;
     type HolderVerifier: signature::Verifier<Self::HolderSignature> + PartialEq + for<'a> TryFrom<&'a KeyConfirmation, Error = CoseKeyConfirmationError>;
 
     type Hasher: digest::Digest + Clone;
@@ -37,9 +35,6 @@ pub trait Verifier {
     type KbtProtectedClaims: CustomClaims;
     type KbtPayloadClaims: CustomClaims;
 
-    fn deserialize_issuer_signature(&self, bytes: &[u8]) -> Result<Self::IssuerSignature, Self::Error>;
-    fn deserialize_holder_signature(&self, bytes: &[u8]) -> Result<Self::HolderSignature, Self::Error>;
-
     fn digest(&self, sd_alg: SdHashAlg, data: &[u8]) -> Result<Vec<u8>, Self::Error>;
 
     #[allow(clippy::type_complexity)]
@@ -49,7 +44,7 @@ pub trait Verifier {
         params: VerifierParams,
         // not mandatory in case the verifier does not have access to it
         holder_verifier: Option<&Self::HolderVerifier>,
-        issuer_verifier: Self::IssuerVerifier,
+        keyset: &cose_key_set::CoseKeySet,
     ) -> Result<
         KbtCwtVerified<
             Self::IssuerPayloadClaims,
@@ -70,7 +65,7 @@ pub trait Verifier {
             Self::KbtUnprotectedClaims,
             Self::KbtPayloadClaims,
         >::from_cbor_bytes(kbt_bytes)?;
-        self.verify_sd_kbt(&kbt_tagged, params, holder_verifier, issuer_verifier)
+        self.verify_sd_kbt(&kbt_tagged, params, holder_verifier, keyset)
     }
 
     #[allow(clippy::type_complexity)]
@@ -87,7 +82,7 @@ pub trait Verifier {
         >,
         params: VerifierParams,
         holder_verifying_key: Option<&Self::HolderVerifier>,
-        issuer_verifier: Self::IssuerVerifier,
+        keyset: &cose_key_set::CoseKeySet,
     ) -> Result<
         KbtCwtVerified<
             Self::IssuerPayloadClaims,
@@ -120,7 +115,7 @@ pub trait Verifier {
         // verifying signature
         let cose_sign1_sd_kbt = CoseSign1::from_cbor_value(kbt_value)?;
         cose_sign1_sd_kbt.verify_signature(&[], |signature, raw_data| {
-            let signature = self.deserialize_holder_signature(signature).map_err(SdCwtVerifierError::CustomError)?;
+            let signature = Self::HolderSignature::try_from(signature).map_err(|_| SdCwtVerifierError::SignatureEncodingError)?;
             holder_confirmation_key.verify(raw_data, &signature).map_err(SdCwtVerifierError::from)
         })?;
 
@@ -162,10 +157,7 @@ pub trait Verifier {
         // After validation, the SD-CWT MUST be extracted from the kcwt header, and validated as described in Section 7.2 of [RFC8392].
         // verify signature if a verifying key supplied
         let cose_sign1_sd_cwt = CoseSign1::from_tagged_slice(sd_cwt_bytes)?;
-        cose_sign1_sd_cwt.verify_signature(&[], |signature, raw_data| {
-            let signature = self.deserialize_issuer_signature(signature).map_err(SdCwtVerifierError::CustomError)?;
-            issuer_verifier.verify(raw_data, &signature).map_err(SdCwtVerifierError::from)
-        })?;
+        validate_signature(&cose_sign1_sd_cwt, keyset)?;
 
         let sd_cwt_payload = sd_cwt.0.payload.to_value_mut()?;
 
@@ -259,6 +251,7 @@ pub trait Verifier {
 #[cfg(test)]
 mod tests {
     use super::claims::CustomTokenClaims;
+    use crate::signature_verifier::SignatureVerifierError;
     use crate::{
         HolderParams, Issuer, IssuerParams, Presentation, SdCwtVerifierError, Verifier, VerifierParams,
         holder::Holder,
@@ -266,6 +259,7 @@ mod tests {
         verifier::test_utils::HybridVerifier,
     };
     use ciborium::{Value, cbor};
+    use cose_key_set::CoseKeySet;
     use esdicawt_spec::{CwtAny, NoClaims, Select, key_binding::KbtCwtTagged, verified::KbtCwtVerified};
 
     wasm_bindgen_test::wasm_bindgen_test_configure!(run_in_browser);
@@ -297,15 +291,20 @@ mod tests {
         // verifying Holder signature
         let holder_verifying_key_bis = ed25519_dalek::SigningKey::generate(&mut rand::thread_rng()).verifying_key();
         assert!(matches!(
-            verifier.verify_sd_kbt(&sd_kbt, Default::default(), Some(&holder_verifying_key_bis), issuer_signing_key.verifying_key()),
+            verifier.verify_sd_kbt(&sd_kbt, Default::default(), Some(&holder_verifying_key_bis), &CoseKeySet::new(&issuer_signing_key).unwrap()),
             Err(SdCwtVerifierError::UnexpectedKeyConfirmation)
         ));
 
         // verifying Issuer signature
         let issuer_verifying_key_bis = ed25519_dalek::SigningKey::generate(&mut rand::thread_rng()).verifying_key();
         assert!(matches!(
-            verifier.verify_sd_kbt(&sd_kbt, Default::default(), Some(&holder_signing_key.verifying_key()), issuer_verifying_key_bis),
-            Err(SdCwtVerifierError::SignatureError(_))
+            verifier.verify_sd_kbt(
+                &sd_kbt,
+                Default::default(),
+                Some(&holder_signing_key.verifying_key()),
+                &CoseKeySet::new(&issuer_verifying_key_bis).unwrap()
+            ),
+            Err(SdCwtVerifierError::SignatureValidationError(SignatureVerifierError::NoSigner))
         ));
     }
 
@@ -328,8 +327,9 @@ mod tests {
         let verifier = HybridVerifier { _marker: Default::default() };
 
         // by default do not validate anything
+        let issuer_verifying_key = CoseKeySet::new(&issuer_signing_key).unwrap();
         verifier
-            .verify_sd_kbt(&sd_kbt, Default::default(), Some(&holder_verifying_key), issuer_signing_key.verifying_key())
+            .verify_sd_kbt(&sd_kbt, Default::default(), Some(&holder_verifying_key), &issuer_verifying_key)
             .unwrap();
 
         // === verify SD-CWT subject
@@ -338,16 +338,14 @@ mod tests {
             expected_subject: Some("sub-a"),
             ..Default::default()
         };
-        verifier
-            .verify_sd_kbt(&sd_kbt, params, Some(&holder_verifying_key), issuer_signing_key.verifying_key())
-            .unwrap();
+        verifier.verify_sd_kbt(&sd_kbt, params, Some(&holder_verifying_key), &issuer_verifying_key).unwrap();
         // fail when mismatch
         let params = VerifierParams {
             expected_subject: Some("sub-b"),
             ..Default::default()
         };
         assert!(matches!(
-        verifier.verify_sd_kbt(&sd_kbt, params, Some(&holder_verifying_key), issuer_signing_key.verifying_key()),
+        verifier.verify_sd_kbt(&sd_kbt, params, Some(&holder_verifying_key), &issuer_verifying_key),
             Err(SdCwtVerifierError::SubMismatch { expected, actual })
             if expected == "sub-b" && actual == "sub-a"
         ));
@@ -358,16 +356,14 @@ mod tests {
             expected_issuer: Some("iss-a"),
             ..Default::default()
         };
-        verifier
-            .verify_sd_kbt(&sd_kbt, params, Some(&holder_verifying_key), issuer_signing_key.verifying_key())
-            .unwrap();
+        verifier.verify_sd_kbt(&sd_kbt, params, Some(&holder_verifying_key), &issuer_verifying_key).unwrap();
         // fail when mismatch
         let params = VerifierParams {
             expected_issuer: Some("iss-b"),
             ..Default::default()
         };
         assert!(matches!(
-        verifier.verify_sd_kbt(&sd_kbt, params, Some(&holder_verifying_key), issuer_signing_key.verifying_key()),
+        verifier.verify_sd_kbt(&sd_kbt, params, Some(&holder_verifying_key), &issuer_verifying_key),
             Err(SdCwtVerifierError::IssuerMismatch { expected, actual })
             if expected == "iss-b" && actual == "iss-a"
         ));
@@ -378,16 +374,14 @@ mod tests {
             expected_audience: Some("aud-a"),
             ..Default::default()
         };
-        verifier
-            .verify_sd_kbt(&sd_kbt, params, Some(&holder_verifying_key), issuer_signing_key.verifying_key())
-            .unwrap();
+        verifier.verify_sd_kbt(&sd_kbt, params, Some(&holder_verifying_key), &issuer_verifying_key).unwrap();
         // fail when mismatch
         let params = VerifierParams {
             expected_audience: Some("aud-b"),
             ..Default::default()
         };
         assert!(matches!(
-        verifier.verify_sd_kbt(&sd_kbt, params, Some(&holder_verifying_key), issuer_signing_key.verifying_key()),
+        verifier.verify_sd_kbt(&sd_kbt, params, Some(&holder_verifying_key), &issuer_verifying_key),
             Err(SdCwtVerifierError::AudienceMismatch { expected, actual })
             if expected == "aud-b" && actual == "aud-a"
         ));
@@ -398,16 +392,14 @@ mod tests {
             expected_kbt_audience: Some("kbt-aud-a"),
             ..Default::default()
         };
-        verifier
-            .verify_sd_kbt(&sd_kbt, params, Some(&holder_verifying_key), issuer_signing_key.verifying_key())
-            .unwrap();
+        verifier.verify_sd_kbt(&sd_kbt, params, Some(&holder_verifying_key), &issuer_verifying_key).unwrap();
         // fail when mismatch
         let params = VerifierParams {
             expected_kbt_audience: Some("kbt-aud-b"),
             ..Default::default()
         };
         assert!(matches!(
-        verifier.verify_sd_kbt(&sd_kbt, params, Some(&holder_verifying_key), issuer_signing_key.verifying_key()),
+        verifier.verify_sd_kbt(&sd_kbt, params, Some(&holder_verifying_key), &issuer_verifying_key),
             Err(SdCwtVerifierError::KbtAudienceMismatch { expected, actual })
             if expected == "kbt-aud-b" && actual == "kbt-aud-a"
         ));
@@ -418,16 +410,14 @@ mod tests {
             expected_cnonce: Some(b"kbt-cnonce-a"),
             ..Default::default()
         };
-        verifier
-            .verify_sd_kbt(&sd_kbt, params, Some(&holder_verifying_key), issuer_signing_key.verifying_key())
-            .unwrap();
+        verifier.verify_sd_kbt(&sd_kbt, params, Some(&holder_verifying_key), &issuer_verifying_key).unwrap();
         // fail when mismatch
         let params = VerifierParams {
             expected_cnonce: Some(b"kbt-cnonce-b"),
             ..Default::default()
         };
         assert!(matches!(
-        verifier.verify_sd_kbt(&sd_kbt, params, Some(&holder_verifying_key), issuer_signing_key.verifying_key()),
+        verifier.verify_sd_kbt(&sd_kbt, params, Some(&holder_verifying_key), &issuer_verifying_key),
             Err(SdCwtVerifierError::CnonceMismatch { expected, actual })
             if expected == b"kbt-cnonce-b" && actual == b"kbt-cnonce-a"
         ));
@@ -472,7 +462,12 @@ mod tests {
         let (issuer_signing_key, sd_kbt) = generate(issuer_params.clone(), holder_params, holder_signing_key);
         let verifier = HybridVerifier::<T> { _marker: Default::default() };
         verifier
-            .verify_sd_kbt(&sd_kbt, Default::default(), Some(&holder_signing_key.verifying_key()), issuer_signing_key.verifying_key())
+            .verify_sd_kbt(
+                &sd_kbt,
+                Default::default(),
+                Some(&holder_signing_key.verifying_key()),
+                &CoseKeySet::new(&issuer_signing_key).unwrap(),
+            )
             .unwrap()
     }
 
@@ -488,7 +483,7 @@ mod tests {
 
         let sd_cwt = issuer.issue_cwt(&mut rand::thread_rng(), issuer_params).unwrap().to_cbor_bytes().unwrap();
         let holder = Ed25519Holder::new(holder_signing_key.clone());
-        let sd_cwt = holder.verify_sd_cwt(&sd_cwt, Default::default(), &issuer_signing_key.verifying_key()).unwrap();
+        let sd_cwt = holder.verify_sd_cwt(&sd_cwt, Default::default(), &CoseKeySet::new(&issuer_signing_key).unwrap()).unwrap();
         let sd_kbt = holder.new_presentation(sd_cwt, holder_params).unwrap();
         (issuer_signing_key, sd_kbt)
     }
@@ -542,8 +537,6 @@ mod tests {
                     Hasher = sha2::Sha256,
                     HolderSignature = ed25519_dalek::Signature,
                     HolderVerifier = ed25519_dalek::VerifyingKey,
-                    IssuerSignature = p256::ecdsa::Signature,
-                    IssuerVerifier = p256::ecdsa::VerifyingKey,
                 >,
         >,
     ) {
@@ -584,8 +577,6 @@ pub mod test_utils {
 
     impl<T: Select> Verifier for HybridVerifier<T> {
         type Error = std::convert::Infallible;
-        type IssuerSignature = ed25519_dalek::Signature;
-        type IssuerVerifier = ed25519_dalek::VerifyingKey;
         type HolderSignature = ed25519_dalek::Signature;
         type HolderVerifier = ed25519_dalek::VerifyingKey;
         type Hasher = sha2::Sha256;
@@ -595,14 +586,6 @@ pub mod test_utils {
         type KbtUnprotectedClaims = NoClaims;
         type KbtProtectedClaims = NoClaims;
         type KbtPayloadClaims = NoClaims;
-
-        fn deserialize_issuer_signature(&self, bytes: &[u8]) -> Result<Self::IssuerSignature, Self::Error> {
-            Ok(ed25519_dalek::Signature::try_from(bytes).unwrap())
-        }
-
-        fn deserialize_holder_signature(&self, bytes: &[u8]) -> Result<Self::HolderSignature, Self::Error> {
-            Ok(ed25519_dalek::Signature::try_from(bytes).unwrap())
-        }
 
         fn digest(&self, sd_alg: SdHashAlg, data: &[u8]) -> Result<Vec<u8>, Self::Error> {
             use digest::Digest as _;

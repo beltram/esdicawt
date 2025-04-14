@@ -1,3 +1,5 @@
+use coset::iana;
+
 pub mod error;
 
 /// Proof of possession key according to [RFC 8747](https://www.rfc-editor.org/rfc/rfc8747)
@@ -99,6 +101,22 @@ impl<'de> serde::Deserialize<'de> for KeyConfirmation {
         }
 
         deserializer.deserialize_map(KeyConfirmationVisitor)
+    }
+}
+
+impl KeyConfirmation {
+    pub fn alg(&self) -> Option<iana::Algorithm> {
+        match self {
+            Self::CoseKey(key) => key.alg(),
+            _ => None,
+        }
+    }
+
+    pub fn crv(&self) -> Option<iana::EllipticCurve> {
+        match self {
+            Self::CoseKey(key) => key.crv(),
+            _ => None,
+        }
     }
 }
 

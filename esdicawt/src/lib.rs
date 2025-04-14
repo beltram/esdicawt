@@ -1,6 +1,7 @@
 #![doc = include_str!("../../README.md")]
 
 pub use cose_key_confirmation::*;
+pub use cose_key_set::{self, reexports::*};
 pub use esdicawt_spec as spec;
 pub use holder::{
     Holder,
@@ -16,7 +17,7 @@ pub use issuer::{
 pub use lookup::*;
 pub use read::{EsdicawtReadError, EsdicawtReadResult, SdCwtRead};
 pub use signature::Keypair;
-pub use spec::{reexports::*, *};
+pub use spec::reexports::*;
 pub use time::CwtTimeError;
 pub use verifier::{
     Verifier,
@@ -28,6 +29,7 @@ mod holder;
 mod issuer;
 mod lookup;
 mod read;
+mod signature_verifier;
 pub(crate) mod time;
 mod verifier;
 

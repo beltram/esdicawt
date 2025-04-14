@@ -1,6 +1,7 @@
 #![allow(clippy::borrow_interior_mutable_const, clippy::declare_interior_mutable_const, dead_code)]
 
 use ciborium::{Value, value::Integer};
+use cose_key_set::CoseKeySet;
 use esdicawt::{Holder, HolderParams, Issuer, IssuerParams, cwt_label};
 use esdicawt_spec::{
     CwtAny, EsdicawtSpecError, NoClaims, SdHashAlg, Select,
@@ -163,14 +164,6 @@ impl<T: Select> Issuer for P384Issuer<T> {
     fn hash_algorithm(&self) -> SdHashAlg {
         SdHashAlg::Sha256
     }
-
-    fn serialize_signature(&self, signature: &p384::ecdsa::Signature) -> Result<Vec<u8>, Self::Error> {
-        Ok(signature.to_bytes().to_vec())
-    }
-
-    fn deserialize_signature(&self, bytes: &[u8]) -> Result<p384::ecdsa::Signature, Self::Error> {
-        Ok(p384::ecdsa::Signature::from_slice(bytes).unwrap())
-    }
 }
 
 pub struct P256Holder<T: Select> {
@@ -186,9 +179,6 @@ impl<T: Select> Holder for P256Holder<T> {
 
     type Signature = p256::ecdsa::Signature;
     type Verifier = p256::ecdsa::VerifyingKey;
-
-    type IssuerSignature = p384::ecdsa::Signature;
-    type IssuerVerifier = p384::ecdsa::VerifyingKey;
 
     type IssuerPayloadClaims = T;
     type IssuerProtectedClaims = NoClaims;
@@ -215,14 +205,6 @@ impl<T: Select> Holder for P256Holder<T> {
 
     fn verifier(&self) -> &Self::Verifier {
         &self.verifying_key
-    }
-
-    fn serialize_signature(&self, signature: &Self::Signature) -> Result<Vec<u8>, Self::Error> {
-        Ok(signature.to_bytes().to_vec())
-    }
-
-    fn deserialize_issuer_signature(&self, bytes: &[u8]) -> Result<Self::IssuerSignature, Self::Error> {
-        Ok(p384::ecdsa::Signature::try_from(bytes).unwrap())
     }
 
     fn supported_hash_alg(&self) -> &[SdHashAlg] {
@@ -427,8 +409,8 @@ fn issuer_signing_key() -> p384::ecdsa::SigningKey {
         .into()
 }
 
-fn issuer_verifying_key() -> p384::ecdsa::VerifyingKey {
-    *issuer_signing_key().as_ref()
+fn issuer_verifying_key() -> CoseKeySet {
+    CoseKeySet::new(issuer_signing_key().as_ref()).unwrap()
 }
 
 struct TestVectorRng;

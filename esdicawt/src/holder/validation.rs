@@ -1,3 +1,4 @@
+use crate::CoseKeyError;
 use ciborium::Value;
 use esdicawt_spec::{REDACTED_CLAIM_ELEMENT_TAG, blinded_claims::Salted, redacted_claims::RedactedClaimKeys};
 use std::{borrow::Cow, collections::HashMap};
@@ -36,6 +37,10 @@ pub enum SdCwtHolderValidationError<CustomError: Send + Sync> {
     CborValueError(#[from] ciborium::value::Error),
     #[error(transparent)]
     SignatureError(#[from] signature::Error),
+    #[error(transparent)]
+    CoseKeyError(#[from] CoseKeyError),
+    #[error("Signature encoding error")]
+    SignatureEncodingError,
     #[error("{0}")]
     SpecError(&'static str),
     #[error("{0}")]
@@ -104,15 +109,16 @@ where
 
 #[cfg(test)]
 mod tests {
+    use crate::signature_verifier::SignatureVerifierError;
     use crate::{
         HolderValidationParams, IssuerParams, SdCwtHolderError, SdCwtHolderValidationError,
-        blinded_claims::Decoy,
         holder::Holder,
         issuer::Issuer,
+        spec::{Salt, blinded_claims::Decoy},
         test_utils::{Ed25519Holder, Ed25519Issuer},
     };
     use ciborium::{Value, cbor};
-    use esdicawt::Salt;
+    use cose_key_set::CoseKeySet;
     use esdicawt_spec::{
         ClaimName, CwtAny,
         blinded_claims::{Salted, SaltedElement},
@@ -123,7 +129,7 @@ mod tests {
     #[test]
     fn should_fail_when_std_claims_mismatch() {
         let issuer_signing_key = ed25519_dalek::SigningKey::generate(&mut rand::thread_rng());
-        let issuer_verifying_key = issuer_signing_key.verifying_key();
+        let issuer_verifying_key = CoseKeySet::builder().with(&issuer_signing_key).unwrap().build();
         let issuer = Ed25519Issuer::<Value>::new(issuer_signing_key);
 
         let holder_signing_key = ed25519_dalek::SigningKey::generate(&mut rand::thread_rng());
@@ -200,7 +206,7 @@ mod tests {
     #[test]
     fn should_fail_when_disclosures_invalid() {
         let issuer_signing_key = ed25519_dalek::SigningKey::generate(&mut rand::thread_rng());
-        let issuer_verifying_key = issuer_signing_key.verifying_key();
+        let issuer_verifying_key = CoseKeySet::new(&issuer_signing_key).unwrap();
         let issuer = Ed25519Issuer::<Value>::new(issuer_signing_key);
 
         let holder_signing_key = ed25519_dalek::SigningKey::generate(&mut rand::thread_rng());
@@ -334,8 +340,8 @@ mod tests {
         let issuer_signing_key_bis = ed25519_dalek::SigningKey::generate(&mut rand::thread_rng());
 
         assert!(matches!(
-            holder.verify_sd_cwt(&sd_cwt, Default::default(), &issuer_signing_key_bis.verifying_key()),
-            Err(SdCwtHolderError::ValidationError(SdCwtHolderValidationError::SignatureError(_)))
+            holder.verify_sd_cwt(&sd_cwt, Default::default(), &CoseKeySet::new(&issuer_signing_key_bis).unwrap()),
+            Err(SdCwtHolderError::SignatureValidationError(SignatureVerifierError::NoSigner))
         ));
     }
 

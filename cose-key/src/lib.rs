@@ -1,17 +1,100 @@
 mod codec;
 mod error;
 
+use ciborium::Value;
 #[cfg(feature = "deterministic-encoding")]
 pub use codec::deterministic_encoding::{CborDeterministicEncoded, DeterministicEncodingError};
+use coset::{Algorithm, KeyOperation, KeyType, Label, iana, iana::EnumI64};
 pub use error::CoseKeyError;
 
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct CoseKey(coset::CoseKey);
 
+impl std::hash::Hash for CoseKey {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        match &self.kty {
+            KeyType::Assigned(i) => i.to_i64().hash(state),
+            KeyType::Text(s) => s.hash(state),
+        };
+        self.key_id.hash(state);
+        match &self.alg {
+            Some(Algorithm::PrivateUse(i)) => i.hash(state),
+            Some(Algorithm::Assigned(i)) => i.to_i64().hash(state),
+            Some(Algorithm::Text(s)) => s.hash(state),
+            None => {}
+        }
+        for ops in &self.key_ops {
+            match ops {
+                KeyOperation::Assigned(i) => i.to_i64().hash(state),
+                KeyOperation::Text(s) => s.hash(state),
+            }
+        }
+        self.base_iv.hash(state);
+        for (label, value) in &self.params {
+            match label {
+                Label::Int(i) => i.hash(state),
+                Label::Text(s) => s.hash(state),
+            }
+            hash_value(value, state);
+        }
+    }
+}
+
+// SAFETY: so far no float has been IANA registered (could be for private use though). So it's kinda fine to do this.
+impl Eq for CoseKey {}
+
+fn hash_value<H: std::hash::Hasher>(value: &Value, state: &mut H) {
+    use std::hash::Hash as _;
+    match value {
+        Value::Integer(i) => {
+            let _ = i64::try_from(*i).inspect(|i| i.hash(state));
+        }
+        Value::Bytes(b) => {
+            b.hash(state);
+        }
+        Value::Float(f) => f.to_be_bytes().hash(state),
+        Value::Text(s) => s.hash(state),
+        Value::Bool(b) => b.hash(state),
+        Value::Tag(tag, v) => {
+            tag.hash(state);
+            hash_value(v, state);
+        }
+        Value::Array(array) => {
+            for e in array {
+                hash_value(e, state);
+            }
+        }
+        Value::Map(map) => {
+            for (k, v) in map {
+                hash_value(k, state);
+                hash_value(v, state);
+            }
+        }
+        Value::Simple(s) => s.hash(state),
+        _ => {}
+    };
+}
+
 /// Accessors
 impl CoseKey {
     pub fn into_inner(self) -> coset::CoseKey {
         self.0
+    }
+
+    pub fn alg(&self) -> Option<iana::Algorithm> {
+        self.alg.as_ref().and_then(|a| match a {
+            Algorithm::Assigned(i) => iana::Algorithm::from_i64(i.to_i64()),
+            _ => None,
+        })
+    }
+
+    pub fn crv(&self) -> Option<iana::EllipticCurve> {
+        self.params
+            .iter()
+            .find_map(|(k, v)| matches!(k, Label::Int(i) if *i == iana::OkpKeyParameter::Crv.to_i64()).then_some(v))
+            .and_then(Value::as_integer)
+            .and_then(|i| i64::try_from(i).ok())
+            .and_then(iana::EllipticCurve::from_i64)
     }
 }
 
@@ -35,10 +118,30 @@ impl From<CoseKey> for coset::CoseKey {
     }
 }
 
+pub trait CoseKeyExt {
+    fn alg() -> iana::Algorithm;
+}
+
+pub trait EcdsaCoseKeyExt: CoseKeyExt {
+    fn crv() -> iana::EllipticCurve;
+}
+
 #[cfg(feature = "ed25519")]
 pub mod ed25519 {
     use super::*;
-    use coset::iana::{self, EnumI64 as _};
+    use coset::iana::{self};
+
+    impl CoseKeyExt for ed25519_dalek::VerifyingKey {
+        fn alg() -> iana::Algorithm {
+            iana::Algorithm::EdDSA
+        }
+    }
+
+    impl EcdsaCoseKeyExt for ed25519_dalek::VerifyingKey {
+        fn crv() -> iana::EllipticCurve {
+            iana::EllipticCurve::Ed25519
+        }
+    }
 
     /// See https://datatracker.ietf.org/doc/html/rfc8152#section-8.2
     impl From<&ed25519_dalek::VerifyingKey> for CoseKey {
@@ -118,7 +221,19 @@ pub mod ed25519 {
 #[cfg(feature = "p256")]
 pub mod ec_p256 {
     use super::*;
-    use coset::iana::{self, EnumI64 as _};
+    use coset::iana::{self};
+
+    impl CoseKeyExt for p256::ecdsa::VerifyingKey {
+        fn alg() -> iana::Algorithm {
+            iana::Algorithm::ES256
+        }
+    }
+
+    impl EcdsaCoseKeyExt for p256::ecdsa::VerifyingKey {
+        fn crv() -> iana::EllipticCurve {
+            iana::EllipticCurve::P_256
+        }
+    }
 
     /// See https://datatracker.ietf.org/doc/html/rfc8152#section-8.1
     impl TryFrom<&p256::PublicKey> for CoseKey {
@@ -256,7 +371,19 @@ pub mod ec_p256 {
 #[cfg(feature = "p384")]
 pub mod ec_p384 {
     use super::*;
-    use coset::iana::{self, EnumI64 as _};
+    use coset::iana::{self};
+
+    impl CoseKeyExt for p384::ecdsa::VerifyingKey {
+        fn alg() -> iana::Algorithm {
+            iana::Algorithm::ES384
+        }
+    }
+
+    impl EcdsaCoseKeyExt for p384::ecdsa::VerifyingKey {
+        fn crv() -> iana::EllipticCurve {
+            iana::EllipticCurve::P_384
+        }
+    }
 
     /// See https://datatracker.ietf.org/doc/html/rfc8152#section-8.1
     impl TryFrom<&p384::PublicKey> for CoseKey {

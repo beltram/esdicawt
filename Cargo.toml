@@ -55,6 +55,7 @@ tailcall = "1.0"
 derive_builder = "0.20"
 wasm-bindgen-test = "0.3"
 enum-variants-strings = "0.3"
+indexmap = "2.9"
 
 [patch.crates-io.ciborium]
 git = "https://github.com/beltram/ciborium"

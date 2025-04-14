@@ -8,6 +8,11 @@ use super::SdUnprotected;
 impl<Extra: CustomClaims> serde::Serialize for SdUnprotected<Extra> {
     fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
         use serde::ser::Error as _;
+        let mut map = serializer.serialize_map(None)?;
+
+        if let Some(sd_claims) = &self.sd_claims {
+            map.serialize_entry(&COSE_SD_CLAIMS, sd_claims)?;
+        }
 
         let mut extra = self
             .extra
@@ -16,12 +21,6 @@ impl<Extra: CustomClaims> serde::Serialize for SdUnprotected<Extra> {
             .transpose()?
             .map(|v| v.into_map().map_err(|_| S::Error::custom("should have been a mapping")))
             .transpose()?;
-        let extra_len = extra.as_ref().map(|extra| extra.len()).unwrap_or_default();
-
-        let mut map = serializer.serialize_map(Some(1 + extra_len))?;
-
-        map.serialize_entry(&COSE_SD_CLAIMS, &self.sd_claims)?;
-
         if let Some(extra) = extra.take() {
             for (k, v) in extra {
                 map.serialize_entry(&k, &v)?;
@@ -54,10 +53,6 @@ impl<'de, Extra: CustomClaims> serde::Deserialize<'de> for SdUnprotected<Extra> 
                         extra.push((k, v));
                     }
                 }
-
-                let Some(sd_claims) = sd_claims else {
-                    return Err(A::Error::custom("Missing sd_claims"));
-                };
 
                 let extra = if extra.is_empty() {
                     None
