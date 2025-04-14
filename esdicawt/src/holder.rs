@@ -1,4 +1,7 @@
-use crate::{HolderParams, HolderValidationParams, SdCwtHolderError, SdCwtHolderValidationError, coset::CoseSign1, holder::validation::validate_disclosures, now};
+use crate::{
+    HolderParams, HolderValidationParams, SdCwtHolderError, SdCwtHolderValidationError, coset::CoseSign1, holder::validation::validate_disclosures, now,
+    signature_verifier::validate_signature,
+};
 use ciborium::Value;
 use cose_key_confirmation::{KeyConfirmation, error::CoseKeyConfirmationError};
 use esdicawt_spec::{
@@ -9,7 +12,6 @@ use esdicawt_spec::{
         TaggedCborSerializable, {self},
     },
 };
-use signature::Signer;
 
 pub mod error;
 pub mod params;
@@ -22,16 +24,13 @@ pub trait Holder {
     type Hasher: digest::Digest + Clone;
 
     #[cfg(not(any(feature = "pem", feature = "der")))]
-    type Signer: Signer<Self::Signature>;
+    type Signer: signature::Signer<Self::Signature>;
 
     #[cfg(any(feature = "pem", feature = "der"))]
-    type Signer: Signer<Self::Signature> + pkcs8::DecodePrivateKey;
+    type Signer: signature::Signer<Self::Signature> + pkcs8::DecodePrivateKey;
 
-    type Signature;
+    type Signature: signature::SignatureEncoding;
     type Verifier: signature::Verifier<Self::Signature> + PartialEq + for<'a> TryFrom<&'a KeyConfirmation, Error = CoseKeyConfirmationError>;
-
-    type IssuerSignature;
-    type IssuerVerifier: signature::Verifier<Self::IssuerSignature>;
 
     type IssuerPayloadClaims: Select;
     type IssuerProtectedClaims: CustomClaims;
@@ -72,10 +71,6 @@ pub trait Holder {
     fn signer(&self) -> &Self::Signer;
 
     fn verifier(&self) -> &Self::Verifier;
-
-    fn serialize_signature(&self, signature: &Self::Signature) -> Result<Vec<u8>, Self::Error>;
-
-    fn deserialize_issuer_signature(&self, bytes: &[u8]) -> Result<Self::IssuerSignature, Self::Error>;
 
     fn supported_hash_alg(&self) -> &[SdHashAlg];
 
@@ -147,8 +142,9 @@ pub trait Holder {
             .unprotected(unprotected)
             .payload(payload.to_cbor_bytes()?)
             .try_create_signature(&[], |tbs| {
+                use signature::{SignatureEncoding as _, Signer as _};
                 let signature = self.signer().try_sign(tbs)?;
-                self.serialize_signature(&signature).map_err(SdCwtHolderError::CustomError)
+                Result::<_, signature::Error>::Ok(signature.to_bytes().as_ref().to_vec())
             })?
             .build()
             .to_tagged_vec()?;
@@ -162,15 +158,11 @@ pub trait Holder {
         &self,
         sd_cwt: &[u8],
         params: HolderValidationParams,
-        issuer_verifier: &Self::IssuerVerifier,
+        keyset: &cose_key_set::CoseKeySet,
     ) -> Result<SdCwtVerified<Self::IssuerPayloadClaims, Self::Hasher, Self::IssuerProtectedClaims, Self::IssuerUnprotectedClaims>, SdCwtHolderError<Self::Error>> {
-        // verify signature
         let cose_sign1_sd_cwt = CoseSign1::from_tagged_slice(sd_cwt)?;
-        cose_sign1_sd_cwt.verify_signature(&[], |signature, raw_data| {
-            let signature = self.deserialize_issuer_signature(signature).map_err(SdCwtHolderValidationError::CustomError)?;
-            use signature::Verifier as _;
-            issuer_verifier.verify(raw_data, &signature).map_err(SdCwtHolderValidationError::from)
-        })?;
+
+        validate_signature(&cose_sign1_sd_cwt, keyset)?;
 
         let mut sd_cwt = SdCwtIssuedTagged::from_cbor_bytes(sd_cwt)?;
         let payload = sd_cwt.0.payload.to_value()?;
@@ -263,6 +255,7 @@ mod tests {
     use super::{claims::CustomTokenClaims, test_utils::Ed25519Holder, *};
     use crate::{Issuer, IssuerParams, Presentation, coset::iana::CwtClaimName, holder::params::CborPath, issuer::test_utils::Ed25519Issuer};
     use ciborium::cbor;
+    use cose_key_set::CoseKeySet;
     use esdicawt_spec::{
         ClaimName, NoClaims,
         blinded_claims::{Salted, SaltedClaim},
@@ -325,7 +318,7 @@ mod tests {
             artificial_time: None,
         };
 
-        let sd_cwt = holder.verify_sd_cwt(&sd_cwt, Default::default(), &issuer_signing_key.verifying_key()).unwrap();
+        let sd_cwt = holder.verify_sd_cwt(&sd_cwt, Default::default(), &CoseKeySet::new(&issuer_signing_key).unwrap()).unwrap();
 
         let mut sd_kbt = holder.new_presentation(sd_cwt, presentation_params).unwrap();
 
@@ -380,7 +373,7 @@ mod tests {
             extra_kbt_payload: None,
             artificial_time: None,
         };
-        let sd_cwt = holder.verify_sd_cwt(&sd_cwt, Default::default(), &issuer_signing_key.verifying_key()).unwrap();
+        let sd_cwt = holder.verify_sd_cwt(&sd_cwt, Default::default(), &CoseKeySet::new(&issuer_signing_key).unwrap()).unwrap();
         let sd_kbt_bytes = holder.new_presentation(sd_cwt, presentation_params).unwrap().to_cbor_bytes().unwrap();
         let raw_sd_kbt = CoseSign1::from_tagged_slice(&sd_kbt_bytes).unwrap();
         let payload = Value::from_cbor_bytes(&raw_sd_kbt.payload.unwrap()).unwrap().into_map().unwrap();
@@ -411,8 +404,6 @@ mod tests {
                     Signer = ed25519_dalek::SigningKey,
                     Signature = ed25519_dalek::Signature,
                     Verifier = ed25519_dalek::VerifyingKey,
-                    IssuerSignature = ed25519_dalek::Signature,
-                    IssuerVerifier = ed25519_dalek::VerifyingKey,
                     Hasher = sha2::Sha256,
                 >,
         >,
@@ -504,9 +495,6 @@ pub mod test_utils {
         type Signature = ed25519_dalek::Signature;
         type Verifier = ed25519_dalek::VerifyingKey;
 
-        type IssuerSignature = ed25519_dalek::Signature;
-        type IssuerVerifier = ed25519_dalek::VerifyingKey;
-
         type IssuerPayloadClaims = T;
         type IssuerProtectedClaims = NoClaims;
         type IssuerUnprotectedClaims = NoClaims;
@@ -526,10 +514,6 @@ pub mod test_utils {
             &self.signing_key
         }
 
-        fn serialize_signature(&self, signature: &Self::Signature) -> Result<Vec<u8>, Self::Error> {
-            Ok(ed25519_dalek::Signature::to_bytes(signature).into())
-        }
-
         fn cwt_algorithm(&self) -> coset::iana::Algorithm {
             coset::iana::Algorithm::EdDSA
         }
@@ -540,10 +524,6 @@ pub mod test_utils {
 
         fn verifier(&self) -> &Self::Verifier {
             &self.verifying_key
-        }
-
-        fn deserialize_issuer_signature(&self, bytes: &[u8]) -> Result<Self::IssuerSignature, Self::Error> {
-            Ok(ed25519_dalek::Signature::try_from(bytes).unwrap())
         }
     }
 }

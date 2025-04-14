@@ -195,11 +195,11 @@ impl<
 mod tests {
     use super::*;
     use ciborium::cbor;
+    use cose_key_set::CoseKeySet;
     use esdicawt_spec::{Select, SelectExt, issuance::SdCwtIssuedTagged, sd};
 
     use crate::{
         Holder, HolderParams, Issuer, IssuerParams, Presentation,
-        key_binding::KbtCwtTagged,
         test_utils::{Ed25519Holder, Ed25519Issuer},
     };
 
@@ -316,7 +316,7 @@ mod tests {
             extra_kbt_unprotected: None,
             extra_kbt_payload: None,
         };
-        let sd_cwt = holder.verify_sd_cwt(sd_cwt, Default::default(), &issuer_verifying_key).unwrap();
+        let sd_cwt = holder.verify_sd_cwt(sd_cwt, Default::default(), &CoseKeySet::new(&issuer_verifying_key).unwrap()).unwrap();
         holder.new_presentation(sd_cwt, holder_params).unwrap()
     }
 }

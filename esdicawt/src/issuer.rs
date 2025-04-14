@@ -10,19 +10,18 @@ use ciborium::Value;
 use esdicawt_spec::{
     COSE_SD_CLAIMS, CWT_CLAIM_AUDIENCE, CWT_CLAIM_CNONCE, CWT_CLAIM_CTI, CWT_CLAIM_EXPIRES_AT, CWT_CLAIM_ISSUED_AT, CWT_CLAIM_ISSUER, CWT_CLAIM_KEY_CONFIRMATION,
     CWT_CLAIM_NOT_BEFORE, CWT_CLAIM_SD_ALG, CWT_CLAIM_SUBJECT, CWT_MEDIATYPE, CustomClaims, CwtAny, MEDIATYPE_SD_CWT, SdHashAlg, Select,
-    blinded_claims::SaltedArray,
     issuance::SdCwtIssuedTagged,
     reexports::coset::{
         TaggedCborSerializable, {self},
     },
 };
-use signature::{Keypair, Signer};
+use signature::{Keypair, SignatureEncoding, Signer};
 
 pub trait Issuer {
     type Error: core::error::Error + Send + Sync;
     type Hasher: digest::Digest + Clone;
 
-    type Signature;
+    type Signature: signature::SignatureEncoding;
 
     type ProtectedClaims: CustomClaims;
     type UnprotectedClaims: CustomClaims;
@@ -66,10 +65,6 @@ pub trait Issuer {
 
     fn hash_algorithm(&self) -> SdHashAlg;
 
-    fn serialize_signature(&self, signature: &Self::Signature) -> Result<Vec<u8>, Self::Error>;
-
-    fn deserialize_signature(&self, bytes: &[u8]) -> Result<Self::Signature, Self::Error>;
-
     #[allow(clippy::type_complexity)]
     fn issue_cwt(
         &self,
@@ -99,13 +94,11 @@ pub trait Issuer {
 
         let mut to_be_redacted_payload = params.payload.map(Self::PayloadClaims::select).transpose()?;
 
-        let salted_array = to_be_redacted_payload
-            .as_mut()
-            .map(|tbr| redact::<Self::Error, Self::Hasher>(csprng, tbr))
-            .transpose()?
-            // FIXME: pending turning sd_claims optional
-            .unwrap_or_else(|| SaltedArray::with_capacity(0));
-        let mut unprotected_builder = coset::HeaderBuilder::new().value(COSE_SD_CLAIMS, salted_array.to_cbor_value()?);
+        let mut unprotected_builder = coset::HeaderBuilder::new();
+
+        if let Some(salted_array) = to_be_redacted_payload.as_mut().map(|tbr| redact::<Self::Error, Self::Hasher>(csprng, tbr)).transpose()? {
+            unprotected_builder = unprotected_builder.value(COSE_SD_CLAIMS, salted_array.to_cbor_value()?);
+        }
 
         if let Some(unprotected_claims) = params.unprotected_claims {
             let unprotected_extra_claims = unprotected_claims.to_cbor_value()?.into_map()?;
@@ -172,7 +165,7 @@ pub trait Issuer {
             .payload(payload.to_cbor_bytes()?)
             .try_create_signature(&[], |tbs| {
                 let signature = self.signer().try_sign(tbs)?;
-                self.serialize_signature(&signature).map_err(SdCwtIssuerError::CustomError)
+                Result::<_, signature::Error>::Ok(signature.to_bytes().as_ref().to_vec())
             })?
             .build()
             .to_tagged_vec()?;
@@ -571,14 +564,6 @@ pub mod test_utils {
         fn hash_algorithm(&self) -> SdHashAlg {
             SdHashAlg::Sha256
         }
-
-        fn serialize_signature(&self, signature: &ed25519_dalek::Signature) -> Result<Vec<u8>, Self::Error> {
-            Ok(ed25519_dalek::Signature::to_bytes(signature).into())
-        }
-
-        fn deserialize_signature(&self, bytes: &[u8]) -> Result<ed25519_dalek::Signature, Self::Error> {
-            Ok(ed25519_dalek::Signature::try_from(bytes).unwrap())
-        }
     }
 
     pub struct P256Issuer<T: Select> {
@@ -613,14 +598,6 @@ pub mod test_utils {
 
         fn hash_algorithm(&self) -> SdHashAlg {
             SdHashAlg::Sha256
-        }
-
-        fn serialize_signature(&self, signature: &p256::ecdsa::Signature) -> Result<Vec<u8>, Self::Error> {
-            Ok(signature.to_bytes().to_vec())
-        }
-
-        fn deserialize_signature(&self, bytes: &[u8]) -> Result<p256::ecdsa::Signature, Self::Error> {
-            Ok(p256::ecdsa::Signature::from_slice(bytes).unwrap())
         }
     }
 }

@@ -1,18 +1,40 @@
+use cose_key::EcdsaCoseKeyExt;
+use coset::iana;
+
+pub mod reexports {
+    pub use cose_key::*;
+}
+
 pub mod error;
 
-/// A COSE KEy Set as defined in [RFC 8152](https://datatracker.ietf.org/doc/html/rfc8152#section-7)
+/// A COSE Key Set as defined in [RFC 8152](https://datatracker.ietf.org/doc/html/rfc8152#section-7) see also jwks we should have the same invariants https://datatracker.ietf.org/doc/html/rfc7517#section-5
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct CoseKeySet(Vec<cose_key::CoseKey>);
 
 impl CoseKeySet {
+    pub fn new<K>(key: &K) -> Result<Self, error::CoseKeySetError>
+    where
+        for<'a> &'a K: TryInto<cose_key::CoseKey, Error: Into<error::CoseKeySetError>>,
+    {
+        Ok(Self::builder().with(key)?.build())
+    }
+
     pub fn builder() -> CoseKeySetBuilder {
         CoseKeySetBuilder::default()
+    }
+
+    pub fn all_ecdsa_keys<V: EcdsaCoseKeyExt>(&self) -> impl Iterator<Item = &cose_key::CoseKey> {
+        self.0.iter().filter(|&k| k.alg() == Some(V::alg()) && k.crv() == Some(V::crv()))
+    }
+
+    pub fn find_ecdsa_keys(&self, alg: &iana::Algorithm) -> impl Iterator<Item = &cose_key::CoseKey> {
+        self.0.iter().filter(move |&k| k.alg() == Some(*alg))
     }
 }
 
 #[derive(Default)]
 pub struct CoseKeySetBuilder {
-    keys: Vec<cose_key::CoseKey>,
+    keys: indexmap::IndexSet<cose_key::CoseKey>,
 }
 
 impl CoseKeySetBuilder {
@@ -20,24 +42,30 @@ impl CoseKeySetBuilder {
     where
         for<'a> &'a K: TryInto<cose_key::CoseKey, Error: Into<error::CoseKeySetError>>,
     {
-        self.keys.push(key.try_into().map_err(Into::into)?);
+        if !self.keys.insert(key.try_into().map_err(Into::into)?) {
+            return Err(error::CoseKeySetError::DuplicateKey);
+        }
         Ok(self)
     }
 
-    pub fn with_cose_key(mut self, key: cose_key::CoseKey) -> Self {
-        self.keys.push(key);
-        self
+    pub fn with_cose_key(mut self, key: cose_key::CoseKey) -> Result<Self, error::CoseKeySetError> {
+        if !self.keys.insert(key) {
+            return Err(error::CoseKeySetError::DuplicateKey);
+        }
+        Ok(self)
     }
 
     pub fn build(self) -> CoseKeySet {
-        CoseKeySet(self.keys)
+        CoseKeySet(self.keys.into_iter().collect())
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::error::CoseKeySetError;
     use ciborium::{Value, cbor};
+
     wasm_bindgen_test::wasm_bindgen_test_configure!(run_in_browser);
 
     #[test]
@@ -49,6 +77,10 @@ mod tests {
         let keyset = CoseKeySet::builder().with(&key_a).unwrap().with(&key_b).unwrap().build();
 
         Value::serialized(&keyset).unwrap();
+
+        assert_eq!(keyset.all_ecdsa_keys::<ed25519_dalek::VerifyingKey>().count(), 2);
+        assert_eq!(keyset.all_ecdsa_keys::<p256::ecdsa::VerifyingKey>().count(), 0);
+        assert_eq!(keyset.all_ecdsa_keys::<p384::ecdsa::VerifyingKey>().count(), 0);
     }
 
     #[test]
@@ -60,6 +92,41 @@ mod tests {
         let keyset = CoseKeySet::builder().with(&key_a).unwrap().with(&key_b).unwrap().build();
 
         Value::serialized(&keyset).unwrap();
+
+        assert_eq!(keyset.all_ecdsa_keys::<ed25519_dalek::VerifyingKey>().count(), 0);
+        assert_eq!(keyset.all_ecdsa_keys::<p256::ecdsa::VerifyingKey>().count(), 2);
+        assert_eq!(keyset.all_ecdsa_keys::<p384::ecdsa::VerifyingKey>().count(), 0);
+    }
+
+    #[test]
+    #[wasm_bindgen_test::wasm_bindgen_test]
+    fn should_support_p384_keys() {
+        let key_a = p384::ecdsa::SigningKey::random(&mut rand::thread_rng());
+        let key_b = p384::ecdsa::SigningKey::random(&mut rand::thread_rng());
+
+        let keyset = CoseKeySet::builder().with(&key_a).unwrap().with(&key_b).unwrap().build();
+
+        Value::serialized(&keyset).unwrap();
+
+        assert_eq!(keyset.all_ecdsa_keys::<ed25519_dalek::VerifyingKey>().count(), 0);
+        assert_eq!(keyset.all_ecdsa_keys::<p256::ecdsa::VerifyingKey>().count(), 0);
+        assert_eq!(keyset.all_ecdsa_keys::<p384::ecdsa::VerifyingKey>().count(), 2);
+    }
+
+    #[test]
+    #[wasm_bindgen_test::wasm_bindgen_test]
+    fn should_be_versatile() {
+        let ed25519_key = ed25519_dalek::SigningKey::generate(&mut rand::thread_rng());
+        let p256_key = p256::ecdsa::SigningKey::random(&mut rand::thread_rng());
+        let p384_key = p384::ecdsa::SigningKey::random(&mut rand::thread_rng());
+
+        let keyset = CoseKeySet::builder().with(&ed25519_key).unwrap().with(&p256_key).unwrap().with(&p384_key).unwrap().build();
+
+        Value::serialized(&keyset).unwrap();
+
+        assert_eq!(keyset.all_ecdsa_keys::<ed25519_dalek::VerifyingKey>().count(), 1);
+        assert_eq!(keyset.all_ecdsa_keys::<p256::ecdsa::VerifyingKey>().count(), 1);
+        assert_eq!(keyset.all_ecdsa_keys::<p384::ecdsa::VerifyingKey>().count(), 1);
     }
 
     #[test]
@@ -111,11 +178,20 @@ mod tests {
             (key, Value::Bytes(x), Value::Bytes(y), Value::Bytes(kid))
         };
 
+        assert!(matches!(
+            CoseKeySet::builder().with_cose_key(meriadoc.clone()).unwrap().with_cose_key(meriadoc.clone()),
+            Err(CoseKeySetError::DuplicateKey)
+        ));
+
         let keyset = CoseKeySet::builder()
             .with_cose_key(meriadoc)
+            .unwrap()
             .with_cose_key(peregrin)
+            .unwrap()
             .with_cose_key(bilbo)
+            .unwrap()
             .with_cose_key(eleven)
+            .unwrap()
             .build();
         let keyset = Value::serialized(&keyset).unwrap();
 
@@ -127,5 +203,12 @@ mod tests {
         ])
         .unwrap();
         assert_eq!(expected, keyset);
+    }
+
+    #[test]
+    #[wasm_bindgen_test::wasm_bindgen_test]
+    fn should_reject_duplicates() {
+        let key_a = ed25519_dalek::SigningKey::generate(&mut rand::thread_rng());
+        assert!(matches!(CoseKeySet::builder().with(&key_a).unwrap().with(&key_a), Err(CoseKeySetError::DuplicateKey)));
     }
 }

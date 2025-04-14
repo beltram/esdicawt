@@ -10,6 +10,7 @@ serde.workspace = true
 thiserror.workspace = true
 coset.workspace = true
 ciborium.workspace = true
+signature.workspace = true
 ed25519-dalek = { workspace = true, optional = true }
 p256 = { workspace = true, optional = true }
 p384 = { workspace = true, optional = true }

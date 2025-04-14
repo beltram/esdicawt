@@ -1,4 +1,4 @@
-use crate::time::CwtTimeError;
+use crate::{signature_verifier::SignatureVerifierError, time::CwtTimeError};
 
 pub type SdCwtVerifierResult<T, CustomError> = Result<T, SdCwtVerifierError<CustomError>>;
 
@@ -14,6 +14,8 @@ pub enum SdCwtVerifierError<CustomError: Send + Sync> {
     KbtAudienceMismatch { expected: String, actual: String },
     #[error("Expected cnonce to be '{expected:x?}' but was '{actual:x?}'")]
     CnonceMismatch { expected: Vec<u8>, actual: Vec<u8> },
+    #[error("Signature encoding error")]
+    SignatureEncodingError,
     #[error("Signature verification error: {0}")]
     SignatureError(#[from] signature::Error),
     #[error(transparent)]
@@ -26,8 +28,14 @@ pub enum SdCwtVerifierError<CustomError: Send + Sync> {
     CoseError(#[from] esdicawt_spec::reexports::coset::CoseError),
     #[error(transparent)]
     SpecError(#[from] esdicawt_spec::EsdicawtSpecError),
+    #[error("Invalid CWT")]
+    InvalidCwt,
+    #[error("This algorithm is not supported")]
+    UnsupportedAlgorithm,
     #[error(transparent)]
     KeyConfirmationError(#[from] cose_key_confirmation::error::CoseKeyConfirmationError),
+    #[error(transparent)]
+    SignatureValidationError(#[from] SignatureVerifierError),
     #[error(transparent)]
     TimeError(#[from] CwtTimeError),
     #[error("The type of Key Confirmation in the SD-CWT is not supported")]
