@@ -211,32 +211,34 @@ pub trait Verifier {
 
         // TODO: verify revocation status w/ Status List
 
-        // now verifying the disclosures
-        let disclosures = &mut sd_cwt.0.sd_unprotected.sd_claims;
-        let disclosures_size = disclosures.len();
-
+        let mut payload = sd_cwt_payload.to_cbor_value()?;
         let sd_alg = sd_cwt.0.protected.to_value()?.sd_alg;
 
-        // compute the hash of all disclosures
-        let mut disclosures = disclosures
-            .iter_mut()
-            .map(|d| match d {
-                Ok(salted) => {
-                    let bytes = salted.to_cbor_bytes()?;
-                    let digest = self.digest(sd_alg, &bytes[..]).map_err(SdCwtVerifierError::CustomError)?;
-                    SdCwtVerifierResult::Ok((digest, salted))
-                }
-                Err(e) => Err(e.into()),
-            })
-            .collect::<Result<HashMap<_, _>, _>>()?;
+        // now verifying the disclosures
+        if let Some(disclosures) = sd_cwt.0.disclosures_mut() {
+            let disclosures_size = disclosures.len();
 
-        if disclosures.len() != disclosures_size {
-            return Err(SdCwtVerifierError::DisclosureHashCollision);
+            // compute the hash of all disclosures
+            let mut disclosures = disclosures
+                .iter_mut()
+                .map(|d| match d {
+                    Ok(salted) => {
+                        let bytes = salted.to_cbor_bytes()?;
+                        let digest = self.digest(sd_alg, &bytes[..]).map_err(SdCwtVerifierError::CustomError)?;
+                        SdCwtVerifierResult::Ok((digest, salted))
+                    }
+                    Err(e) => Err(e.into()),
+                })
+                .collect::<Result<HashMap<_, _>, _>>()?;
+
+            if disclosures.len() != disclosures_size {
+                return Err(SdCwtVerifierError::DisclosureHashCollision);
+            }
+
+            walk::walk_payload(&mut payload, &mut disclosures)?;
         }
 
-        let mut payload = sd_cwt_payload.to_cbor_value()?;
-        walk::walk_payload(&mut payload, &mut disclosures)?;
-
+        // removing the 'cnf' claim before deserialization
         if let Some(map) = payload.as_map_mut() {
             map.retain(|(k, _)| !matches!(k, Value::Integer(i) if *i == Integer::from(CWT_CLAIM_KEY_CONFIRMATION)));
         }

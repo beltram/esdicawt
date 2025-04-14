@@ -35,7 +35,7 @@ pub struct SdProtected<Extra: CustomClaims> {
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct SdUnprotected<Extra: CustomClaims> {
-    pub sd_claims: SaltedArray,
+    pub sd_claims: Option<SaltedArray>,
     pub extra: Option<Extra>,
 }
 
@@ -78,12 +78,16 @@ pub type SdCwtIssuedTagged<PayloadClaims, Hasher, ProtectedClaims = NoClaims, Un
 impl<PayloadClaims: Select, Hasher: digest::Digest + Clone, ProtectedClaims: CustomClaims, UnprotectedClaims: CustomClaims>
     SdCwtIssued<PayloadClaims, Hasher, ProtectedClaims, UnprotectedClaims>
 {
-    pub fn disclosures(&self) -> &SaltedArray {
-        &self.sd_unprotected.sd_claims
+    pub fn disclosures(&self) -> Option<&SaltedArray> {
+        self.sd_unprotected.sd_claims.as_ref()
     }
 
-    pub fn disclosures_mut(&mut self) -> &mut SaltedArray {
-        &mut self.sd_unprotected.sd_claims
+    pub fn take_disclosures(self) -> Option<SaltedArray> {
+        self.sd_unprotected.sd_claims
+    }
+
+    pub fn disclosures_mut(&mut self) -> Option<&mut SaltedArray> {
+        self.sd_unprotected.sd_claims.as_mut()
     }
 }
 
