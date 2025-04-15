@@ -5,8 +5,7 @@ use crate::{
     key_binding::{KbtPayload, KbtProtected, KbtUnprotected},
 };
 
-#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
-#[serde(bound = "IssuerProtectedClaims: Select")]
+#[derive(Debug, Clone, PartialEq)]
 pub struct KbtCwtVerified<
     IssuerPayloadClaims: Select,
     IssuerProtectedClaims: CustomClaims = NoClaims,
@@ -15,7 +14,7 @@ pub struct KbtCwtVerified<
     KbtUnprotectedClaims: CustomClaims = NoClaims,
     KbtPayloadClaims: CustomClaims = NoClaims,
 > {
-    pub protected: KbtCwtProtectedVerified<IssuerPayloadClaims, IssuerProtectedClaims, IssuerUnprotectedClaims, KbtProtectedClaims>,
+    pub protected: KbtProtectedVerified<IssuerPayloadClaims, IssuerProtectedClaims, IssuerUnprotectedClaims, KbtProtectedClaims>,
     pub unprotected: KbtUnprotected<KbtUnprotectedClaims>,
     pub payload: KbtPayload<KbtPayloadClaims>,
     pub claimset: Option<IssuerPayloadClaims>,
@@ -35,9 +34,13 @@ impl<
     }
 }
 
-#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
-#[serde(bound = "IssuerProtectedClaims: CustomClaims")]
-pub struct KbtCwtProtectedVerified<IssuerPayloadClaims: Select, IssuerProtectedClaims: CustomClaims, IssuerUnprotectedClaims: CustomClaims, Extra: CustomClaims> {
+#[derive(Debug, Clone, PartialEq)]
+pub struct KbtProtectedVerified<
+    IssuerPayloadClaims: Select,
+    IssuerProtectedClaims: CustomClaims = NoClaims,
+    IssuerUnprotectedClaims: CustomClaims = NoClaims,
+    Extra: CustomClaims = NoClaims,
+> {
     pub alg: Algorithm,
     pub issuer_sd_cwt: SdIssuedVerified<IssuerPayloadClaims, IssuerProtectedClaims, IssuerUnprotectedClaims>,
     pub claims: Option<Extra>,
@@ -45,7 +48,7 @@ pub struct KbtCwtProtectedVerified<IssuerPayloadClaims: Select, IssuerProtectedC
 
 impl<IssuerPayloadClaims: Select, Hasher: digest::Digest + Clone, IssuerProtectedClaims: CustomClaims, IssuerUnprotectedClaims: CustomClaims, Extra: CustomClaims>
     TryFrom<KbtProtected<IssuerPayloadClaims, Hasher, IssuerProtectedClaims, IssuerUnprotectedClaims, Extra>>
-    for KbtCwtProtectedVerified<IssuerPayloadClaims, IssuerProtectedClaims, IssuerUnprotectedClaims, Extra>
+    for KbtProtectedVerified<IssuerPayloadClaims, IssuerProtectedClaims, IssuerUnprotectedClaims, Extra>
 {
     type Error = EsdicawtSpecError;
 
@@ -58,9 +61,8 @@ impl<IssuerPayloadClaims: Select, Hasher: digest::Digest + Clone, IssuerProtecte
     }
 }
 
-#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
-#[serde(bound = "ProtectedClaims: CustomClaims")]
-pub struct SdIssuedVerified<PayloadClaims: CustomClaims, ProtectedClaims: CustomClaims, UnprotectedClaims: CustomClaims> {
+#[derive(Debug, Clone, PartialEq)]
+pub struct SdIssuedVerified<PayloadClaims: CustomClaims, ProtectedClaims: CustomClaims = NoClaims, UnprotectedClaims: CustomClaims = NoClaims> {
     pub protected: SdProtected<ProtectedClaims>,
     pub sd_unprotected: SdUnprotectedVerified<UnprotectedClaims>,
     pub payload: SdInnerPayload<PayloadClaims>,
@@ -80,9 +82,8 @@ impl<PayloadClaims: Select, Hasher: digest::Digest + Clone, ProtectedClaims: Cus
     }
 }
 
-#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
-#[serde(bound = "Extra: CustomClaims")]
-pub struct SdUnprotectedVerified<Extra: CustomClaims> {
+#[derive(Debug, Clone, PartialEq)]
+pub struct SdUnprotectedVerified<Extra: CustomClaims = NoClaims> {
     pub claims: Option<Extra>,
 }
 

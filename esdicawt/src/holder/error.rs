@@ -19,7 +19,7 @@ pub enum SdCwtHolderError<CustomError: Send + Sync> {
     #[error(transparent)]
     SignatureError(#[from] signature::Error),
     #[error(transparent)]
-    SignatureValidationError(#[from] SignatureVerifierError),
+    IssuerSignatureValidationError(#[from] SignatureVerifierError),
     #[error(transparent)]
     IntError(#[from] core::num::TryFromIntError),
     #[error(transparent)]

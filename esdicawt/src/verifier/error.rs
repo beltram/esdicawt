@@ -28,14 +28,16 @@ pub enum SdCwtVerifierError<CustomError: Send + Sync> {
     CoseError(#[from] esdicawt_spec::reexports::coset::CoseError),
     #[error(transparent)]
     SpecError(#[from] esdicawt_spec::EsdicawtSpecError),
-    #[error("Invalid CWT")]
-    InvalidCwt,
+    #[error("Invalid SD-CWT")]
+    InvalidSdCwt,
+    #[error("Invalid SD-KBT")]
+    InvalidSdKbt,
     #[error("This algorithm is not supported")]
     UnsupportedAlgorithm,
     #[error(transparent)]
     KeyConfirmationError(#[from] cose_key_confirmation::error::CoseKeyConfirmationError),
     #[error(transparent)]
-    SignatureValidationError(#[from] SignatureVerifierError),
+    IssuerSignatureValidationError(#[from] SignatureVerifierError),
     #[error(transparent)]
     TimeError(#[from] CwtTimeError),
     #[error("The type of Key Confirmation in the SD-CWT is not supported")]

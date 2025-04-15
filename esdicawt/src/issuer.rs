@@ -178,13 +178,13 @@ pub trait Issuer {
 mod tests {
     use super::{claims::CustomTokenClaims, test_utils::Ed25519Issuer};
     use crate::{
-        Issuer, IssuerParams,
+        CwtStdLabel, Issuer, IssuerParams,
         spec::{
             ClaimName, CwtAny, NoClaims, Select, SelectExt,
             blinded_claims::{Salted, SaltedClaim, SaltedElement},
             issuance::SdCwtIssuedTagged,
             redacted_claims::RedactedClaimKeys,
-            reexports::coset::{CoseSign1, TaggedCborSerializable, iana::CwtClaimName},
+            reexports::coset::{CoseSign1, TaggedCborSerializable},
             sd,
         },
     };
@@ -259,15 +259,15 @@ mod tests {
 
         for entry in payload {
             match entry {
-                (Value::Integer(label), Value::Text(issuer)) if label == (CwtClaimName::Iss as i64).into() => assert_eq!(&issuer, "https://example.com/i/acme.io"),
-                (Value::Integer(label), Value::Text(sub)) if label == (CwtClaimName::Sub as i64).into() => assert_eq!(&sub, "https://example.com/alice.smith"),
-                (Value::Integer(label), Value::Text(aud)) if label == (CwtClaimName::Aud as i64).into() => assert_eq!(&aud, "https://example.com/r/party"),
-                (Value::Integer(label), Value::Integer(_)) if label == (CwtClaimName::Exp as i64).into() => {}
-                (Value::Integer(label), Value::Integer(_)) if label == (CwtClaimName::Iat as i64).into() => {}
-                (Value::Integer(label), Value::Integer(_)) if label == (CwtClaimName::Nbf as i64).into() => {}
-                (Value::Integer(label), Value::Bytes(cti)) if label == (CwtClaimName::Cti as i64).into() => assert_eq!(cti, b"cti"),
-                (Value::Integer(label), Value::Bytes(cnonce)) if label == (CwtClaimName::CNonce as i64).into() => assert_eq!(cnonce, b"cnonce"),
-                (Value::Integer(label), Value::Map(_)) if label == (CwtClaimName::Cnf as i64).into() => {}
+                (Value::Integer(label), Value::Text(issuer)) if label == CwtStdLabel::Issuer => assert_eq!(&issuer, "https://example.com/i/acme.io"),
+                (Value::Integer(label), Value::Text(sub)) if label == CwtStdLabel::Subject => assert_eq!(&sub, "https://example.com/alice.smith"),
+                (Value::Integer(label), Value::Text(aud)) if label == CwtStdLabel::Audience => assert_eq!(&aud, "https://example.com/r/party"),
+                (Value::Integer(label), Value::Integer(_)) if label == CwtStdLabel::ExpiresAt => {}
+                (Value::Integer(label), Value::Integer(_)) if label == CwtStdLabel::IssuedAt => {}
+                (Value::Integer(label), Value::Integer(_)) if label == CwtStdLabel::NotBefore => {}
+                (Value::Integer(label), Value::Bytes(cti)) if label == CwtStdLabel::Cti => assert_eq!(cti, b"cti"),
+                (Value::Integer(label), Value::Bytes(cnonce)) if label == CwtStdLabel::Cnonce => assert_eq!(cnonce, b"cnonce"),
+                (Value::Integer(label), Value::Map(_)) if label == CwtStdLabel::KeyConfirmation => {}
                 (Value::Simple(label), Value::Bytes(_)) if label == RedactedClaimKeys::CWT_LABEL => {}
                 e => panic!("unexpected: {e:?}"),
             }

@@ -3,8 +3,11 @@
 pub use cose_key_confirmation::*;
 pub use cose_key_set::{self, reexports::*};
 pub use esdicawt_spec as spec;
+
+use esdicawt_spec::reexports::coset;
+
 pub use holder::{
-    Holder,
+    Holder, SdCwtVerified,
     error::{SdCwtHolderError, SdCwtHolderResult},
     params::{CborPath, HolderParams, Presentation},
     validation::{HolderValidationParams, SdCwtHolderValidationError},
@@ -24,6 +27,7 @@ pub use verifier::{
     params::VerifierParams,
 };
 
+pub(crate) mod any_digest;
 mod holder;
 mod issuer;
 mod lookup;
@@ -97,3 +101,21 @@ macro_rules! cwt_label {
         }
     };
 }
+
+use crate as esdicawt;
+
+#[derive(Debug, Copy, Clone, serde_repr::Serialize_repr, serde_repr::Deserialize_repr, enum_variants_strings::EnumVariantsStrings)]
+#[enum_variants_strings_transform(transform = "snake_case")]
+#[repr(i64)]
+pub enum CwtStdLabel {
+    Issuer = coset::iana::CwtClaimName::Iss as i64,
+    Subject = coset::iana::CwtClaimName::Sub as i64,
+    Audience = coset::iana::CwtClaimName::Aud as i64,
+    ExpiresAt = coset::iana::CwtClaimName::Exp as i64,
+    NotBefore = coset::iana::CwtClaimName::Nbf as i64,
+    IssuedAt = coset::iana::CwtClaimName::Iat as i64,
+    Cnonce = coset::iana::CwtClaimName::CNonce as i64,
+    Cti = coset::iana::CwtClaimName::Cti as i64,
+    KeyConfirmation = coset::iana::CwtClaimName::Cnf as i64,
+}
+cwt_label!(CwtStdLabel);

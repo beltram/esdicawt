@@ -733,13 +733,14 @@ mod tests {
     #[test]
     #[wasm_bindgen_test::wasm_bindgen_test]
     fn can_issue_and_present_oidc_claim_token() {
-        let mut rng = rand::thread_rng();
-        let issuer_signing_key = ed25519_dalek::SigningKey::generate(&mut rng);
+        let issuer_signing_key = ed25519_dalek::SigningKey::generate(&mut rand::thread_rng());
         let issuer = Ed25519Issuer::new(issuer_signing_key.clone());
-        let holder_signing_key = ed25519_dalek::SigningKey::generate(&mut rng);
+        let cks = CoseKeySet::new(&issuer_signing_key).unwrap();
+
+        let holder_signing_key = ed25519_dalek::SigningKey::generate(&mut rand::thread_rng());
         let alice_holder = Ed25519Holder::new(holder_signing_key);
 
-        let _bob_holder = Ed25519Holder::new(ed25519_dalek::SigningKey::generate(&mut rng));
+        let _bob_holder = Ed25519Holder::new(ed25519_dalek::SigningKey::generate(&mut rand::thread_rng()));
 
         let alice = get_alice();
         let alice_subject = alice.preferred_username.clone().unwrap();
@@ -765,9 +766,7 @@ mod tests {
         }));
 
         let alice_sd_cwt = alice_sd_cwt.to_cbor_bytes().unwrap();
-        let alice_sd_cwt = alice_holder
-            .verify_sd_cwt(&alice_sd_cwt, Default::default(), &CoseKeySet::new(&issuer_signing_key).unwrap())
-            .unwrap();
+        let alice_sd_cwt = alice_holder.verify_sd_cwt(&alice_sd_cwt, Default::default(), &cks).unwrap();
 
         let mut alice_kbt = alice_holder
             .new_presentation(
@@ -869,8 +868,8 @@ mod ed25519 {
 
     impl Issuer for Ed25519Issuer {
         type Error = EsdicawtSpecError;
-        type Signer = ed25519_dalek::SigningKey;
         type Hasher = sha2::Sha256;
+        type Signer = ed25519_dalek::SigningKey;
         type Signature = ed25519_dalek::Signature;
 
         type ProtectedClaims = NoClaims;
@@ -928,10 +927,6 @@ mod ed25519 {
 
         fn cwt_algorithm(&self) -> coset::iana::Algorithm {
             coset::iana::Algorithm::EdDSA
-        }
-
-        fn supported_hash_alg(&self) -> &[SdHashAlg] {
-            &[SdHashAlg::Sha256]
         }
 
         fn verifier(&self) -> &Self::Verifier {

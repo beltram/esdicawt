@@ -442,7 +442,7 @@ mod tests {
     }
 
     fn traverse<const N: usize>(disclosures: [SaltedRef<Value>; N]) -> [Vec<CborPath>; N] {
-        let mut d = SaltedArray::with_capacity(0);
+        let mut d = SaltedArray::new();
         for s in disclosures {
             d.push_ref(s).unwrap();
         }

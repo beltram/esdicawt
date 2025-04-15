@@ -341,7 +341,7 @@ mod tests {
 
         assert!(matches!(
             holder.verify_sd_cwt(&sd_cwt, Default::default(), &CoseKeySet::new(&issuer_signing_key_bis).unwrap()),
-            Err(SdCwtHolderError::SignatureValidationError(SignatureVerifierError::NoSigner))
+            Err(SdCwtHolderError::IssuerSignatureValidationError(SignatureVerifierError::SignatureError(_)))
         ));
     }
 

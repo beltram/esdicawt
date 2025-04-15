@@ -11,28 +11,28 @@ pub fn validate_signature(cose_sign1_sd_cwt: &CoseSign1, keyset: &cose_key_set::
     };
 
     cose_sign1_sd_cwt.verify_signature(&[], |#[allow(unused_variables)] signature, #[allow(unused_variables)] raw_data| {
-        for key in keyset.find_ecdsa_keys(&alg) {
+        for key in keyset.find_keys(&alg) {
             match key.crv() {
                 #[cfg(feature = "ed25519")]
                 Some(iana::EllipticCurve::Ed25519) => {
                     use signature::Verifier as _;
                     let signature = ed25519_dalek::Signature::from_slice(signature)?;
                     let verifier = ed25519_dalek::VerifyingKey::try_from(key)?;
-                    return verifier.verify(raw_data, &signature).map_err(|_| SignatureVerifierError::NoSigner);
+                    return Ok(verifier.verify(raw_data, &signature)?);
                 }
                 #[cfg(feature = "p256")]
                 Some(iana::EllipticCurve::P_256) => {
                     use signature::Verifier as _;
                     let signature = p256::ecdsa::Signature::from_slice(signature)?;
                     let verifier = p256::ecdsa::VerifyingKey::try_from(key)?;
-                    return verifier.verify(raw_data, &signature).map_err(|_| SignatureVerifierError::NoSigner);
+                    return Ok(verifier.verify(raw_data, &signature)?);
                 }
                 #[cfg(feature = "p384")]
                 Some(iana::EllipticCurve::P_384) => {
                     use signature::Verifier as _;
                     let signature = p384::ecdsa::Signature::from_slice(signature)?;
                     let verifier = p384::ecdsa::VerifyingKey::try_from(key)?;
-                    return verifier.verify(raw_data, &signature).map_err(|_| SignatureVerifierError::NoSigner);
+                    return Ok(verifier.verify(raw_data, &signature)?);
                 }
                 _ => {}
             }
