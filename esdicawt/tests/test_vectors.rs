@@ -206,10 +206,6 @@ impl<T: Select> Holder for P256Holder<T> {
     fn verifier(&self) -> &Self::Verifier {
         &self.verifying_key
     }
-
-    fn supported_hash_alg(&self) -> &[SdHashAlg] {
-        &[SdHashAlg::Sha256]
-    }
 }
 
 #[test]

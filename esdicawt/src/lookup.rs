@@ -1,14 +1,17 @@
 #![allow(dead_code)]
 
-use crate::spec::{
-    ClaimName, CustomClaims, CwtAny, EsdicawtSpecResult, REDACTED_CLAIM_ELEMENT_TAG, Select,
-    blinded_claims::{Salted, SaltedArray},
-    issuance::SdCwtIssued,
-    key_binding::KbtCwt,
-    redacted_claims::RedactedClaimKeys,
+use crate::{
+    any_digest::AnyDigest,
+    spec::{
+        ClaimName, CustomClaims, CwtAny, EsdicawtSpecResult, REDACTED_CLAIM_ELEMENT_TAG, Select,
+        blinded_claims::{Salted, SaltedArray},
+        issuance::SdCwtIssued,
+        key_binding::KbtCwt,
+        redacted_claims::RedactedClaimKeys,
+    },
 };
 use ciborium::Value;
-use esdicawt_spec::{issuance::SdCwtIssuedTagged, key_binding::KbtCwtTagged};
+use esdicawt_spec::{issuance::SdCwtIssuedTagged, key_binding::KbtCwtTagged, verified::KbtCwtVerified};
 
 #[derive(Debug, Clone, Hash, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct Query {
@@ -57,7 +60,7 @@ where
     query_inner::<Hasher>(array, payload, &query.elements)
 }
 
-pub fn query_inner<Hasher>(array: &mut SaltedArray, payload: &Value, query: &[QueryElement]) -> EsdicawtSpecResult<Option<Value>>
+fn query_inner<Hasher>(array: &mut SaltedArray, payload: &Value, query: &[QueryElement]) -> EsdicawtSpecResult<Option<Value>>
 where
     Hasher: digest::Digest,
 {
@@ -188,6 +191,21 @@ impl<
 {
     fn query(&mut self, token_query: Query) -> EsdicawtSpecResult<Option<Value>> {
         self.protected.to_value_mut()?.kcwt.to_value_mut()?.0.query(token_query)
+    }
+}
+
+impl<
+    IssuerPayloadClaims: Select,
+    IssuerProtectedClaims: CustomClaims,
+    IssuerUnprotectedClaims: CustomClaims,
+    KbtProtectedClaims: CustomClaims,
+    KbtUnprotectedClaims: CustomClaims,
+    KbtPayloadClaims: CustomClaims,
+> TokenQuery for KbtCwtVerified<IssuerPayloadClaims, IssuerProtectedClaims, IssuerUnprotectedClaims, KbtProtectedClaims, KbtUnprotectedClaims, KbtPayloadClaims>
+{
+    fn query(&mut self, token_query: Query) -> EsdicawtSpecResult<Option<Value>> {
+        let payload = self.payload.to_cbor_value()?;
+        query_inner::<AnyDigest>(&mut SaltedArray::new(), &payload, &token_query.elements)
     }
 }
 

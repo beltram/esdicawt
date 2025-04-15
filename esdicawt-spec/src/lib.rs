@@ -1,4 +1,5 @@
 pub mod alg;
+pub(crate) mod any_digest;
 pub mod blinded_claims;
 pub mod inlined_cbor;
 pub mod issuance;
@@ -238,7 +239,9 @@ impl<'de> serde::Deserialize<'de> for ClaimName {
                     return Err(D::Error::custom("Only String, integers in tags at the root of a CWT payload"));
                 }
             },
-            _ => return Err(D::Error::custom("Only String, integers are allowed in the root of a CWT payload")),
+            _ => {
+                return Err(D::Error::custom("Only String, integers are allowed in the root of a CWT payload"));
+            }
         })
     }
 }

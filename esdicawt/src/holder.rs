@@ -1,16 +1,19 @@
 use crate::{
-    HolderParams, HolderValidationParams, SdCwtHolderError, SdCwtHolderValidationError, holder::validation::validate_disclosures, now, signature_verifier::validate_signature,
+    HolderParams, HolderValidationParams, SdCwtHolderError, SdCwtHolderValidationError,
+    holder::validation::validate_disclosures,
+    now,
+    signature_verifier::validate_signature,
+    spec::{
+        CustomClaims, CwtAny, NoClaims, Select,
+        issuance::SdCwtIssuedTagged,
+        key_binding::{KbtCwtTagged, KbtPayload, KbtProtected, KbtUnprotected},
+        reexports::coset::{
+            CoseSign1, TaggedCborSerializable, {self},
+        },
+    },
 };
 use ciborium::Value;
 use cose_key_confirmation::{KeyConfirmation, error::CoseKeyConfirmationError};
-use esdicawt_spec::{
-    CustomClaims, CwtAny, NoClaims, SdHashAlg, Select,
-    issuance::SdCwtIssuedTagged,
-    key_binding::{KbtCwtTagged, KbtPayload, KbtProtected, KbtUnprotected},
-    reexports::coset::{
-        CoseSign1, TaggedCborSerializable, {self},
-    },
-};
 
 pub mod error;
 pub mod params;
@@ -70,85 +73,6 @@ pub trait Holder {
     fn signer(&self) -> &Self::Signer;
 
     fn verifier(&self) -> &Self::Verifier;
-
-    fn supported_hash_alg(&self) -> &[SdHashAlg];
-
-    /// Simple API when a holder wants all the redacted claims to be disclosed to the Verifier
-    #[allow(clippy::type_complexity)]
-    fn new_presentation(
-        &self,
-        mut sd_cwt_issued: SdCwtVerified<Self::IssuerPayloadClaims, Self::Hasher, Self::IssuerProtectedClaims, Self::IssuerUnprotectedClaims>,
-        params: HolderParams<Self::KbtProtectedClaims, Self::KbtUnprotectedClaims, Self::KbtPayloadClaims>,
-    ) -> Result<
-        KbtCwtTagged<
-            Self::IssuerPayloadClaims,
-            Self::Hasher,
-            Self::IssuerProtectedClaims,
-            Self::IssuerUnprotectedClaims,
-            Self::KbtProtectedClaims,
-            Self::KbtUnprotectedClaims,
-            Self::KbtPayloadClaims,
-        >,
-        SdCwtHolderError<Self::Error>,
-    > {
-        // --- building the kbt ---
-        // --- unprotected ---
-        let unprotected = KbtUnprotected {
-            extra: params.extra_kbt_unprotected,
-        }
-        .try_into()?;
-
-        // --- redaction of claims ---
-        // select the claims to disclose
-        if let Some(sd_claims) = sd_cwt_issued.0.0.sd_unprotected.sd_claims {
-            let sd_claims = params.presentation.try_select_disclosures::<Self::Hasher, Self::Error>(sd_claims)?;
-
-            // then replace them in the issued sd-cwt
-            sd_cwt_issued.0.0.sd_unprotected.sd_claims = Some(sd_claims);
-        }
-
-        // --- protected ---
-        let alg = coset::Algorithm::Assigned(self.cwt_algorithm());
-        let protected = KbtProtected::<Self::IssuerPayloadClaims, Self::Hasher, Self::IssuerProtectedClaims, Self::IssuerUnprotectedClaims, Self::KbtProtectedClaims> {
-            alg: alg.into(),
-            kcwt: sd_cwt_issued.0.into(),
-            extra: params.extra_kbt_protected,
-        }
-        .try_into()
-        .map_err(|_| SdCwtHolderError::ImplementationError("Failed mapping kbt protected to COSE header"))?;
-
-        // --- payload ---
-        #[cfg(feature = "test-vectors")]
-        let now = params.artificial_time.map(|d| d.as_secs()).unwrap_or_else(now);
-        #[cfg(not(feature = "test-vectors"))]
-        let now = now();
-
-        let expiration = params.expiry.map(|exp| (now + exp.as_secs()) as i64);
-        let not_before = params.with_not_before.then_some(now as i64);
-        let issued_at = now as i64;
-
-        let payload = KbtPayload {
-            audience: params.audience.to_string(),
-            expiration,
-            not_before,
-            issued_at,
-            cnonce: params.cnonce.map(|b| b.to_owned().into()),
-            extra: params.extra_kbt_payload,
-        };
-
-        let sign1 = coset::CoseSign1Builder::new()
-            .protected(protected)
-            .unprotected(unprotected)
-            .payload(payload.to_cbor_bytes()?)
-            .try_create_signature(&[], |tbs| {
-                use signature::{SignatureEncoding as _, Signer as _};
-                let signature = self.signer().try_sign(tbs)?;
-                Result::<_, signature::Error>::Ok(signature.to_bytes().as_ref().to_vec())
-            })?
-            .build()
-            .to_tagged_vec()?;
-        Ok(KbtCwtTagged::from_cbor_bytes(&sign1)?)
-    }
 
     // TODO: there are no unblinded claims about the subject which violate its privacy policies
     // TODO: all the Salted Disclosed Claims are correct in their unblinded context in the payload
@@ -242,17 +166,110 @@ pub trait Holder {
 
         Ok(SdCwtVerified(sd_cwt))
     }
+
+    /// Simple API when a holder wants all the redacted claims to be disclosed to the Verifier
+    #[allow(clippy::type_complexity)]
+    fn new_presentation(
+        &self,
+        mut sd_cwt: SdCwtVerified<Self::IssuerPayloadClaims, Self::Hasher, Self::IssuerProtectedClaims, Self::IssuerUnprotectedClaims>,
+        params: HolderParams<Self::KbtProtectedClaims, Self::KbtUnprotectedClaims, Self::KbtPayloadClaims>,
+    ) -> Result<
+        KbtCwtTagged<
+            Self::IssuerPayloadClaims,
+            Self::Hasher,
+            Self::IssuerProtectedClaims,
+            Self::IssuerUnprotectedClaims,
+            Self::KbtProtectedClaims,
+            Self::KbtUnprotectedClaims,
+            Self::KbtPayloadClaims,
+        >,
+        SdCwtHolderError<Self::Error>,
+    > {
+        // verify time claims first
+        #[cfg(not(feature = "test-vectors"))] // FIXME: draft samples are expired
+        {
+            let payload = sd_cwt.0.0.payload.clone_value()?;
+            let now = time::OffsetDateTime::now_utc().unix_timestamp();
+            crate::time::verify_time_claims(now, params.leeway, payload.inner.issued_at, payload.inner.expiration, payload.inner.not_before)?;
+        }
+
+        // --- building the kbt ---
+        // --- unprotected ---
+        let unprotected = KbtUnprotected {
+            extra: params.extra_kbt_unprotected,
+        }
+        .try_into()?;
+
+        // --- redaction of claims ---
+        // select the claims to disclose
+        if let Some(sd_claims) = sd_cwt.0.0.sd_unprotected.sd_claims {
+            let sd_claims = params.presentation.try_select_disclosures::<Self::Hasher, Self::Error>(sd_claims)?;
+
+            // then replace them in the issued sd-cwt
+            sd_cwt.0.0.sd_unprotected.sd_claims = Some(sd_claims);
+        }
+
+        // --- protected ---
+        let alg = coset::Algorithm::Assigned(self.cwt_algorithm());
+        let protected = KbtProtected::<Self::IssuerPayloadClaims, Self::Hasher, Self::IssuerProtectedClaims, Self::IssuerUnprotectedClaims, Self::KbtProtectedClaims> {
+            alg: alg.into(),
+            kcwt: sd_cwt.0.into(),
+            extra: params.extra_kbt_protected,
+        }
+        .try_into()
+        .map_err(|_| SdCwtHolderError::ImplementationError("Failed mapping kbt protected to COSE header"))?;
+
+        // --- payload ---
+        #[cfg(feature = "test-vectors")]
+        let now = params.artificial_time.map(|d| d.as_secs()).unwrap_or_else(now);
+        #[cfg(not(feature = "test-vectors"))]
+        let now = now();
+
+        let expiration = params.expiry.map(|exp| (now + exp.as_secs()) as i64);
+        let not_before = params.with_not_before.then_some(now as i64);
+        let issued_at = now as i64;
+
+        let payload = KbtPayload {
+            audience: params.audience.to_string(),
+            expiration,
+            not_before,
+            issued_at,
+            cnonce: params.cnonce.map(|b| b.to_owned().into()),
+            extra: params.extra_kbt_payload,
+        };
+
+        let sign1 = coset::CoseSign1Builder::new()
+            .protected(protected)
+            .unprotected(unprotected)
+            .payload(payload.to_cbor_bytes()?)
+            .try_create_signature(&[], |tbs| {
+                use signature::{SignatureEncoding as _, Signer as _};
+                let signature = self.signer().try_sign(tbs)?;
+                Result::<_, signature::Error>::Ok(signature.to_bytes().as_ref().to_vec())
+            })?
+            .build()
+            .to_tagged_vec()?;
+        Ok(KbtCwtTagged::from_cbor_bytes(&sign1)?)
+    }
 }
 
 #[derive(Debug, Clone)]
 pub struct SdCwtVerified<PayloadClaims: Select, Hasher: digest::Digest + Clone, ProtectedClaims: CustomClaims = NoClaims, UnprotectedClaims: CustomClaims = NoClaims>(
-    pub(crate) SdCwtIssuedTagged<PayloadClaims, Hasher, ProtectedClaims, UnprotectedClaims>,
+    pub SdCwtIssuedTagged<PayloadClaims, Hasher, ProtectedClaims, UnprotectedClaims>,
 );
+
+impl<PayloadClaims: Select, Hasher: digest::Digest + Clone, ProtectedClaims: CustomClaims, UnprotectedClaims: CustomClaims> PartialEq
+    for SdCwtVerified<PayloadClaims, Hasher, ProtectedClaims, UnprotectedClaims>
+{
+    fn eq(&self, other: &Self) -> bool {
+        self.0.eq(&other.0)
+    }
+}
 
 #[cfg(test)]
 mod tests {
     use super::{claims::CustomTokenClaims, test_utils::Ed25519Holder, *};
-    use crate::{Issuer, IssuerParams, Presentation, holder::params::CborPath, issuer::test_utils::Ed25519Issuer, spec::reexports::coset::iana::CwtClaimName};
+    use crate::{CwtStdLabel, Issuer, IssuerParams, Presentation, holder::params::CborPath, issuer::test_utils::Ed25519Issuer};
     use ciborium::cbor;
     use cose_key_set::CoseKeySet;
     use esdicawt_spec::{
@@ -379,11 +396,11 @@ mod tests {
 
         for entry in payload {
             match entry {
-                (Value::Integer(label), Value::Text(aud)) if label == (CwtClaimName::Aud as i64).into() => assert_eq!(&aud, "https://example.com/r/alice-bob-group"),
-                (Value::Integer(label), Value::Integer(_)) if label == (CwtClaimName::Exp as i64).into() => {}
-                (Value::Integer(label), Value::Integer(_)) if label == (CwtClaimName::Iat as i64).into() => {}
-                (Value::Integer(label), Value::Integer(_)) if label == (CwtClaimName::Nbf as i64).into() => {}
-                (Value::Integer(label), Value::Bytes(cnonce)) if label == (CwtClaimName::CNonce as i64).into() => assert_eq!(cnonce, b"cnonce"),
+                (Value::Integer(label), Value::Text(aud)) if label == CwtStdLabel::Audience => assert_eq!(&aud, "https://example.com/r/alice-bob-group"),
+                (Value::Integer(label), Value::Integer(_)) if label == CwtStdLabel::ExpiresAt => {}
+                (Value::Integer(label), Value::Integer(_)) if label == CwtStdLabel::IssuedAt => {}
+                (Value::Integer(label), Value::Integer(_)) if label == CwtStdLabel::NotBefore => {}
+                (Value::Integer(label), Value::Bytes(cnonce)) if label == CwtStdLabel::Cnonce => assert_eq!(cnonce, b"cnonce"),
                 e => panic!("unexpected: {e:?}"),
             }
         }
@@ -407,6 +424,14 @@ mod tests {
                 >,
         >,
     ) {
+    }
+
+    #[allow(dead_code)]
+    fn should_be_comparable<PayloadClaims: Select, Hasher: digest::Digest + Clone, ProtectedClaims: CustomClaims, UnprotectedClaims: CustomClaims>(
+        a: SdCwtVerified<PayloadClaims, Hasher, ProtectedClaims, UnprotectedClaims>,
+        b: SdCwtVerified<PayloadClaims, Hasher, ProtectedClaims, UnprotectedClaims>,
+    ) -> bool {
+        a == b
     }
 }
 
@@ -474,7 +499,7 @@ pub mod claims {
 
 #[cfg(feature = "test-utils")]
 pub mod test_utils {
-    use esdicawt_spec::{CustomClaims, NoClaims, SdHashAlg, Select, reexports::coset};
+    use crate::spec::{CustomClaims, NoClaims, Select, reexports::coset};
 
     #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
     pub struct Ed25519Holder<DisclosedClaims: CustomClaims> {
@@ -515,10 +540,6 @@ pub mod test_utils {
 
         fn cwt_algorithm(&self) -> coset::iana::Algorithm {
             coset::iana::Algorithm::EdDSA
-        }
-
-        fn supported_hash_alg(&self) -> &[SdHashAlg] {
-            &[SdHashAlg::Sha256]
         }
 
         fn verifier(&self) -> &Self::Verifier {

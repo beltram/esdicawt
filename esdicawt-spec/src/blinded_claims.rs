@@ -238,6 +238,10 @@ impl<'a, T: CwtAny> From<&'a Salted<T>> for SaltedRef<'a, T> {
 pub struct SaltedArray(pub Vec<InlinedCbor<Salted<Value>>>);
 
 impl SaltedArray {
+    pub fn new() -> Self {
+        Self(Vec::with_capacity(0))
+    }
+
     pub fn with_capacity(capacity: usize) -> Self {
         Self(Vec::with_capacity(capacity))
     }
