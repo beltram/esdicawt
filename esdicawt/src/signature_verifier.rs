@@ -1,6 +1,6 @@
 use crate::{
     CoseKeyError,
-    coset::{Algorithm, CoseSign1, iana, iana::EnumI64},
+    spec::reexports::coset::{Algorithm, CoseSign1, iana, iana::EnumI64},
 };
 
 pub fn validate_signature(cose_sign1_sd_cwt: &CoseSign1, keyset: &cose_key_set::CoseKeySet) -> Result<(), SignatureVerifierError> {

@@ -1,6 +1,5 @@
 use crate::{
-    HolderParams, HolderValidationParams, SdCwtHolderError, SdCwtHolderValidationError, coset::CoseSign1, holder::validation::validate_disclosures, now,
-    signature_verifier::validate_signature,
+    HolderParams, HolderValidationParams, SdCwtHolderError, SdCwtHolderValidationError, holder::validation::validate_disclosures, now, signature_verifier::validate_signature,
 };
 use ciborium::Value;
 use cose_key_confirmation::{KeyConfirmation, error::CoseKeyConfirmationError};
@@ -9,7 +8,7 @@ use esdicawt_spec::{
     issuance::SdCwtIssuedTagged,
     key_binding::{KbtCwtTagged, KbtPayload, KbtProtected, KbtUnprotected},
     reexports::coset::{
-        TaggedCborSerializable, {self},
+        CoseSign1, TaggedCborSerializable, {self},
     },
 };
 
@@ -253,7 +252,7 @@ pub struct SdCwtVerified<PayloadClaims: Select, Hasher: digest::Digest + Clone, 
 #[cfg(test)]
 mod tests {
     use super::{claims::CustomTokenClaims, test_utils::Ed25519Holder, *};
-    use crate::{Issuer, IssuerParams, Presentation, coset::iana::CwtClaimName, holder::params::CborPath, issuer::test_utils::Ed25519Issuer};
+    use crate::{Issuer, IssuerParams, Presentation, holder::params::CborPath, issuer::test_utils::Ed25519Issuer, spec::reexports::coset::iana::CwtClaimName};
     use ciborium::cbor;
     use cose_key_set::CoseKeySet;
     use esdicawt_spec::{

@@ -178,18 +178,18 @@ pub trait Issuer {
 mod tests {
     use super::{claims::CustomTokenClaims, test_utils::Ed25519Issuer};
     use crate::{
-        Issuer, IssuerParams, coset,
-        coset::CoseSign1,
+        Issuer, IssuerParams,
         spec::{
+            ClaimName, CwtAny, NoClaims, Select, SelectExt,
             blinded_claims::{Salted, SaltedClaim, SaltedElement},
+            issuance::SdCwtIssuedTagged,
+            redacted_claims::RedactedClaimKeys,
+            reexports::coset::{CoseSign1, TaggedCborSerializable, iana::CwtClaimName},
             sd,
         },
     };
     use ciborium::{Value, cbor};
-    use coset::iana::CwtClaimName;
     use digest::Digest as _;
-    use esdicawt::coset::TaggedCborSerializable;
-    use esdicawt_spec::{ClaimName, CwtAny, NoClaims, Select, SelectExt, issuance::SdCwtIssuedTagged, redacted_claims::RedactedClaimKeys};
     use std::collections::HashMap;
 
     wasm_bindgen_test::wasm_bindgen_test_configure!(run_in_browser);
