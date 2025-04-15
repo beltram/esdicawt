@@ -17,7 +17,6 @@ pub use issuer::{
 pub use lookup::*;
 pub use read::{EsdicawtReadError, EsdicawtReadResult, SdCwtRead};
 pub use signature::Keypair;
-pub use spec::reexports::*;
 pub use time::CwtTimeError;
 pub use verifier::{
     Verifier,

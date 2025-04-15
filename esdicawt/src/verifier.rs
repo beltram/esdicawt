@@ -251,10 +251,10 @@ pub trait Verifier {
 #[cfg(test)]
 mod tests {
     use super::claims::CustomTokenClaims;
-    use crate::signature_verifier::SignatureVerifierError;
     use crate::{
         HolderParams, Issuer, IssuerParams, Presentation, SdCwtVerifierError, Verifier, VerifierParams,
         holder::Holder,
+        signature_verifier::SignatureVerifierError,
         test_utils::{Ed25519Holder, Ed25519Issuer},
         verifier::test_utils::HybridVerifier,
     };
