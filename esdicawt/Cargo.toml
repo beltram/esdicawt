@@ -7,8 +7,8 @@ authors.workspace = true
 
 [features]
 default = []
-pem = ["dep:pkcs8", "pkcs8?/pem"]
-der = ["dep:pkcs8"]
+pem = ["dep:pkcs8", "pkcs8?/pem", "cose-key-set/pem"]
+der = ["dep:pkcs8", "cose-key-set/pem"]
 ed25519 = ["dep:ed25519-dalek", "cose-key-confirmation/ed25519", "dep:sha2"]
 p256 = ["dep:p256", "cose-key-confirmation/p256", "dep:sha2"]
 p384 = ["dep:p384", "cose-key-confirmation/p384", "dep:sha2"]
