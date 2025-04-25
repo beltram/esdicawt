@@ -169,22 +169,11 @@ pub trait Holder {
 
     /// Simple API when a holder wants all the redacted claims to be disclosed to the Verifier
     #[allow(clippy::type_complexity)]
-    fn new_presentation(
+    fn new_presentation_raw(
         &self,
         mut sd_cwt: SdCwtVerified<Self::IssuerPayloadClaims, Self::Hasher, Self::IssuerProtectedClaims, Self::IssuerUnprotectedClaims>,
         params: HolderParams<Self::KbtProtectedClaims, Self::KbtUnprotectedClaims, Self::KbtPayloadClaims>,
-    ) -> Result<
-        KbtCwtTagged<
-            Self::IssuerPayloadClaims,
-            Self::Hasher,
-            Self::IssuerProtectedClaims,
-            Self::IssuerUnprotectedClaims,
-            Self::KbtProtectedClaims,
-            Self::KbtUnprotectedClaims,
-            Self::KbtPayloadClaims,
-        >,
-        SdCwtHolderError<Self::Error>,
-    > {
+    ) -> Result<Vec<u8>, SdCwtHolderError<Self::Error>> {
         // verify time claims first
         #[cfg(not(feature = "test-vectors"))] // FIXME: draft samples are expired
         {
@@ -249,6 +238,28 @@ pub trait Holder {
             })?
             .build()
             .to_tagged_vec()?;
+        Ok(sign1)
+    }
+
+    /// Simple API when a holder wants all the redacted claims to be disclosed to the Verifier
+    #[allow(clippy::type_complexity)]
+    fn new_presentation(
+        &self,
+        sd_cwt: SdCwtVerified<Self::IssuerPayloadClaims, Self::Hasher, Self::IssuerProtectedClaims, Self::IssuerUnprotectedClaims>,
+        params: HolderParams<Self::KbtProtectedClaims, Self::KbtUnprotectedClaims, Self::KbtPayloadClaims>,
+    ) -> Result<
+        KbtCwtTagged<
+            Self::IssuerPayloadClaims,
+            Self::Hasher,
+            Self::IssuerProtectedClaims,
+            Self::IssuerUnprotectedClaims,
+            Self::KbtProtectedClaims,
+            Self::KbtUnprotectedClaims,
+            Self::KbtPayloadClaims,
+        >,
+        SdCwtHolderError<Self::Error>,
+    > {
+        let sign1 = self.new_presentation_raw(sd_cwt, params)?;
         Ok(KbtCwtTagged::from_cbor_bytes(&sign1)?)
     }
 }
