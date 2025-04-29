@@ -54,17 +54,20 @@ pub trait Verifier {
         })
     }
 
+    /// Only verify the signatures and the time claims without trying to rebuild the whole ClaimSet which
+    /// is expensive by requiring a lot of hashes
     #[allow(clippy::type_complexity)]
-    fn verify_sd_kbt(
+    fn shallow_verify_sd_kbt(
         &self,
         raw_sd_kbt: &[u8],
-        params: VerifierParams,
+        leeway: core::time::Duration,
         // not mandatory in case the verifier does not have access to it
         holder_verifier: Option<&Self::HolderVerifier>,
         keyset: &cose_key_set::CoseKeySet,
     ) -> Result<
-        KbtCwtVerified<
+        KbtCwtTagged<
             Self::IssuerPayloadClaims,
+            AnyDigest,
             Self::IssuerProtectedClaims,
             Self::IssuerUnprotectedClaims,
             Self::KbtProtectedClaims,
@@ -110,6 +113,51 @@ pub trait Verifier {
             }
         }
 
+        let kbt_payload = kbt.0.payload.to_value()?;
+
+        // verify time claims
+        let now = OffsetDateTime::now_utc().unix_timestamp();
+        let (iat, exp, nbf) = (Some(kbt_payload.issued_at), kbt_payload.expiration, kbt_payload.not_before);
+        verify_time_claims(now, leeway, iat, exp, nbf)?;
+
+        // After validation, the SD-CWT MUST be extracted from the kcwt header, and validated as described in Section 7.2 of [RFC8392].
+        // verify signature if a verifying key supplied
+        validate_signature(&sd_cwt_cose_sign1, keyset)?;
+
+        // verify time claims
+        let (iat, exp, nbf) = (sd_cwt_payload.inner.issued_at, sd_cwt_payload.inner.expiration, sd_cwt_payload.inner.not_before);
+        verify_time_claims(now, leeway, iat, exp, nbf)?;
+
+        // TODO: verify SD-CWT revocation status w/ Status List
+
+        Ok(kbt)
+    }
+
+    #[allow(clippy::type_complexity)]
+    fn verify_sd_kbt(
+        &self,
+        raw_sd_kbt: &[u8],
+        params: VerifierParams,
+        // not mandatory in case the verifier does not have access to it
+        holder_verifier: Option<&Self::HolderVerifier>,
+        keyset: &cose_key_set::CoseKeySet,
+    ) -> Result<
+        KbtCwtVerified<
+            Self::IssuerPayloadClaims,
+            Self::IssuerProtectedClaims,
+            Self::IssuerUnprotectedClaims,
+            Self::KbtProtectedClaims,
+            Self::KbtUnprotectedClaims,
+            Self::KbtPayloadClaims,
+        >,
+        SdCwtVerifierError<Self::Error>,
+    > {
+        let mut kbt = self.shallow_verify_sd_kbt(raw_sd_kbt, params.leeway, holder_verifier, keyset)?;
+
+        let kbt_protected = kbt.0.protected.to_value_mut()?;
+        let sd_cwt = kbt_protected.kcwt.to_value_mut()?;
+        let sd_cwt_payload = sd_cwt.0.payload.to_value_mut()?;
+
         let kbt_payload = kbt.0.payload.try_into_value()?;
 
         // verify SD-KBT audience
@@ -131,17 +179,6 @@ pub trait Verifier {
                 });
             }
         }
-
-        // verify time claims
-        let now = params.artificial_time.unwrap_or_else(|| OffsetDateTime::now_utc().unix_timestamp());
-        let (iat, exp, nbf) = (Some(kbt_payload.issued_at), kbt_payload.expiration, kbt_payload.not_before);
-        verify_time_claims(now, params.leeway, iat, exp, nbf)?;
-
-        // TODO: verify revocation status w/ Status List
-
-        // After validation, the SD-CWT MUST be extracted from the kcwt header, and validated as described in Section 7.2 of [RFC8392].
-        // verify signature if a verifying key supplied
-        validate_signature(&sd_cwt_cose_sign1, keyset)?;
 
         // verify SD-CWT subject
         if let Some((actual, expected)) = sd_cwt_payload.inner.subject.as_ref().zip(params.expected_subject) {
@@ -173,10 +210,6 @@ pub trait Verifier {
                 });
             }
         }
-
-        // verify time claims
-        let (iat, exp, nbf) = (sd_cwt_payload.inner.issued_at, sd_cwt_payload.inner.expiration, sd_cwt_payload.inner.not_before);
-        verify_time_claims(now, params.leeway, iat, exp, nbf)?;
 
         // TODO: verify revocation status w/ Status List
 
