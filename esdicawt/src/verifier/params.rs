@@ -5,8 +5,10 @@ pub struct VerifierParams<'a> {
     pub expected_audience: Option<&'a str>,
     pub expected_kbt_audience: Option<&'a str>,
     pub expected_cnonce: Option<&'a [u8]>,
-    // to accommodate clock skews, applies to exp & nbf
-    pub leeway: core::time::Duration,
+    // to accommodate clock skews, applies to iat, exp & nbf of the SD-CWT
+    pub sd_cwt_leeway: core::time::Duration,
+    // to accommodate clock skews, applies to iat, exp & nbf of the SD-KBT
+    pub sd_kbt_leeway: core::time::Duration,
     /// for testing
     pub artificial_time: Option<i64>,
 }
