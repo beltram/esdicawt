@@ -9,6 +9,6 @@ pub struct VerifierParams<'a> {
     pub sd_cwt_leeway: core::time::Duration,
     // to accommodate clock skews, applies to iat, exp & nbf of the SD-KBT
     pub sd_kbt_leeway: core::time::Duration,
-    /// for testing
+    /// when verifying a delayed message or testing
     pub artificial_time: Option<i64>,
 }
