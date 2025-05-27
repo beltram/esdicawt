@@ -62,12 +62,12 @@ impl<IssuerPayloadClaims: Select, Hasher: digest::Digest + Clone, IssuerProtecte
 impl<
     IssuerPayloadClaims: Select,
     Hasher: digest::Digest + Clone,
+    KbtPayloadClaims: CustomClaims,
     IssuerProtectedClaims: CustomClaims,
     IssuerUnprotectedClaims: CustomClaims,
     KbtProtectedClaims: CustomClaims,
     KbtUnprotectedClaims: CustomClaims,
-    KbtPayloadClaims: CustomClaims,
-> SdCwtRead for KbtCwtTagged<IssuerPayloadClaims, Hasher, IssuerProtectedClaims, IssuerUnprotectedClaims, KbtProtectedClaims, KbtUnprotectedClaims, KbtPayloadClaims>
+> SdCwtRead for KbtCwtTagged<IssuerPayloadClaims, Hasher, KbtPayloadClaims, IssuerProtectedClaims, IssuerUnprotectedClaims, KbtProtectedClaims, KbtUnprotectedClaims>
 {
     type PayloadClaims = IssuerPayloadClaims;
 }

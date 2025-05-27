@@ -3,7 +3,7 @@ use ciborium::Value;
 use esdicawt_spec::{ClaimName, CustomClaims, NoClaims, blinded_claims::SaltedArray};
 
 #[derive(Debug)]
-pub struct HolderParams<'a, KbtProtectedClaims: CustomClaims = NoClaims, KbtUnprotectedClaims: CustomClaims = NoClaims, KbtPayloadClaims: CustomClaims = NoClaims> {
+pub struct HolderParams<'a, KbtPayloadClaims: CustomClaims = NoClaims, KbtProtectedClaims: CustomClaims = NoClaims, KbtUnprotectedClaims: CustomClaims = NoClaims> {
     pub presentation: Presentation,
     /// Subject, see https://www.rfc-editor.org/rfc/rfc8392.html#section-3.1.3
     pub audience: &'a str,
