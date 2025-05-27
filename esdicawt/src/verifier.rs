@@ -30,9 +30,9 @@ pub trait Verifier {
     type IssuerProtectedClaims: CustomClaims;
     type IssuerUnprotectedClaims: CustomClaims;
     type IssuerPayloadClaims: Select;
-    type KbtUnprotectedClaims: CustomClaims;
-    type KbtProtectedClaims: CustomClaims;
     type KbtPayloadClaims: CustomClaims;
+    type KbtProtectedClaims: CustomClaims;
+    type KbtUnprotectedClaims: CustomClaims;
 
     #[cfg(not(any(feature = "ed25519", feature = "p256", feature = "p384")))]
     fn digest(&self, sd_alg: SdHashAlg, data: &[u8]) -> Result<Vec<u8>, SdCwtVerifierError<Self::Error>>;
@@ -69,9 +69,9 @@ pub trait Verifier {
         KbtCwtTagged<
             Self::IssuerPayloadClaims,
             AnyDigest,
+            Self::KbtPayloadClaims,
             Self::IssuerProtectedClaims,
             Self::IssuerUnprotectedClaims,
-            Self::KbtPayloadClaims,
             Self::KbtProtectedClaims,
             Self::KbtUnprotectedClaims,
         >,
@@ -82,9 +82,9 @@ pub trait Verifier {
         let mut kbt = KbtCwtTagged::<
             Self::IssuerPayloadClaims,
             AnyDigest,
+            Self::KbtPayloadClaims,
             Self::IssuerProtectedClaims,
             Self::IssuerUnprotectedClaims,
-            Self::KbtPayloadClaims,
             Self::KbtProtectedClaims,
             Self::KbtUnprotectedClaims,
         >::from_cbor_bytes(raw_sd_kbt)?;
@@ -145,9 +145,9 @@ pub trait Verifier {
     ) -> Result<
         KbtCwtVerified<
             Self::IssuerPayloadClaims,
+            Self::KbtPayloadClaims,
             Self::IssuerProtectedClaims,
             Self::IssuerUnprotectedClaims,
-            Self::KbtPayloadClaims,
             Self::KbtProtectedClaims,
             Self::KbtUnprotectedClaims,
         >,
@@ -274,7 +274,7 @@ mod tests {
     };
     use ciborium::{Value, cbor};
     use cose_key_set::CoseKeySet;
-    use esdicawt_spec::{CwtAny, NoClaims, Select, verified::KbtCwtVerified};
+    use esdicawt_spec::{CustomClaims, CwtAny, NoClaims, Select, verified::KbtCwtVerified};
 
     wasm_bindgen_test::wasm_bindgen_test_configure!(run_in_browser);
 
@@ -284,14 +284,14 @@ mod tests {
         let payload = CustomTokenClaims { name: Some("Alice Smith".into()) };
         let holder_signing_key = ed25519_dalek::SigningKey::generate(&mut rand::thread_rng());
         let issuer_params = default_issuer_params(Some(payload), &holder_signing_key);
-        let verified = verify(issuer_params, default_holder_params(), &holder_signing_key);
+        let verified = verify(issuer_params, default_holder_params::<NoClaims>(), &holder_signing_key);
 
         assert_eq!(verified.claimset.as_ref().unwrap().name.as_deref(), Some("Alice Smith"));
         assert_eq!(verified.sd_cwt().payload.subject, Some("https://example.com/u/alice.smith".into()));
 
         // should work without disclosures
         let issuer_params = default_issuer_params(None::<Value>, &holder_signing_key);
-        verify(issuer_params, default_holder_params(), &holder_signing_key);
+        verify(issuer_params, default_holder_params::<NoClaims>(), &holder_signing_key);
     }
 
     #[test]
@@ -299,8 +299,8 @@ mod tests {
     fn should_verify_signature() {
         let holder_signing_key = ed25519_dalek::SigningKey::generate(&mut rand::thread_rng());
         let issuer_params = default_issuer_params(None::<Value>, &holder_signing_key);
-        let (cks, sd_kbt) = generate(issuer_params.clone(), default_holder_params(), &holder_signing_key);
-        let verifier = HybridVerifier::<Value> { _marker: Default::default() };
+        let (cks, sd_kbt) = generate(issuer_params.clone(), default_holder_params::<NoClaims>(), &holder_signing_key);
+        let verifier = HybridVerifier::<Value, NoClaims> { _marker: Default::default() };
 
         // verifying Holder signature
         let holder_verifying_key_bis = ed25519_dalek::SigningKey::generate(&mut rand::thread_rng()).verifying_key();
@@ -333,12 +333,12 @@ mod tests {
         issuer_params.subject.replace("sub-a");
         issuer_params.audience.replace("aud-a");
 
-        let mut holder_params = default_holder_params();
+        let mut holder_params = default_holder_params::<NoClaims>();
         holder_params.audience = "kbt-aud-a";
         holder_params.cnonce.replace(b"kbt-cnonce-a");
 
         let (cks, sd_kbt) = generate(issuer_params.clone(), holder_params, &holder_signing_key);
-        let verifier = HybridVerifier::<Value> { _marker: Default::default() };
+        let verifier = HybridVerifier::<Value, NoClaims> { _marker: Default::default() };
 
         // by default do not validate anything
         verifier.verify_sd_kbt(&sd_kbt, Default::default(), Some(&holder_verifying_key), &cks).unwrap();
@@ -442,7 +442,7 @@ mod tests {
             let payload = cbor!({ "___claim" => value }).unwrap();
             let holder_signing_key = ed25519_dalek::SigningKey::generate(&mut rand::thread_rng());
             let issuer_params = default_issuer_params(Some(payload), &holder_signing_key);
-            let holder_params = default_holder_params();
+            let holder_params = default_holder_params::<NoClaims>();
             let verified = verify(issuer_params, holder_params, &holder_signing_key);
 
             let claimset = verified.claimset.unwrap().into_map().unwrap();
@@ -469,29 +469,53 @@ mod tests {
         verifying(cbor!({ "a" => [0, 1] }));
     }
 
-    fn verify<T: Select>(issuer_params: IssuerParams<T>, holder_params: HolderParams, holder_signing_key: &ed25519_dalek::SigningKey) -> KbtCwtVerified<T> {
+    #[test]
+    #[wasm_bindgen_test::wasm_bindgen_test]
+    fn should_be_customizable() {
+        #[derive(Debug, Clone, Eq, PartialEq, serde::Serialize, serde::Deserialize)]
+        struct ExtraKbtClaims {
+            pub foo: String,
+        }
+        let extra_kbt = ExtraKbtClaims { foo: "bar".into() };
+        let payload = CustomTokenClaims { name: Some("Alice Smith".into()) };
+        let holder_signing_key = ed25519_dalek::SigningKey::generate(&mut rand::thread_rng());
+        let issuer_params = default_issuer_params(Some(payload), &holder_signing_key);
+
+        let mut holder_params = default_holder_params::<ExtraKbtClaims>();
+        holder_params.extra_kbt_payload.replace(extra_kbt);
+
+        let verified = verify(issuer_params, holder_params, &holder_signing_key);
+
+        assert_eq!(verified.payload.extra.unwrap().foo, "bar".to_string());
+    }
+
+    fn verify<T: Select, U: CustomClaims>(issuer_params: IssuerParams<T>, holder_params: HolderParams<U>, holder_signing_key: &ed25519_dalek::SigningKey) -> KbtCwtVerified<T, U> {
         let (cks, sd_kbt) = generate(issuer_params.clone(), holder_params, holder_signing_key);
-        let verifier = HybridVerifier::<T> { _marker: Default::default() };
+        let verifier = HybridVerifier::<T, U> { _marker: Default::default() };
         verifier
             .verify_sd_kbt(&sd_kbt, Default::default(), Some(&holder_signing_key.verifying_key()), &cks)
             .unwrap()
     }
 
     #[allow(clippy::type_complexity)]
-    fn generate<T: Select>(issuer_params: IssuerParams<T>, holder_params: HolderParams, holder_signing_key: &ed25519_dalek::SigningKey) -> (CoseKeySet, Vec<u8>) {
+    fn generate<T: Select, U: CustomClaims>(
+        issuer_params: IssuerParams<T>,
+        holder_params: HolderParams<'_, U>,
+        holder_signing_key: &ed25519_dalek::SigningKey,
+    ) -> (CoseKeySet, Vec<u8>) {
         let issuer_signing_key = ed25519_dalek::SigningKey::generate(&mut rand::thread_rng());
 
         let issuer = Ed25519Issuer::new(issuer_signing_key.clone());
 
         let sd_cwt = issuer.issue_cwt(&mut rand::thread_rng(), issuer_params).unwrap().to_cbor_bytes().unwrap();
-        let holder = Ed25519Holder::<Value>::new(holder_signing_key.clone());
+        let holder = Ed25519Holder::<Value, U>::new(holder_signing_key.clone());
         let cks = CoseKeySet::new(&issuer_signing_key).unwrap();
         let sd_cwt = holder.verify_sd_cwt(&sd_cwt, Default::default(), &cks).unwrap();
         let sd_kbt = holder.new_presentation(sd_cwt, holder_params).unwrap();
         (cks, sd_kbt.to_cbor_bytes().unwrap())
     }
 
-    fn default_holder_params<'a>() -> HolderParams<'a> {
+    fn default_holder_params<'a, U: CustomClaims>() -> HolderParams<'a, U> {
         HolderParams {
             presentation: Presentation::Full,
             audience: "https://example.com/r/alice-bob-group",
@@ -573,19 +597,19 @@ pub mod test_utils {
 
     // TODO: turn generic again
     #[derive(Debug, Clone, Default)]
-    pub struct HybridVerifier<DisclosedClaims: CustomClaims> {
-        pub _marker: core::marker::PhantomData<DisclosedClaims>,
+    pub struct HybridVerifier<DisclosedClaims: CustomClaims, KbtClaims: CustomClaims> {
+        pub _marker: core::marker::PhantomData<(DisclosedClaims, KbtClaims)>,
     }
 
-    impl<T: Select> Verifier for HybridVerifier<T> {
+    impl<T: Select, U: CustomClaims> Verifier for HybridVerifier<T, U> {
         type Error = std::convert::Infallible;
         type HolderSignature = ed25519_dalek::Signature;
         type HolderVerifier = ed25519_dalek::VerifyingKey;
         type IssuerProtectedClaims = NoClaims;
         type IssuerUnprotectedClaims = NoClaims;
         type IssuerPayloadClaims = T;
-        type KbtUnprotectedClaims = NoClaims;
+        type KbtPayloadClaims = U;
         type KbtProtectedClaims = NoClaims;
-        type KbtPayloadClaims = NoClaims;
+        type KbtUnprotectedClaims = NoClaims;
     }
 }

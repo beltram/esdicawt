@@ -16,9 +16,9 @@ mod kbt_unprotected_codec;
 pub struct KbtCwt<
     IssuerPayloadClaims: Select,
     Hasher: digest::Digest + Clone,
+    PayloadClaims: CustomClaims = NoClaims,
     IssuerProtectedClaims: CustomClaims = NoClaims,
     IssuerUnprotectedClaims: CustomClaims = NoClaims,
-    PayloadClaims: CustomClaims = NoClaims,
     ProtectedClaims: CustomClaims = NoClaims,
     UnprotectedClaims: CustomClaims = NoClaims,
 > {
@@ -31,12 +31,12 @@ pub struct KbtCwt<
 impl<
     IssuerPayloadClaims: Select,
     Hasher: digest::Digest + Clone,
+    PayloadClaims: CustomClaims,
     IssuerProtectedClaims: CustomClaims,
     IssuerUnprotectedClaims: CustomClaims,
     ProtectedClaims: CustomClaims,
     UnprotectedClaims: CustomClaims,
-    PayloadClaims: CustomClaims,
-> PartialEq for KbtCwt<IssuerPayloadClaims, Hasher, IssuerProtectedClaims, IssuerUnprotectedClaims, ProtectedClaims, UnprotectedClaims, PayloadClaims>
+> PartialEq for KbtCwt<IssuerPayloadClaims, Hasher, PayloadClaims, IssuerProtectedClaims, IssuerUnprotectedClaims, ProtectedClaims, UnprotectedClaims>
 {
     fn eq(&self, other: &Self) -> bool {
         self.protected.eq(&other.protected) && self.unprotected.eq(&other.unprotected) && self.payload.eq(&other.payload) && self.signature.eq(&other.signature)
@@ -100,7 +100,7 @@ impl<
     ProtectedClaims: CustomClaims,
     UnprotectedClaims: CustomClaims,
     PayloadClaims: CustomClaims,
-> KbtCwt<IssuerPayloadClaims, Hasher, IssuerProtectedClaims, IssuerUnprotectedClaims, PayloadClaims, ProtectedClaims, UnprotectedClaims>
+> KbtCwt<IssuerPayloadClaims, Hasher, PayloadClaims, IssuerProtectedClaims, IssuerUnprotectedClaims, ProtectedClaims, UnprotectedClaims>
 {
     pub fn sd_cwt_payload(&mut self) -> EsdicawtSpecResult<&SdPayload<IssuerPayloadClaims>> {
         let protected = self.protected.to_value_mut()?;
@@ -119,13 +119,13 @@ impl<
 pub type KbtCwtTagged<
     IssuerPayloadClaims,
     Hasher,
+    PayloadClaims = NoClaims,
     IssuerProtectedClaims = NoClaims,
     IssuerUnprotectedClaims = NoClaims,
-    PayloadClaims = NoClaims,
     ProtectedClaims = NoClaims,
     UnprotectedClaims = NoClaims,
 > = ciborium::tag::Required<
-    KbtCwt<IssuerPayloadClaims, Hasher, IssuerProtectedClaims, IssuerUnprotectedClaims, PayloadClaims, ProtectedClaims, UnprotectedClaims>,
+    KbtCwt<IssuerPayloadClaims, Hasher, PayloadClaims, IssuerProtectedClaims, IssuerUnprotectedClaims, ProtectedClaims, UnprotectedClaims>,
     { <coset::CoseSign1 as coset::TaggedCborSerializable>::TAG },
 >;
 
@@ -137,7 +137,7 @@ impl<
     ProtectedClaims: CustomClaims,
     UnprotectedClaims: CustomClaims,
     PayloadClaims: CustomClaims,
-> KbtCwt<IssuerPayloadClaims, Hasher, IssuerProtectedClaims, IssuerUnprotectedClaims, PayloadClaims, ProtectedClaims, UnprotectedClaims>
+> KbtCwt<IssuerPayloadClaims, Hasher, PayloadClaims, IssuerProtectedClaims, IssuerUnprotectedClaims, ProtectedClaims, UnprotectedClaims>
 {
     /// Iterates through all the disclosed claims in this SD-KBT
     pub fn walk_disclosed_claims(&mut self) -> EsdicawtSpecResult<Box<dyn Iterator<Item = EsdicawtSpecResult<&Salted<ciborium::Value>>> + '_>> {
@@ -167,8 +167,8 @@ mod tests {
         UnprotectedClaims: CustomClaims,
         PayloadClaims: CustomClaims,
     >(
-        a: KbtCwtTagged<IssuerPayloadClaims, Hasher, IssuerProtectedClaims, IssuerUnprotectedClaims, ProtectedClaims, UnprotectedClaims, PayloadClaims>,
-        b: KbtCwtTagged<IssuerPayloadClaims, Hasher, IssuerProtectedClaims, IssuerUnprotectedClaims, ProtectedClaims, UnprotectedClaims, PayloadClaims>,
+        a: KbtCwtTagged<IssuerPayloadClaims, Hasher, PayloadClaims, IssuerProtectedClaims, IssuerUnprotectedClaims, ProtectedClaims, UnprotectedClaims>,
+        b: KbtCwtTagged<IssuerPayloadClaims, Hasher, PayloadClaims, IssuerProtectedClaims, IssuerUnprotectedClaims, ProtectedClaims, UnprotectedClaims>,
     ) -> bool {
         a == b
     }

@@ -167,12 +167,12 @@ impl<PayloadClaims: Select, Hasher: digest::Digest + Clone, ProtectedClaims: Cus
 impl<
     IssuerPayloadClaims: Select,
     Hasher: digest::Digest + Clone,
+    KbtPayloadClaims: CustomClaims,
     IssuerProtectedClaims: CustomClaims,
     IssuerUnprotectedClaims: CustomClaims,
     KbtProtectedClaims: CustomClaims,
     KbtUnprotectedClaims: CustomClaims,
-    KbtPayloadClaims: CustomClaims,
-> TokenQuery for KbtCwtTagged<IssuerPayloadClaims, Hasher, IssuerProtectedClaims, IssuerUnprotectedClaims, KbtProtectedClaims, KbtUnprotectedClaims, KbtPayloadClaims>
+> TokenQuery for KbtCwtTagged<IssuerPayloadClaims, Hasher, KbtPayloadClaims, IssuerProtectedClaims, IssuerUnprotectedClaims, KbtProtectedClaims, KbtUnprotectedClaims>
 {
     fn query(&mut self, token_query: Query) -> EsdicawtSpecResult<Option<Value>> {
         self.0.query(token_query)
@@ -187,7 +187,7 @@ impl<
     KbtProtectedClaims: CustomClaims,
     KbtUnprotectedClaims: CustomClaims,
     KbtPayloadClaims: CustomClaims,
-> TokenQuery for KbtCwt<IssuerPayloadClaims, Hasher, IssuerProtectedClaims, IssuerUnprotectedClaims, KbtProtectedClaims, KbtUnprotectedClaims, KbtPayloadClaims>
+> TokenQuery for KbtCwt<IssuerPayloadClaims, Hasher, KbtPayloadClaims, IssuerProtectedClaims, IssuerUnprotectedClaims, KbtProtectedClaims, KbtUnprotectedClaims>
 {
     fn query(&mut self, token_query: Query) -> EsdicawtSpecResult<Option<Value>> {
         self.protected.to_value_mut()?.kcwt.to_value_mut()?.0.query(token_query)
@@ -201,7 +201,7 @@ impl<
     KbtProtectedClaims: CustomClaims,
     KbtUnprotectedClaims: CustomClaims,
     KbtPayloadClaims: CustomClaims,
-> TokenQuery for KbtCwtVerified<IssuerPayloadClaims, IssuerProtectedClaims, IssuerUnprotectedClaims, KbtProtectedClaims, KbtUnprotectedClaims, KbtPayloadClaims>
+> TokenQuery for KbtCwtVerified<IssuerPayloadClaims, KbtPayloadClaims, IssuerProtectedClaims, IssuerUnprotectedClaims, KbtProtectedClaims, KbtUnprotectedClaims>
 {
     fn query(&mut self, token_query: Query) -> EsdicawtSpecResult<Option<Value>> {
         let payload = self.payload.to_cbor_value()?;

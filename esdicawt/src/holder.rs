@@ -172,7 +172,7 @@ pub trait Holder {
     fn new_presentation_raw(
         &self,
         mut sd_cwt: SdCwtVerified<Self::IssuerPayloadClaims, Self::Hasher, Self::IssuerProtectedClaims, Self::IssuerUnprotectedClaims>,
-        params: HolderParams<Self::KbtProtectedClaims, Self::KbtUnprotectedClaims, Self::KbtPayloadClaims>,
+        params: HolderParams<Self::KbtPayloadClaims, Self::KbtProtectedClaims, Self::KbtUnprotectedClaims>,
     ) -> Result<Vec<u8>, SdCwtHolderError<Self::Error>> {
         // verify time claims first
         #[cfg(not(feature = "test-vectors"))] // FIXME: draft samples are expired
@@ -246,16 +246,16 @@ pub trait Holder {
     fn new_presentation(
         &self,
         sd_cwt: SdCwtVerified<Self::IssuerPayloadClaims, Self::Hasher, Self::IssuerProtectedClaims, Self::IssuerUnprotectedClaims>,
-        params: HolderParams<Self::KbtProtectedClaims, Self::KbtUnprotectedClaims, Self::KbtPayloadClaims>,
+        params: HolderParams<Self::KbtPayloadClaims, Self::KbtProtectedClaims, Self::KbtUnprotectedClaims>,
     ) -> Result<
         KbtCwtTagged<
             Self::IssuerPayloadClaims,
             Self::Hasher,
+            Self::KbtPayloadClaims,
             Self::IssuerProtectedClaims,
             Self::IssuerUnprotectedClaims,
             Self::KbtProtectedClaims,
             Self::KbtUnprotectedClaims,
-            Self::KbtPayloadClaims,
         >,
         SdCwtHolderError<Self::Error>,
     > {
@@ -324,7 +324,7 @@ mod tests {
         };
         let sd_cwt = issuer.issue_cwt(&mut rand::thread_rng(), issue_params).unwrap().to_cbor_bytes().unwrap();
 
-        let holder = Ed25519Holder::<CustomTokenClaims>::new(holder_signing_key);
+        let holder = Ed25519Holder::<CustomTokenClaims, NoClaims>::new(holder_signing_key);
 
         let presentation = Presentation::Path(Box::new(|path| match path {
             [CborPath::Str(name), ..] if name == "name" => true,
@@ -387,7 +387,7 @@ mod tests {
         };
         let sd_cwt = issuer.issue_cwt(&mut rand::thread_rng(), issue_params).unwrap().to_cbor_bytes().unwrap();
 
-        let holder = Ed25519Holder::<CustomTokenClaims>::new(holder_signing_key);
+        let holder = Ed25519Holder::<CustomTokenClaims, NoClaims>::new(holder_signing_key);
         let presentation_params = HolderParams {
             presentation: Presentation::Full,
             audience: "https://example.com/r/alice-bob-group",
@@ -513,13 +513,13 @@ pub mod test_utils {
     use crate::spec::{CustomClaims, NoClaims, Select, reexports::coset};
 
     #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
-    pub struct Ed25519Holder<DisclosedClaims: CustomClaims> {
+    pub struct Ed25519Holder<DisclosedClaims: CustomClaims, KbtClaims: CustomClaims> {
         signing_key: ed25519_dalek::SigningKey,
         verifying_key: ed25519_dalek::VerifyingKey,
-        pub _marker: core::marker::PhantomData<DisclosedClaims>,
+        pub _marker: core::marker::PhantomData<(DisclosedClaims, KbtClaims)>,
     }
 
-    impl<T: Select> super::Holder for Ed25519Holder<T>
+    impl<T: Select, U: CustomClaims> super::Holder for Ed25519Holder<T, U>
     where
         ed25519_dalek::SigningKey: signature::Signer<ed25519_dalek::Signature>,
     {
@@ -533,9 +533,9 @@ pub mod test_utils {
         type IssuerPayloadClaims = T;
         type IssuerProtectedClaims = NoClaims;
         type IssuerUnprotectedClaims = NoClaims;
+        type KbtPayloadClaims = U;
         type KbtProtectedClaims = NoClaims;
         type KbtUnprotectedClaims = NoClaims;
-        type KbtPayloadClaims = NoClaims;
 
         fn new(signing_key: Self::Signer) -> Self {
             Self {
