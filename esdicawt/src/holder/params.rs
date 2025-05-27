@@ -75,7 +75,7 @@ impl From<&ClaimName> for CborPath {
     fn from(name: &ClaimName) -> Self {
         match name {
             ClaimName::Integer(i) => Self::Int(*i),
-            ClaimName::Text(s) => Self::Str(s.to_string()),
+            ClaimName::Text(s) => Self::Str(s.clone()),
             ClaimName::TaggedInteger(tag, i) => Self::Any(Value::Tag(*tag, Box::new((*i).into()))),
             ClaimName::TaggedText(tag, s) => Self::Any(Value::Tag(*tag, Box::new(s.as_str().into()))),
             ClaimName::SimpleValue(i) => Self::Any(Value::Simple(*i)),
@@ -89,7 +89,7 @@ impl TryFrom<&Value> for CborPath {
     fn try_from(name: &Value) -> Result<Self, Self::Error> {
         Ok(match name {
             Value::Integer(i) => Self::Int((*i).try_into()?),
-            Value::Text(s) => Self::Str(s.to_string()),
+            Value::Text(s) => Self::Str(s.clone()),
             value => Self::Any(value.clone()),
         })
     }
