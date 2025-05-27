@@ -10,9 +10,9 @@ pub struct KbtCwtVerified<
     IssuerPayloadClaims: Select,
     IssuerProtectedClaims: CustomClaims = NoClaims,
     IssuerUnprotectedClaims: CustomClaims = NoClaims,
+    KbtPayloadClaims: CustomClaims = NoClaims,
     KbtProtectedClaims: CustomClaims = NoClaims,
     KbtUnprotectedClaims: CustomClaims = NoClaims,
-    KbtPayloadClaims: CustomClaims = NoClaims,
 > {
     pub protected: KbtProtectedVerified<IssuerPayloadClaims, IssuerProtectedClaims, IssuerUnprotectedClaims, KbtProtectedClaims>,
     pub unprotected: KbtUnprotected<KbtUnprotectedClaims>,

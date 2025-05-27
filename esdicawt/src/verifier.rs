@@ -71,9 +71,9 @@ pub trait Verifier {
             AnyDigest,
             Self::IssuerProtectedClaims,
             Self::IssuerUnprotectedClaims,
+            Self::KbtPayloadClaims,
             Self::KbtProtectedClaims,
             Self::KbtUnprotectedClaims,
-            Self::KbtPayloadClaims,
         >,
         SdCwtVerifierError<Self::Error>,
     > {
@@ -84,9 +84,9 @@ pub trait Verifier {
             AnyDigest,
             Self::IssuerProtectedClaims,
             Self::IssuerUnprotectedClaims,
+            Self::KbtPayloadClaims,
             Self::KbtProtectedClaims,
             Self::KbtUnprotectedClaims,
-            Self::KbtPayloadClaims,
         >::from_cbor_bytes(raw_sd_kbt)?;
 
         let kbt_protected = kbt.0.protected.to_value_mut()?;
@@ -147,9 +147,9 @@ pub trait Verifier {
             Self::IssuerPayloadClaims,
             Self::IssuerProtectedClaims,
             Self::IssuerUnprotectedClaims,
+            Self::KbtPayloadClaims,
             Self::KbtProtectedClaims,
             Self::KbtUnprotectedClaims,
-            Self::KbtPayloadClaims,
         >,
         SdCwtVerifierError<Self::Error>,
     > {
