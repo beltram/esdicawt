@@ -18,9 +18,9 @@ pub struct KbtCwt<
     Hasher: digest::Digest + Clone,
     IssuerProtectedClaims: CustomClaims = NoClaims,
     IssuerUnprotectedClaims: CustomClaims = NoClaims,
+    PayloadClaims: CustomClaims = NoClaims,
     ProtectedClaims: CustomClaims = NoClaims,
     UnprotectedClaims: CustomClaims = NoClaims,
-    PayloadClaims: CustomClaims = NoClaims,
 > {
     pub protected: InlinedCbor<KbtProtected<IssuerPayloadClaims, Hasher, IssuerProtectedClaims, IssuerUnprotectedClaims, ProtectedClaims>>,
     pub unprotected: KbtUnprotected<UnprotectedClaims>,
