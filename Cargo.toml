@@ -49,7 +49,7 @@ serde_repr = "0.1"
 
 # misc
 url = "2.5"
-time = "0.3"
+time = { version = "0.3", default-features = false, features = ["std"] }
 tailcall = "1.0"
 derive_builder = "0.20"
 wasm-bindgen-test = "0.3"
