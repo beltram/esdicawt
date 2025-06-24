@@ -3,7 +3,7 @@ pub mod params;
 mod walk;
 
 use crate::{
-    VerifierParams,
+    ShallowVerifierParams, VerifierParams,
     any_digest::AnyDigest,
     signature_verifier::validate_signature,
     time::verify_time_claims,
@@ -60,8 +60,7 @@ pub trait Verifier {
     fn shallow_verify_sd_kbt(
         &self,
         raw_sd_kbt: &[u8],
-        sd_cwt_leeway: core::time::Duration,
-        sd_kbt_leeway: core::time::Duration,
+        params: ShallowVerifierParams,
         // not mandatory in case the verifier does not have access to it
         holder_verifier: Option<&Self::HolderVerifier>,
         keyset: &cose_key_set::CoseKeySet,
@@ -116,18 +115,18 @@ pub trait Verifier {
 
         let kbt_payload = kbt.0.payload.to_value()?;
 
-        // verify time claims
+        // verify time claims of the SD-KBT
         let now = OffsetDateTime::now_utc().unix_timestamp();
         let (iat, exp, nbf) = (Some(kbt_payload.issued_at), kbt_payload.expiration, kbt_payload.not_before);
-        verify_time_claims(now, sd_kbt_leeway, iat, exp, nbf)?;
+        verify_time_claims(now, params.sd_kbt_leeway, iat, exp, nbf, params.sd_kbt_time_verification)?;
 
         // After validation, the SD-CWT MUST be extracted from the kcwt header, and validated as described in Section 7.2 of [RFC8392].
         // verify signature if a verifying key supplied
         validate_signature(&sd_cwt_cose_sign1, keyset)?;
 
-        // verify time claims
+        // verify time claims of the SD-CWT
         let (iat, exp, nbf) = (sd_cwt_payload.inner.issued_at, sd_cwt_payload.inner.expiration, sd_cwt_payload.inner.not_before);
-        verify_time_claims(now, sd_cwt_leeway, iat, exp, nbf)?;
+        verify_time_claims(now, params.sd_cwt_leeway, iat, exp, nbf, params.sd_cwt_time_verification)?;
 
         // TODO: verify SD-CWT revocation status w/ Status List
 
@@ -153,7 +152,7 @@ pub trait Verifier {
         >,
         SdCwtVerifierError<Self::Error>,
     > {
-        let mut kbt = self.shallow_verify_sd_kbt(raw_sd_kbt, params.sd_cwt_leeway, params.sd_kbt_leeway, holder_verifier, keyset)?;
+        let mut kbt = self.shallow_verify_sd_kbt(raw_sd_kbt, params.shallow(), holder_verifier, keyset)?;
 
         let kbt_protected = kbt.0.protected.to_value_mut()?;
         let sd_cwt = kbt_protected.kcwt.to_value_mut()?;
@@ -522,7 +521,6 @@ mod tests {
             cnonce: None,
             expiry: Some(core::time::Duration::from_secs(90 * 24 * 3600)),
             with_not_before: true,
-            leeway: core::time::Duration::from_secs(3600),
             extra_kbt_unprotected: None,
             extra_kbt_protected: None,
             extra_kbt_payload: None,

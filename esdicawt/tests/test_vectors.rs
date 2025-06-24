@@ -362,7 +362,6 @@ fn test_vectors<P: Select>(payload: P, spec_sd_cwt_bytes: &[u8], spec_sd_kbt_byt
         cnonce: None,
         expiry: None,
         with_not_before: false,
-        leeway: core::time::Duration::from_secs(LEEWAY),
         artificial_time: Some(core::time::Duration::from_secs(NOW + 37)),
         extra_kbt_protected: None,
         extra_kbt_unprotected: None,

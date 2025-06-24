@@ -24,7 +24,7 @@ pub use time::CwtTimeError;
 pub use verifier::{
     Verifier,
     error::{SdCwtVerifierError, SdCwtVerifierResult},
-    params::VerifierParams,
+    params::{ShallowVerifierParams, VerifierParams},
 };
 
 pub(crate) mod any_digest;
