@@ -815,7 +815,7 @@ mod tests {
                     cti: Default::default(),
                     cnonce: Default::default(),
                     issuer: "",
-                    expiry: Some(Duration::from_secs(90)),
+                    expiry: None,
                     with_not_before: false,
                     leeway: Duration::from_secs(1),
                     key_location: "",

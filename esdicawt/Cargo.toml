@@ -22,7 +22,6 @@ cose-key-confirmation.workspace = true
 signature = { workspace = true, features = ["std", "digest"] }
 digest.workspace = true
 rand_core = { workspace = true, features = ["std"] }
-getrandom = { workspace = true, features = ["js"] }
 ciborium.workspace = true
 thiserror.workspace = true
 serde.workspace = true
@@ -30,15 +29,17 @@ pkcs8 = { workspace = true, optional = true }
 tailcall.workspace = true
 serde_repr.workspace = true
 enum-variants-strings.workspace = true
+time = { workspace = true, default-features = false }
 
 sha2 = { optional = true, workspace = true }
-time = { workspace = true, features = ["wasm-bindgen"] }
 ed25519-dalek = { optional = true, workspace = true, features = ["rand_core", "pem", "serde"] }
 p256 = { optional = true, workspace = true }
 p384 = { optional = true, workspace = true }
 
 [target.'cfg(all(target_arch = "wasm32", target_os = "unknown"))'.dependencies]
 js-sys = "0.3"
+getrandom = { workspace = true, features = ["js"] }
+time = { workspace = true, default-features = false, features = ["wasm-bindgen"] }
 
 [dev-dependencies]
 esdicawt = { workspace = true, features = ["pem", "der", "test-utils", "test-vectors", "ed25519", "p256", "p384"] }
