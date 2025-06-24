@@ -134,7 +134,8 @@ pub trait Issuer {
             let now = now();
 
             if let Some(expiry) = params.expiry {
-                let expiry = now + expiry.as_secs();
+                let e = expiry.as_secs();
+                let expiry = now + e;
                 payload.push((Value::Integer(CWT_CLAIM_EXPIRES_AT.into()), expiry.into()));
             }
             if params.with_not_before {
@@ -178,7 +179,7 @@ pub trait Issuer {
 mod tests {
     use super::{claims::CustomTokenClaims, test_utils::Ed25519Issuer};
     use crate::{
-        CwtStdLabel, Issuer, IssuerParams,
+        CwtStdLabel, Issuer, IssuerParams, now,
         spec::{
             ClaimName, CwtAny, NoClaims, Select, SelectExt,
             blinded_claims::{Salted, SaltedClaim, SaltedElement},
@@ -235,6 +236,7 @@ mod tests {
         let issuer_signing_key = ed25519_dalek::SigningKey::generate(&mut rand::thread_rng());
         let issuer = Ed25519Issuer::new(issuer_signing_key);
 
+        let exp = core::time::Duration::from_secs(90);
         let params = IssuerParams {
             protected_claims: None,
             unprotected_claims: None,
@@ -244,7 +246,7 @@ mod tests {
             audience: Some("https://example.com/r/party"),
             cti: Some(b"cti"),
             cnonce: Some(b"cnonce"),
-            expiry: Some(core::time::Duration::from_secs(90)),
+            expiry: Some(exp),
             with_not_before: true,
             with_issued_at: true,
             leeway: core::time::Duration::from_secs(1),
@@ -257,14 +259,25 @@ mod tests {
         let raw_sd_cwt = CoseSign1::from_tagged_slice(&sd_cwt_bytes).unwrap();
         let payload = Value::from_cbor_bytes(&raw_sd_cwt.payload.unwrap()).unwrap().into_map().unwrap();
 
+        let now = now();
         for entry in payload {
             match entry {
                 (Value::Integer(label), Value::Text(issuer)) if label == CwtStdLabel::Issuer => assert_eq!(&issuer, "https://example.com/i/acme.io"),
                 (Value::Integer(label), Value::Text(sub)) if label == CwtStdLabel::Subject => assert_eq!(&sub, "https://example.com/alice.smith"),
                 (Value::Integer(label), Value::Text(aud)) if label == CwtStdLabel::Audience => assert_eq!(&aud, "https://example.com/r/party"),
-                (Value::Integer(label), Value::Integer(_)) if label == CwtStdLabel::ExpiresAt => {}
-                (Value::Integer(label), Value::Integer(_)) if label == CwtStdLabel::IssuedAt => {}
-                (Value::Integer(label), Value::Integer(_)) if label == CwtStdLabel::NotBefore => {}
+                (Value::Integer(label), Value::Integer(actual_exp)) if label == CwtStdLabel::ExpiresAt => {
+                    let actual = u64::try_from(actual_exp).unwrap();
+                    let expected = now + exp.as_secs();
+                    assert!((expected - 1..expected + 1).contains(&actual));
+                }
+                (Value::Integer(label), Value::Integer(actual_iat)) if label == CwtStdLabel::IssuedAt => {
+                    let actual = u64::try_from(actual_iat).unwrap();
+                    assert!((now - 1..now + 1).contains(&actual));
+                }
+                (Value::Integer(label), Value::Integer(actual_nbf)) if label == CwtStdLabel::NotBefore => {
+                    let actual = u64::try_from(actual_nbf).unwrap();
+                    assert!((now - 1..now + 1).contains(&actual));
+                }
                 (Value::Integer(label), Value::Bytes(cti)) if label == CwtStdLabel::Cti => assert_eq!(cti, b"cti"),
                 (Value::Integer(label), Value::Bytes(cnonce)) if label == CwtStdLabel::Cnonce => assert_eq!(cnonce, b"cnonce"),
                 (Value::Integer(label), Value::Map(_)) if label == CwtStdLabel::KeyConfirmation => {}
@@ -476,7 +489,7 @@ mod tests {
                     audience: Default::default(),
                     cti: Default::default(),
                     cnonce: Default::default(),
-                    expiry: Some(core::time::Duration::from_secs(90)),
+                    expiry: None,
                     with_not_before: true,
                     with_issued_at: true,
                     leeway: core::time::Duration::from_secs(1),
