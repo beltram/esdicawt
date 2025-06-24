@@ -1,4 +1,5 @@
 use crate::CoseKeyError;
+use crate::time::TimeVerification;
 use ciborium::Value;
 use esdicawt_spec::{REDACTED_CLAIM_ELEMENT_TAG, blinded_claims::Salted, redacted_claims::RedactedClaimKeys};
 use std::{borrow::Cow, collections::HashMap};
@@ -11,6 +12,7 @@ pub struct HolderValidationParams<'a> {
     pub expected_cnonce: Option<&'a [u8]>,
     // to accommodate clock skews, applies to exp & nbf
     pub leeway: core::time::Duration,
+    pub time_verification: TimeVerification,
     /// for testing
     pub artificial_time: Option<i64>,
 }
@@ -149,6 +151,7 @@ mod tests {
             expected_audience: Some("aud-a"),
             expected_cnonce: Some(b"cnonce-a"),
             leeway: Default::default(),
+            time_verification: Default::default(),
             artificial_time: None,
         };
 

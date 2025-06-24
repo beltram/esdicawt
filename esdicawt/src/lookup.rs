@@ -328,7 +328,6 @@ mod tests {
             cnonce: None,
             expiry: None,
             with_not_before: false,
-            leeway: Default::default(),
             artificial_time: None,
             extra_kbt_protected: None,
             extra_kbt_unprotected: None,
