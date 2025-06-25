@@ -19,7 +19,7 @@ use std::{
 
 #[derive(Debug, Clone, PartialEq, derive_builder::Builder)]
 #[builder(pattern = "mutable")]
-struct Payload {
+pub struct Payload {
     pub most_recent_inspection_passed: bool,
     #[builder(default, setter(into, strip_option))]
     pub inspector_license_number: Option<String>,
@@ -114,7 +114,7 @@ impl Select for Payload {
 }
 
 #[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
-struct NestedPayload(Payload);
+pub struct NestedPayload(Payload);
 
 impl Select for NestedPayload {
     fn select(self) -> Result<Value, ciborium::value::Error> {

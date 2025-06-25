@@ -53,6 +53,15 @@ hex.workspace = true
 spice-oidc-cwt = { workspace = true }
 derive_builder.workspace = true
 serde_repr.workspace = true
+blake3 = { version = "1.8" , features = ["traits-preview"]}
+
+[target.'cfg(not(target_arch = "wasm32"))'.dev-dependencies]
+criterion = "0.6"
 
 [lints]
 workspace = true
+
+[[bench]]
+name = "verify"
+path = "benches/verify.rs"
+harness = false
