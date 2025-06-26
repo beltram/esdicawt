@@ -48,6 +48,24 @@ impl Default for TimeVerification {
     }
 }
 
+#[derive(Debug, Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash)]
+pub enum TimeArg {
+    /// Durating elapsed since UNIX_EPOCH
+    Absolute(core::time::Duration),
+    /// Duration from now
+    Relative(core::time::Duration),
+}
+
+impl TimeArg {
+    #[allow(clippy::wrong_self_convention)]
+    pub(crate) fn to_absolute(&self, now: core::time::Duration) -> core::time::Duration {
+        match *self {
+            Self::Absolute(d) => d,
+            Self::Relative(d) => now + d,
+        }
+    }
+}
+
 #[derive(Debug, thiserror::Error)]
 pub enum CwtTimeError {
     #[error("Iat in the future, probably clock drift")]

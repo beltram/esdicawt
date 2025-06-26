@@ -1,3 +1,4 @@
+use crate::time::TimeArg;
 use cose_key_confirmation::KeyConfirmation;
 use esdicawt_spec::{CustomClaims, NoClaims, Select};
 
@@ -16,7 +17,7 @@ pub struct IssuerParams<'a, PayloadClaims: Select, ProtectedClaims: CustomClaims
     /// Subject, see https://www.rfc-editor.org/rfc/rfc8392.html#section-3.1.3
     pub audience: Option<&'a str>,
     /// Expiry, see https://www.rfc-editor.org/rfc/rfc8392.html#section-3.1.4
-    pub expiry: Option<core::time::Duration>,
+    pub expiry: Option<TimeArg>,
     /// Whether to include a not_before, see https://www.rfc-editor.org/rfc/rfc8392.html#section-3.1.5
     pub with_not_before: bool,
     /// Whether to include an issued_at, see https://www.rfc-editor.org/rfc/rfc8392.html#section-3.1.6

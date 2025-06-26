@@ -2,10 +2,7 @@ pub mod error;
 pub mod params;
 mod redaction;
 
-use crate::{
-    issuer::{error::SdCwtIssuerError, params::IssuerParams, redaction::redact},
-    now,
-};
+use crate::issuer::{error::SdCwtIssuerError, params::IssuerParams, redaction::redact};
 use ciborium::Value;
 use esdicawt_spec::{
     COSE_SD_CLAIMS, CWT_CLAIM_AUDIENCE, CWT_CLAIM_CNONCE, CWT_CLAIM_CTI, CWT_CLAIM_EXPIRES_AT, CWT_CLAIM_ISSUED_AT, CWT_CLAIM_ISSUER, CWT_CLAIM_KEY_CONFIRMATION,
@@ -129,22 +126,21 @@ pub trait Issuer {
 
         if params.expiry.is_some() || params.with_issued_at || params.with_not_before {
             #[cfg(feature = "test-vectors")]
-            let now = params.artificial_time.map(|d| d.as_secs()).unwrap_or_else(now);
+            let now = params.artificial_time.unwrap_or_else(crate::elapsed_since_epoch);
             #[cfg(not(feature = "test-vectors"))]
-            let now = now();
+            let now = crate::elapsed_since_epoch();
 
             if let Some(expiry) = params.expiry {
-                let e = expiry.as_secs();
-                let expiry = now + e;
-                payload.push((Value::Integer(CWT_CLAIM_EXPIRES_AT.into()), expiry.into()));
+                let expiry = expiry.to_absolute(now);
+                payload.push((Value::Integer(CWT_CLAIM_EXPIRES_AT.into()), expiry.as_secs().into()));
             }
             if params.with_not_before {
-                let nbf = now - params.leeway.as_secs();
-                payload.push((Value::Integer(CWT_CLAIM_NOT_BEFORE.into()), nbf.into()));
+                let nbf = now - params.leeway;
+                payload.push((Value::Integer(CWT_CLAIM_NOT_BEFORE.into()), nbf.as_secs().into()));
             }
             if params.with_issued_at {
                 let iat = now;
-                payload.push((Value::Integer(CWT_CLAIM_ISSUED_AT.into()), iat.into()));
+                payload.push((Value::Integer(CWT_CLAIM_ISSUED_AT.into()), iat.as_secs().into()));
             }
         }
 
@@ -179,7 +175,7 @@ pub trait Issuer {
 mod tests {
     use super::{claims::CustomTokenClaims, test_utils::Ed25519Issuer};
     use crate::{
-        CwtStdLabel, Issuer, IssuerParams, now,
+        CwtStdLabel, Issuer, IssuerParams, TimeArg, elapsed_since_epoch,
         spec::{
             ClaimName, CwtAny, NoClaims, Select, SelectExt,
             blinded_claims::{Salted, SaltedClaim, SaltedElement},
@@ -246,7 +242,7 @@ mod tests {
             audience: Some("https://example.com/r/party"),
             cti: Some(b"cti"),
             cnonce: Some(b"cnonce"),
-            expiry: Some(exp),
+            expiry: Some(TimeArg::Relative(exp)),
             with_not_before: true,
             with_issued_at: true,
             leeway: core::time::Duration::from_secs(1),
@@ -259,7 +255,7 @@ mod tests {
         let raw_sd_cwt = CoseSign1::from_tagged_slice(&sd_cwt_bytes).unwrap();
         let payload = Value::from_cbor_bytes(&raw_sd_cwt.payload.unwrap()).unwrap().into_map().unwrap();
 
-        let now = now();
+        let now = elapsed_since_epoch().as_secs();
         for entry in payload {
             match entry {
                 (Value::Integer(label), Value::Text(issuer)) if label == CwtStdLabel::Issuer => assert_eq!(&issuer, "https://example.com/i/acme.io"),
