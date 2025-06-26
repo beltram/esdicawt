@@ -92,11 +92,13 @@ pub trait Holder {
         // verify time claims
         #[cfg(not(feature = "test-vectors"))] // FIXME: draft samples are expired
         {
-            let now = params.artificial_time.unwrap_or_else(|| time::OffsetDateTime::now_utc().unix_timestamp());
+            let now = params
+                .artificial_time
+                .unwrap_or_else(|| core::time::Duration::from_secs(time::OffsetDateTime::now_utc().unix_timestamp() as u64));
             let iat = payload.inner.issued_at;
             let exp = payload.inner.expiration;
             let nbf = payload.inner.not_before;
-            crate::time::verify_time_claims(now, params.leeway, iat, exp, nbf, params.time_verification)?;
+            crate::time::verify_time_claims(now.as_secs() as i64, params.leeway, iat, exp, nbf, params.time_verification)?;
         }
 
         // subject
@@ -176,6 +178,19 @@ pub trait Holder {
         mut sd_cwt: SdCwtVerified<Self::IssuerPayloadClaims, Self::Hasher, Self::IssuerProtectedClaims, Self::IssuerUnprotectedClaims>,
         params: HolderParams<Self::KbtPayloadClaims, Self::KbtProtectedClaims, Self::KbtUnprotectedClaims>,
     ) -> Result<Vec<u8>, SdCwtHolderError<Self::Error>> {
+        // verify again the time claims of the SD-CWT as time could have gone by between the last 'verify_sd_cwt'
+        #[cfg(not(feature = "test-vectors"))] // FIXME: draft samples are expired
+        {
+            let payload = sd_cwt.0.0.payload.to_value()?;
+            let now = params
+                .artificial_time
+                .unwrap_or_else(|| core::time::Duration::from_secs(time::OffsetDateTime::now_utc().unix_timestamp() as u64));
+            let iat = payload.inner.issued_at;
+            let exp = payload.inner.expiration;
+            let nbf = payload.inner.not_before;
+            crate::time::verify_time_claims(now.as_secs() as i64, params.leeway, iat, exp, nbf, params.time_verification)?;
+        }
+
         // --- building the kbt ---
         // --- unprotected ---
         let unprotected = KbtUnprotected {
@@ -336,6 +351,8 @@ mod tests {
             extra_kbt_protected: None,
             extra_kbt_payload: None,
             artificial_time: None,
+            time_verification: Default::default(),
+            leeway: Default::default(),
         };
 
         let sd_cwt = holder.verify_sd_cwt(&sd_cwt, Default::default(), &CoseKeySet::new(&issuer_signing_key).unwrap()).unwrap();
@@ -391,6 +408,8 @@ mod tests {
             extra_kbt_protected: None,
             extra_kbt_payload: None,
             artificial_time: None,
+            time_verification: Default::default(),
+            leeway: Default::default(),
         };
         let sd_cwt = holder.verify_sd_cwt(&sd_cwt, Default::default(), &CoseKeySet::new(&issuer_signing_key).unwrap()).unwrap();
         let sd_kbt_bytes = holder.new_presentation(sd_cwt, presentation_params).unwrap().to_cbor_bytes().unwrap();
