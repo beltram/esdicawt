@@ -478,6 +478,7 @@ impl RngCore for TestVectorRng {
             "d2be8cc99c185ef10e3f91a61d2d9bf9",
         ];
         let i = CTR.fetch_add(1, Ordering::SeqCst);
+        #[allow(clippy::indexing_slicing)]
         let salt = SALTS[i as usize];
         let _ = dest.write(&hex::decode(salt).unwrap()[..]).unwrap();
         Ok(())

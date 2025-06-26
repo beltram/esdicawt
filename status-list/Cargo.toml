@@ -1,0 +1,43 @@
+[package]
+name = "status-list"
+edition.workspace = true
+version.workspace = true
+description = "Token Status List"
+authors.workspace = true
+
+[features]
+default = ["issuer"] # for convenience
+issuer = []
+pem = ["dep:pkcs8", "pkcs8?/pem"]
+der = ["dep:pkcs8"]
+
+[dependencies]
+serde.workspace = true
+thiserror.workspace = true
+
+signature = { workspace = true, features = ["std"] }
+digest.workspace = true
+derive_builder.workspace = true
+hex = { workspace = true, default-features = false }
+
+flate2 = { workspace = true, features = ["zlib"] }
+serde_repr.workspace = true
+bytes = { workspace = true, features = ["serde"] }
+url = { workspace = true, features = ["serde"] }
+serde_bytes.workspace = true
+
+coset.workspace = true
+ciborium.workspace = true
+pkcs8 = { workspace = true, optional = true }
+
+[dev-dependencies]
+status-list = { path = "./" }
+ed25519-dalek.workspace = true
+p256 = { workspace = true, features = ["jwk"] }
+sha2.workspace = true
+rand.workspace = true
+serde_json = "1.0"
+hex = { workspace = true, features = ["alloc"] }
+
+[lints]
+workspace = true

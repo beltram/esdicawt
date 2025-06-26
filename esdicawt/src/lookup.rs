@@ -137,6 +137,7 @@ where
     if query.len() == 1 {
         Ok(Some(value))
     } else {
+        #[allow(clippy::indexing_slicing)]
         query_inner::<Hasher>(array, &value, &query[1..])
     }
 }
@@ -234,6 +235,7 @@ mod tests {
 
             if a_redacted {
                 let salted = sd_cwt.0.disclosures_mut().unwrap();
+                #[allow(clippy::indexing_slicing)]
                 salted
                     .0
                     .retain_mut(|cl| cl.to_value().unwrap().value().unwrap().as_array().map(|a| a[2] != "a".into()).unwrap_or_default());
