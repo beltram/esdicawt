@@ -1,3 +1,4 @@
+use crate::time::TimeArg;
 use crate::{SdCwtHolderResult, holder::traverse::traverse_disclosures};
 use ciborium::Value;
 use esdicawt_spec::{ClaimName, CustomClaims, NoClaims, blinded_claims::SaltedArray};
@@ -10,7 +11,7 @@ pub struct HolderParams<'a, KbtPayloadClaims: CustomClaims = NoClaims, KbtProtec
     /// Client Nonce, see https://www.rfc-editor.org/rfc/rfc9200.html#section-5.3.1
     pub cnonce: Option<&'a [u8]>,
     /// Expiry, see https://www.rfc-editor.org/rfc/rfc8392.html#section-3.1.4
-    pub expiry: Option<core::time::Duration>,
+    pub expiry: Option<TimeArg>,
     /// Whether to include a not_before, see https://www.rfc-editor.org/rfc/rfc8392.html#section-3.1.5
     pub with_not_before: bool,
     #[cfg(feature = "test-vectors")]

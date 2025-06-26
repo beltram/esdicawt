@@ -20,7 +20,7 @@ pub use issuer::{
 pub use lookup::*;
 pub use read::{EsdicawtReadError, EsdicawtReadResult, SdCwtRead};
 pub use signature::Keypair;
-pub use time::{CwtTimeError, TimeVerification};
+pub use time::{CwtTimeError, TimeArg, TimeVerification};
 pub use verifier::{
     Verifier,
     error::{SdCwtVerifierError, SdCwtVerifierResult},
@@ -42,15 +42,15 @@ pub mod test_utils {
 }
 
 #[cfg(all(target_arch = "wasm32", target_os = "unknown"))]
-pub(crate) fn now() -> u64 {
+pub(crate) fn elapsed_since_epoch() -> core::time::Duration {
     let val = js_sys::Date::now();
-    std::time::Duration::from_millis(val as u64).as_secs()
+    std::time::Duration::from_millis(val as u64)
 }
 
 #[cfg(not(all(target_arch = "wasm32", target_os = "unknown")))]
-pub(crate) fn now() -> u64 {
+pub(crate) fn elapsed_since_epoch() -> core::time::Duration {
     let now = std::time::SystemTime::now();
-    now.duration_since(std::time::SystemTime::UNIX_EPOCH).expect("System clock is before UNIX_EPOCH").as_secs()
+    now.duration_since(std::time::SystemTime::UNIX_EPOCH).expect("System clock is before UNIX_EPOCH")
 }
 
 /// Helps managing CBOR integer labels declared in an enum.
