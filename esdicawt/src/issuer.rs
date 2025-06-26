@@ -167,7 +167,7 @@ pub trait Issuer {
             .build()
             .to_tagged_vec()?;
 
-        Ok(SdCwtIssuedTagged::from_cbor_bytes(&sign1).unwrap())
+        Ok(SdCwtIssuedTagged::from_cbor_bytes(&sign1)?)
     }
 }
 
