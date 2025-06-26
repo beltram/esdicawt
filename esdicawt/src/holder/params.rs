@@ -1,5 +1,5 @@
 use crate::time::TimeArg;
-use crate::{SdCwtHolderResult, holder::traverse::traverse_disclosures};
+use crate::{SdCwtHolderResult, TimeVerification, holder::traverse::traverse_disclosures};
 use ciborium::Value;
 use esdicawt_spec::{ClaimName, CustomClaims, NoClaims, blinded_claims::SaltedArray};
 
@@ -14,8 +14,10 @@ pub struct HolderParams<'a, KbtPayloadClaims: CustomClaims = NoClaims, KbtProtec
     pub expiry: Option<TimeArg>,
     /// Whether to include a not_before, see https://www.rfc-editor.org/rfc/rfc8392.html#section-3.1.5
     pub with_not_before: bool,
-    #[cfg(feature = "test-vectors")]
     pub artificial_time: Option<core::time::Duration>,
+    pub time_verification: TimeVerification,
+    // to accommodate clock skews, applies to exp & nbf
+    pub leeway: core::time::Duration,
     pub extra_kbt_protected: Option<KbtProtectedClaims>,
     pub extra_kbt_unprotected: Option<KbtUnprotectedClaims>,
     pub extra_kbt_payload: Option<KbtPayloadClaims>,

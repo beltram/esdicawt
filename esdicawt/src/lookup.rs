@@ -329,6 +329,8 @@ mod tests {
             expiry: None,
             with_not_before: false,
             artificial_time: None,
+            time_verification: Default::default(),
+            leeway: Default::default(),
             extra_kbt_protected: None,
             extra_kbt_unprotected: None,
             extra_kbt_payload: None,

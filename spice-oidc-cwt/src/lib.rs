@@ -781,6 +781,8 @@ mod tests {
                     extra_kbt_protected: None,
                     extra_kbt_payload: None,
                     artificial_time: None,
+                    time_verification: Default::default(),
+                    leeway: Default::default(),
                 },
             )
             .unwrap();
