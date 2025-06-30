@@ -2,7 +2,7 @@ use cose_key::EcdsaCoseKeyExt;
 use coset::iana;
 
 pub mod reexports {
-    pub use cose_key::*;
+    pub use cose_key;
 }
 
 pub mod error;

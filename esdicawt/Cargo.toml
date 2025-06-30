@@ -18,6 +18,7 @@ test-vectors = ["test-utils"]
 [dependencies]
 esdicawt-spec.workspace = true
 cose-key-set.workspace = true
+cose-key.workspace = true
 cose-key-confirmation.workspace = true
 signature = { workspace = true, features = ["std", "digest"] }
 digest.workspace = true

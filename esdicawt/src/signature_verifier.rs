@@ -1,7 +1,4 @@
-use crate::{
-    CoseKeyError,
-    spec::reexports::coset::{Algorithm, CoseSign1, iana, iana::EnumI64},
-};
+use crate::spec::reexports::coset::{Algorithm, CoseSign1, iana, iana::EnumI64};
 
 pub fn validate_signature(cose_sign1_sd_cwt: &CoseSign1, keyset: &cose_key_set::CoseKeySet) -> Result<(), SignatureVerifierError> {
     let alg = cose_sign1_sd_cwt.protected.header.alg.as_ref().ok_or(SignatureVerifierError::InvalidCwt)?;
@@ -50,7 +47,7 @@ pub enum SignatureVerifierError {
     #[error("No signer found for this SD-CWT in this KeySet")]
     NoSigner,
     #[error(transparent)]
-    CoseKeyError(#[from] CoseKeyError),
+    CoseKeyError(#[from] cose_key::CoseKeyError),
     #[error("Signature verification error: {0}")]
     SignatureError(#[from] signature::Error),
 }
