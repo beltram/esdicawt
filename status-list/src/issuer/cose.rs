@@ -3,8 +3,7 @@ use crate::{
     issuer::{StatusListIssuerParams, cose::model::StatusListTokenTagged, elapsed_since_epoch},
 };
 use ciborium::Value;
-use coset::iana::CwtClaimName;
-use coset::{CborSerializable, TaggedCborSerializable};
+use coset::{CborSerializable, TaggedCborSerializable, iana::CwtClaimName};
 use signature::{Keypair, SignatureEncoding, Signer};
 
 pub mod codec;

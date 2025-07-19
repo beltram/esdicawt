@@ -1,5 +1,4 @@
-use crate::issuance::SdCwtIssued;
-use crate::{CustomClaims, EsdicawtSpecError, EsdicawtSpecResult, Select};
+use crate::{CustomClaims, EsdicawtSpecError, EsdicawtSpecResult, Select, issuance::SdCwtIssued};
 use cose_key_confirmation::KeyConfirmation;
 
 impl<PayloadClaims: Select, Hasher: digest::Digest + Clone, ProtectedClaims: CustomClaims, UnprotectedClaims: CustomClaims>

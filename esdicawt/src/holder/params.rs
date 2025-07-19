@@ -1,4 +1,4 @@
-use crate::{SdCwtHolderResult, TimeVerification, holder::traverse::traverse_disclosures, time::TimeArg};
+use crate::{SdCwtHolderResult, TimeVerification, holder::traverse::traverse_all_cbor_paths_in_disclosures, time::TimeArg};
 use ciborium::Value;
 use esdicawt_spec::{ClaimName, CustomClaims, NoClaims, blinded_claims::SaltedArray};
 
@@ -50,14 +50,13 @@ impl Presentation {
             Self::None => SaltedArray(vec![]),
             Self::Custom(f) => f(disclosures),
             Self::Path(f) => {
-                let mut kept_disclosures = SaltedArray::with_capacity(disclosures.len());
-                let paths = traverse_disclosures::<Hasher, E>(&disclosures)?;
-                for (path, salted) in paths {
-                    if f(&path) {
-                        kept_disclosures.0.push(salted.into())
-                    }
-                }
-                kept_disclosures
+                let hashed_disclosures = disclosures.digested::<Hasher>()?;
+                let cbor_paths = traverse_all_cbor_paths_in_disclosures::<Hasher, E>(&hashed_disclosures)?;
+                let cbor_paths = cbor_paths
+                    .into_iter()
+                    .filter_map(|(path, salted, ..)| f(&path).then_some(salted.into()))
+                    .collect::<Vec<_>>();
+                SaltedArray(cbor_paths)
             }
         })
     }

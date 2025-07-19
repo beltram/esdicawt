@@ -1,15 +1,16 @@
-use crate::issuer::StatusListTokenBuilder;
 use crate::{
     CborAny, StatusList,
     issuer::{
-        StatusListToken,
+        StatusListToken, StatusListTokenBuilder,
         cose::{LABEL_TYPE, MEDIATYPE_STATUS_LIST_CWT},
     },
 };
 use ciborium::Value;
-use coset::cwt::{ClaimName, Timestamp};
-use coset::iana::CwtClaimName;
-use coset::{AsCborValue, CborSerializable, TaggedCborSerializable};
+use coset::{
+    AsCborValue, CborSerializable, TaggedCborSerializable,
+    cwt::{ClaimName, Timestamp},
+    iana::CwtClaimName,
+};
 
 impl serde::Serialize for StatusListToken {
     fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
