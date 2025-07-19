@@ -3,67 +3,59 @@ use ciborium::Value;
 use digest::Digest;
 use esdicawt_spec::{
     CWT_LABEL_REDACTED_KEYS, CwtAny, REDACTED_CLAIM_ELEMENT_TAG,
-    blinded_claims::{Salted, SaltedArray, SaltedClaim, SaltedElement},
+    blinded_claims::{Salted, SaltedClaim, SaltedElement},
 };
+use std::{borrow::Cow, collections::HashMap};
 
 type PathAndSalted = Vec<(Vec<CborPath>, Salted<Value>)>;
 type PathAndSaltedAndDigest = Vec<(Vec<CborPath>, Salted<Value>, Vec<u8>)>;
 
-/// TODO: very inefficient implementation, disclosures are traversed many times, hashes are computed many times.
-/// Will be easier when we have semantics for order of disclosures
-pub fn traverse_disclosures<Hasher: Digest, E>(disclosures: &SaltedArray) -> SdCwtHolderResult<PathAndSalted, E>
+/// Given disclosures, this method returns all the possible paths one can build from it
+pub fn traverse_all_cbor_paths_in_disclosures<Hasher: Digest, E>(hashed_disclosures: &HashMap<Vec<u8>, Cow<Salted<Value>>>) -> SdCwtHolderResult<PathAndSalted, E>
 where
     E: core::error::Error + Send + Sync,
 {
-    let mut paths = vec![];
-    for salted in disclosures.iter_clone().filter_map(Result::ok) {
-        _traverse::<Hasher, _>(SaltedOrValue::Salted(salted), vec![], disclosures, &mut paths)?;
-    }
-    let paths = paths.into_iter().map(|(p, s, _)| (p, s)).collect();
-    Ok(paths)
-}
+    // there are at least as many paths in the ClaimSet as there are disclosures, small optimization
+    let mut paths = Vec::with_capacity(hashed_disclosures.len());
 
-// wrapping "_traverse" is required for fallible recursion
-fn _traverse<Hasher: Digest, E>(salted: SaltedOrValue, current: Vec<CborPath>, disclosures: &SaltedArray, paths: &mut PathAndSaltedAndDigest) -> SdCwtHolderResult<(), E>
-where
-    E: core::error::Error + Send + Sync,
-{
-    __traverse::<Hasher, _>(salted, current, disclosures, paths)
+    for salted in hashed_disclosures.values() {
+        __traverse::<Hasher, _>(&salted.into(), vec![], hashed_disclosures, &mut paths)?;
+    }
+    Ok(paths.into_iter().map(|(p, s, _)| (p, s)).collect())
 }
 
 #[tailcall::tailcall]
-fn __traverse<Hasher: Digest, E>(
-    salted_or_value: SaltedOrValue,
+fn __traverse<'a, Hasher: Digest, E>(
+    salted_or_value: &'a SaltedOrValue<'a>,
     mut current: Vec<CborPath>,
-    disclosures: &SaltedArray,
+    disclosures: &HashMap<Vec<u8>, Cow<Salted<Value>>>,
     paths: &mut PathAndSaltedAndDigest,
 ) -> SdCwtHolderResult<(), E>
 where
     E: core::error::Error + Send + Sync,
 {
-    let find_hash = |hash: &[u8]| {
-        disclosures
-            .0
-            .iter()
-            .find(|h| h.clone_bytes().map(|b| Hasher::digest(b).to_vec() == hash).unwrap_or_default())
-    };
-    match &salted_or_value {
+    let find_hash = |hash: &[u8]| disclosures.iter().find_map(|(h, salted)| (h == hash).then_some(salted.clone()));
+    match salted_or_value {
         SaltedOrValue::Salted(salted) => {
             let digest = Hasher::digest(&salted.to_cbor_bytes()?).to_vec();
             let previous_depth = paths.iter().find_map(|(p, _, d)| (d == &digest).then_some(p.len()));
             let retract_previous = previous_depth.map(|prev| prev <= current.len()).unwrap_or_default();
             let insert = previous_depth.is_none() || previous_depth.map(|prev| current.len() >= prev).unwrap_or_default() || retract_previous;
 
-            match salted {
+            match &**salted {
                 Salted::Claim(SaltedClaim { value, .. }) | Salted::Element(SaltedElement { value, .. }) if value.is_map() || value.is_array() => {
-                    if let Salted::Claim(SaltedClaim { name, .. }) = salted {
+                    if let Salted::Claim(SaltedClaim { name, .. }) = &**salted {
                         current.push(name.into());
                     }
                     if retract_previous {
                         paths.retain(|(_, _, d)| d != &digest);
                     }
                     if insert {
-                        paths.push((current.clone(), salted.clone(), digest));
+                        let salted = match salted {
+                            Cow::Borrowed(s) => (*s).clone(),
+                            Cow::Owned(s) => s.clone(),
+                        };
+                        paths.push((current.clone(), salted, digest));
                     }
 
                     let values = match value {
@@ -79,8 +71,7 @@ where
                                 let hashes = hashes.iter().filter_map(|h| h.as_bytes()).collect::<Vec<_>>();
                                 for hash in hashes {
                                     if let Some(salted_child) = find_hash(hash) {
-                                        let salted = salted_child.clone_value()?;
-                                        _traverse::<Hasher, E>(SaltedOrValue::Salted(salted), current.clone(), disclosures, paths)?;
+                                        __traverse::<Hasher, E>(&salted_child.into(), current.clone(), disclosures, paths)?;
                                     }
                                 }
                             }
@@ -91,8 +82,7 @@ where
                                 };
                                 if let Some(salted_child) = find_hash(hash) {
                                     current.push(CborPath::Index(index as u64));
-                                    let salted = salted_child.clone_value()?;
-                                    _traverse::<Hasher, E>(SaltedOrValue::Salted(salted), current.clone(), disclosures, paths)?;
+                                    __traverse::<Hasher, E>(&salted_child.into(), current.clone(), disclosures, paths)?;
                                     current.pop();
                                 }
                             }
@@ -100,7 +90,7 @@ where
                             (label, value) if value.is_map() || value.is_array() => {
                                 let path = label.map(TryInto::try_into).transpose()?.unwrap_or(CborPath::Index(index as u64));
                                 current.push(path);
-                                _traverse::<Hasher, E>(SaltedOrValue::Value(value.clone()), current.clone(), disclosures, paths)?;
+                                __traverse::<Hasher, E>(&value.into(), current.clone(), disclosures, paths)?;
                                 current.pop();
                             }
                             _ => {}
@@ -109,14 +99,18 @@ where
                 }
                 // leaf
                 Salted::Claim(SaltedClaim { .. }) | Salted::Element(SaltedElement { .. }) => {
-                    if let Salted::Claim(SaltedClaim { name, .. }) = salted {
+                    if let Salted::Claim(SaltedClaim { name, .. }) = &**salted {
                         current.push(name.into());
                     }
                     if retract_previous {
                         paths.retain(|(_, _, d)| d != &digest);
                     }
                     if insert || retract_previous {
-                        paths.push((current.clone(), salted.clone(), digest));
+                        let salted = match salted {
+                            Cow::Borrowed(s) => (*s).clone(),
+                            Cow::Owned(s) => s.clone(),
+                        };
+                        paths.push((current.clone(), salted, digest));
                     }
                 }
                 // ignored
@@ -130,14 +124,13 @@ where
                         let hashes = hashes.iter().filter_map(|h| h.as_bytes()).collect::<Vec<_>>();
                         for hash in hashes {
                             if let Some(salted_child) = find_hash(hash) {
-                                let salted = salted_child.clone_value()?;
-                                _traverse::<Hasher, E>(SaltedOrValue::Salted(salted), current.clone(), disclosures, paths)?;
+                                __traverse::<Hasher, E>(&salted_child.into(), current.clone(), disclosures, paths)?;
                             }
                         }
                     }
                     (_, value) if value.is_map() || value.is_array() => {
                         current.push(label.try_into()?);
-                        _traverse::<Hasher, E>(SaltedOrValue::Value(value.clone()), current.clone(), disclosures, paths)?;
+                        __traverse::<Hasher, E>(&value.into(), current.clone(), disclosures, paths)?;
                         current.pop();
                     }
                     _ => {}
@@ -152,15 +145,14 @@ where
                             return Err(SdCwtHolderError::<E>::ImplementationError("Invalid redacted array element"));
                         };
                         if let Some(salted_child) = find_hash(hash) {
-                            let salted = salted_child.clone_value()?;
                             current.push(CborPath::Index(index as u64));
-                            _traverse::<Hasher, E>(SaltedOrValue::Salted(salted), current.clone(), disclosures, paths)?;
+                            __traverse::<Hasher, E>(&salted_child.into(), current.clone(), disclosures, paths)?;
                             current.pop();
                         }
                     }
                     value if value.is_map() || value.is_array() => {
                         current.push(CborPath::Index(index as u64));
-                        _traverse::<Hasher, E>(SaltedOrValue::Value(value.clone()), current.clone(), disclosures, paths)?;
+                        __traverse::<Hasher, E>(&value.into(), current.clone(), disclosures, paths)?;
                         current.pop();
                     }
                     _ => {}
@@ -173,15 +165,36 @@ where
 }
 
 #[derive(Debug, Clone)]
-enum SaltedOrValue {
-    Salted(Salted<Value>),
-    Value(Value),
+enum SaltedOrValue<'a> {
+    Salted(Cow<'a, Salted<Value>>),
+    Value(&'a Value),
+}
+
+impl<'a> From<Cow<'a, Salted<Value>>> for SaltedOrValue<'a> {
+    fn from(value: Cow<'a, Salted<Value>>) -> Self {
+        Self::Salted(value)
+    }
+}
+
+impl<'a> From<&'a Cow<'_, Salted<Value>>> for SaltedOrValue<'a> {
+    fn from(value: &'a Cow<Salted<Value>>) -> Self {
+        match value {
+            Cow::Borrowed(value) => Self::Salted(Cow::Borrowed(value)),
+            Cow::Owned(value) => Self::Salted(Cow::Owned(value.clone())),
+        }
+    }
+}
+
+impl<'a> From<&'a Value> for SaltedOrValue<'a> {
+    fn from(value: &'a Value) -> Self {
+        Self::Value(value)
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::salted;
+    use crate::{salted, spec::blinded_claims::SaltedArray};
     use ciborium::{Value, Value::Simple, cbor, tag::Required};
     use esdicawt_spec::{
         Salt,
@@ -191,28 +204,28 @@ mod tests {
 
     #[test]
     fn tstr() {
-        let [a] = traverse([salted!("a", 1)]);
+        let [a] = find_cbor_paths([salted!("a", 1)]);
         assert_eq!(a, vec![CborPath::Str("a".into())]);
     }
 
     #[test]
     fn int() {
-        let [zero] = traverse([salted!(0, 1)]);
+        let [zero] = find_cbor_paths([salted!(0, 1)]);
         assert_eq!(zero, vec![CborPath::Int(0)]);
     }
 
     #[test]
     fn many_simple() {
-        let [zero, a, one, b] = traverse([salted!(0, 1), salted!("a", 1), salted!(1, 1), salted!("b", 1)]);
-        assert_eq!(zero, vec![CborPath::Int(0)]);
-        assert_eq!(a, vec![CborPath::Str("a".into())]);
-        assert_eq!(one, vec![CborPath::Int(1)]);
-        assert_eq!(b, vec![CborPath::Str("b".into())]);
+        let cbor_paths = find_cbor_paths([salted!(0, 1), salted!("a", 1), salted!(1, 1), salted!("b", 1)]);
+        assert!(cbor_paths.contains(&vec![CborPath::Int(0)]));
+        assert!(cbor_paths.contains(&vec![CborPath::Int(1)]));
+        assert!(cbor_paths.contains(&vec![CborPath::Str("a".into())]));
+        assert!(cbor_paths.contains(&vec![CborPath::Str("b".into())]));
     }
 
     #[test]
     fn mapping() {
-        let [map, a] = traverse([
+        let [map, a] = find_cbor_paths([
             salted!(obj => "map", cbor!({
                 "c" => "d",
                 Simple(59) => [salted!(digest => "a", cbor!(1))],
@@ -225,7 +238,7 @@ mod tests {
 
     #[test]
     fn mapping_reversed_order() {
-        let [map, a] = traverse([
+        let [map, a] = find_cbor_paths([
             salted!("a", 1),
             salted!(obj => "map", cbor!({
                 Simple(59) => [salted!(digest => "a", cbor!(1))],
@@ -237,7 +250,7 @@ mod tests {
 
     #[test]
     fn mapping_many_claims() {
-        let [map, a, b] = traverse([
+        let [map, a, b] = find_cbor_paths([
             salted!(obj => "map", cbor!({
                 "c" => "d",
                 Simple(59) => [
@@ -255,7 +268,7 @@ mod tests {
 
     #[test]
     fn mapping_nested_redacted_mapping() {
-        let [map1, map2, a] = traverse([
+        let [map1, map2, a] = find_cbor_paths([
             salted!(obj => "map1", cbor!({
                 "c" => "d",
                 Simple(59) => [salted!(digest => "map2", cbor!({Simple(59) => [salted!(digest => "a", cbor!(1))]}))],
@@ -272,7 +285,7 @@ mod tests {
 
     #[test]
     fn mapping_nested_unredacted_mapping() {
-        let [map, a, b] = traverse([
+        let [map, a, b] = find_cbor_paths([
             salted!(obj => "map", cbor!({
                 "wrap1" => {
                     Simple(59) => [salted!(digest => "a", cbor!(1))]
@@ -291,7 +304,7 @@ mod tests {
 
     #[test]
     fn mapping_nested_unredacted_nested_unredacted_mapping() {
-        let [map, a] = traverse([
+        let [map, a] = find_cbor_paths([
             salted!(obj => "map", cbor!({
                 "wrap1" => {
                     "wrap2" => {
@@ -315,7 +328,7 @@ mod tests {
 
     #[test]
     fn array() {
-        let [array, a] = traverse([
+        let [array, a] = find_cbor_paths([
             salted!(obj => "array", cbor!([
                 Required::<_, 59>(salted!(digest => cbor!("a"))),
             ])),
@@ -327,7 +340,7 @@ mod tests {
 
     #[test]
     fn array_reverse_order() {
-        let [array, a] = traverse([
+        let [array, a] = find_cbor_paths([
             salted!("a"),
             salted!(obj => "array", cbor!([
                 Required::<_, 59>(salted!(digest => cbor!("a"))),
@@ -339,7 +352,7 @@ mod tests {
 
     #[test]
     fn array_many_elements() {
-        let [array, a, b] = traverse([
+        let [array, a, b] = find_cbor_paths([
             salted!(obj => "array", cbor!([
                 Required::<_, 59>(salted!(digest => cbor!("a"))),
                 Required::<_, 59>(salted!(digest => cbor!("b"))),
@@ -354,7 +367,7 @@ mod tests {
 
     #[test]
     fn array_nested_redacted_array() {
-        let [array1, array2, a] = traverse([
+        let [array1, array2, a] = find_cbor_paths([
             salted!(obj => "array", cbor!([
                 Required::<_, 59>(salted!(digest => cbor!([
                     Required::<_, 59>(salted!(digest => cbor!("a")))
@@ -372,7 +385,7 @@ mod tests {
 
     #[test]
     fn array_nested_unredacted_array() {
-        let [array, a, b, c] = traverse([
+        let [array, a, b, c] = find_cbor_paths([
             salted!(obj => "array", cbor!([
                 [
                     Required::<_, 59>(salted!(digest => cbor!("a"))),
@@ -394,7 +407,7 @@ mod tests {
 
     #[test]
     fn array_nested_unredacted_nested_unredacted_array() {
-        let [array, a] = traverse([
+        let [array, a] = find_cbor_paths([
             salted!(obj => "array", cbor!([
                 [
                     [
@@ -410,7 +423,7 @@ mod tests {
 
     #[test]
     fn array_nested_redacted_mapping() {
-        let [array, map, a] = traverse([
+        let [array, map, a] = find_cbor_paths([
             salted!(obj => "array", cbor!([
                 Required::<_, 59>(salted!(digest => cbor!({
                     Simple(59) => [salted!(digest => "a", cbor!(1))]
@@ -428,7 +441,7 @@ mod tests {
 
     #[test]
     fn array_nested_unredacted_mapping() {
-        let [array, a] = traverse([
+        let [array, a] = find_cbor_paths([
             salted!(obj => "array", cbor!([
                 {
                     "c" => "d",
@@ -441,13 +454,14 @@ mod tests {
         assert_eq!(a, vec![CborPath::Str("array".into()), CborPath::Index(0), CborPath::Str("a".into())]);
     }
 
-    fn traverse<const N: usize>(disclosures: [SaltedRef<Value>; N]) -> [Vec<CborPath>; N] {
+    fn find_cbor_paths<const N: usize>(disclosures: [SaltedRef<Value>; N]) -> [Vec<CborPath>; N] {
         let mut d = SaltedArray::new();
         for s in disclosures {
             d.push_ref(s).unwrap();
         }
+        let d = d.digested::<Sha256>().unwrap();
 
-        let traversed = traverse_disclosures::<Sha256, core::convert::Infallible>(&d).unwrap();
+        let traversed = traverse_all_cbor_paths_in_disclosures::<Sha256, core::convert::Infallible>(&d).unwrap();
         let paths = traversed.into_iter().map(|(p, _)| p).collect::<Vec<_>>();
         let size = paths.len();
         paths.try_into().unwrap_or_else(|_| panic!("Expected {N} got {size}"))

@@ -2,7 +2,7 @@ use crate::fmk::ed25519::{Ed25519Holder, Ed25519Issuer, Ed25519Verifier};
 use ciborium::{Value, value::Error};
 use cose_key_set::CoseKeySet;
 use criterion::{BatchSize, BenchmarkId, Criterion, criterion_group, criterion_main};
-use esdicawt::{Holder, HolderParams, Issuer, IssuerParams, SdCwtVerified, Verifier, VerifierParams};
+use esdicawt::{Holder, HolderParams, Issuer, IssuerParams, SdCwtVerified, ShallowVerifierParams, Verifier, VerifierParams};
 use esdicawt_spec::{CwtAny, Select, SelectExt};
 use rand::prelude::ThreadRng;
 use std::{collections::HashMap, hint::black_box};
@@ -120,29 +120,29 @@ fn shallow_verifier_bench(c: &mut Criterion) {
     for i in (0usize..1000).step_by(300) {
         group.bench_with_input(BenchmarkId::new("SHA-256", i), &i, |b, i| {
             b.iter_batched(
-                || verifier::<sha2::Sha256>(i),
-                |(verifier, sd_kbt, params, cks, ..)| black_box(verifier.verify_sd_kbt(&sd_kbt, params, None, &cks).unwrap()),
+                || shallow_verifier::<sha2::Sha256>(i),
+                |(verifier, sd_kbt, params, cks, ..)| black_box(verifier.shallow_verify_sd_kbt(&sd_kbt, params, None, &cks).unwrap()),
                 BatchSize::LargeInput,
             )
         });
         group.bench_with_input(BenchmarkId::new("SHA-384", i), &i, |b, i| {
             b.iter_batched(
-                || verifier::<sha2::Sha384>(i),
-                |(verifier, sd_kbt, params, cks, ..)| black_box(verifier.verify_sd_kbt(&sd_kbt, params, None, &cks).unwrap()),
+                || shallow_verifier::<sha2::Sha384>(i),
+                |(verifier, sd_kbt, params, cks, ..)| black_box(verifier.shallow_verify_sd_kbt(&sd_kbt, params, None, &cks).unwrap()),
                 BatchSize::LargeInput,
             )
         });
         group.bench_with_input(BenchmarkId::new("SHA-512", i), &i, |b, i| {
             b.iter_batched(
-                || verifier::<sha2::Sha512>(i),
-                |(verifier, sd_kbt, params, cks, ..)| black_box(verifier.verify_sd_kbt(&sd_kbt, params, None, &cks).unwrap()),
+                || shallow_verifier::<sha2::Sha512>(i),
+                |(verifier, sd_kbt, params, cks, ..)| black_box(verifier.shallow_verify_sd_kbt(&sd_kbt, params, None, &cks).unwrap()),
                 BatchSize::LargeInput,
             )
         });
         group.bench_with_input(BenchmarkId::new("Blake3", i), &i, |b, i| {
             b.iter_batched(
-                || verifier::<blake3::Hasher>(i),
-                |(verifier, sd_kbt, params, cks, ..)| black_box(verifier.verify_sd_kbt(&sd_kbt, params, None, &cks).unwrap()),
+                || shallow_verifier::<blake3::Hasher>(i),
+                |(verifier, sd_kbt, params, cks, ..)| black_box(verifier.shallow_verify_sd_kbt(&sd_kbt, params, None, &cks).unwrap()),
                 BatchSize::LargeInput,
             )
         });
@@ -227,55 +227,22 @@ fn verifier<H: digest::Digest + Clone>(i: &usize) -> (Ed25519Verifier<VarSizePay
     (verifier, sd_kbt, params, cks)
 }
 
-/*fn verify_bench(c: &mut Criterion) {
-    let mut group = c.benchmark_group("Verify");
-    group.bench_function(BenchmarkId::new("SHA-256", 0), |b| {
-        b.iter_batched(
-            || {
-                let issuer = Ed25519Issuer::<Payload, sha2::Sha256>::new(ed25519_dalek::SigningKey::generate(&mut rand::thread_rng()));
-                let holder = Ed25519Holder::<Payload, sha2::Sha256>::new(ed25519_dalek::SigningKey::generate(&mut rand::thread_rng()));
+fn shallow_verifier<H: digest::Digest + Clone>(i: &usize) -> (Ed25519Verifier<VarSizePayload>, Vec<u8>, ShallowVerifierParams, CoseKeySet) {
+    let (holder, holder_params, sd_cwt, cks) = holder::<H>(i);
 
-                let payload = Payload {
-                    most_recent_inspection_passed: true,
-                    inspector_license_number: Some("ABCD-123456".into()),
-                    inspection_dates: vec![1549560720, 1612560720, 17183928],
-                    inspection_location: OidcAddressClaim {
-                        country: Some("us".into()),
-                        region: Some("ca".into()),
-                        postal_code: Some("94188".into()),
-                        ..Default::default()
-                    },
-                };
+    let sd_kbt = holder.new_presentation_raw(sd_cwt, holder_params).unwrap();
 
-                let issuer_params = IssuerParams {
-                    protected_claims: None,
-                    unprotected_claims: None,
-                    payload: Some(payload),
-                    issuer: "",
-                    subject: None,
-                    audience: None,
-                    expiry: None,
-                    with_not_before: false,
-                    with_issued_at: false,
-                    cti: None,
-                    cnonce: None,
-                    artificial_time: None,
-                    leeway: Default::default(),
-                    key_location: "",
-                    holder_confirmation_key: (&holder.verifying_key).try_into().unwrap(),
-                };
+    let verifier = Ed25519Verifier::<VarSizePayload>::new();
 
-                let sd_cwt = issuer.issue_cwt(&mut rand::thread_rng(), issuer_params).unwrap();
+    let params = ShallowVerifierParams {
+        sd_cwt_leeway: Default::default(),
+        sd_kbt_leeway: Default::default(),
+        sd_cwt_time_verification: Default::default(),
+        sd_kbt_time_verification: Default::default(),
+    };
 
-                // let verifier = Ed25519Verifier;
-                0
-            },
-            |_| black_box(()),
-            BatchSize::SmallInput,
-        )
-    });
-    group.finish();
-}*/
+    (verifier, sd_kbt, params, cks)
+}
 
 #[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 struct VarSizePayload(HashMap<String, String>);
