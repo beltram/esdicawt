@@ -2,10 +2,10 @@ use crate::lookup::TokenQuery;
 use ciborium::Value;
 use coset::iana::CwtClaimName;
 use esdicawt_spec::{
-    CustomClaims, Select,
-    issuance::SdCwtIssuedTagged,
-    key_binding::KbtCwtTagged,
+    issuance::SdCwtIssuedTagged, key_binding::KbtCwtTagged,
     reexports::{coset, coset::iana::EnumI64},
+    CustomClaims,
+    Select,
 };
 use std::borrow::Cow;
 
@@ -13,13 +13,12 @@ use std::borrow::Cow;
 pub trait SdCwtRead: TokenQuery {
     type PayloadClaims: CustomClaims;
 
-    // TODO: pending optional vs mandatory claims is settled. tl;dr: it should be required
-    fn iss(&mut self) -> EsdicawtReadResult<Option<Cow<str>>> {
-        Ok(self.query(vec![CwtClaimName::Iss.to_i64().into()].into())?.as_ref().map(Value::deserialized).transpose()?)
-    }
-
     fn sub(&mut self) -> EsdicawtReadResult<Option<Cow<str>>> {
         Ok(self.query(vec![CwtClaimName::Sub.to_i64().into()].into())?.as_ref().map(Value::deserialized).transpose()?)
+    }
+
+    fn iss(&mut self) -> EsdicawtReadResult<Option<Cow<str>>> {
+        Ok(self.query(vec![CwtClaimName::Iss.to_i64().into()].into())?.as_ref().map(Value::deserialized).transpose()?)
     }
 
     fn aud(&mut self) -> EsdicawtReadResult<Option<Cow<str>>> {
@@ -57,6 +56,11 @@ impl<IssuerPayloadClaims: Select, Hasher: digest::Digest + Clone, IssuerProtecte
     for SdCwtIssuedTagged<IssuerPayloadClaims, Hasher, IssuerProtectedClaims, IssuerUnprotectedClaims>
 {
     type PayloadClaims = IssuerPayloadClaims;
+
+    // sub is not redactable so we read it directly from the SD-CWT
+    fn sub(&mut self) -> EsdicawtReadResult<Option<Cow<str>>> {
+        Ok(self.0.payload.to_value()?.inner.subject.as_deref().map(Cow::Borrowed))
+    }
 }
 
 impl<
