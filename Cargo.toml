@@ -62,7 +62,7 @@ flate2 = { version = "1.1", default-features = false }
 [patch.crates-io.ciborium]
 git = "https://github.com/beltram/ciborium"
 #branch = "simple-value"
-rev = "ce44d46b"
+rev = "69c8aede"
 #path = "../ciborium/ciborium"
 
 
