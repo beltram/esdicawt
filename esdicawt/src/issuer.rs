@@ -195,7 +195,7 @@ mod tests {
     #[wasm_bindgen_test::wasm_bindgen_test]
     fn should_generate_sd_cwt() {
         let payload = CustomTokenClaims { name: Some("Alice Smith".into()) };
-        let mut sd_cwt = issue(Some(payload));
+        let (mut sd_cwt, _) = issue(Some(payload));
 
         let sd_cwt_bytes = sd_cwt.to_cbor_bytes().unwrap();
         let sd_cwt_2 = SdCwtIssuedTagged::<CustomTokenClaims, sha2::Sha256>::from_cbor_bytes(&sd_cwt_bytes).unwrap();
@@ -288,7 +288,7 @@ mod tests {
     fn should_issue_complex_types() {
         let verify_issuance = |value: Value, expected: (Option<ClaimName>, Result<Value, ciborium::value::Error>)| {
             let payload = cbor!({ "___claim" => value }).unwrap().select_all().unwrap();
-            let mut sd_cwt = issue(Some(payload));
+            let (mut sd_cwt, _) = issue(Some(payload));
 
             let disclosable_claims = sd_cwt.0.disclosures_mut().unwrap().iter().collect::<Result<Vec<_>, _>>().unwrap();
 
@@ -400,7 +400,7 @@ mod tests {
             numbers: vec![0, 1, 2],
             inner: HashMap::from_iter([("a".into(), "b".into())]),
         };
-        let mut sd_cwt = issue(Some(model));
+        let (mut sd_cwt, _) = issue(Some(model));
 
         let mut payload = sd_cwt.0.payload.clone();
         let payload = payload.to_value().unwrap().clone();
@@ -448,7 +448,7 @@ mod tests {
             name: Some("Alice".to_string()),
             age: Some(42),
         };
-        let mut sd_cwt = issue(Some(model));
+        let (mut sd_cwt, _) = issue(Some(model));
 
         let mut payload = sd_cwt.0.payload.clone();
         let payload = payload.to_value().unwrap().clone();
@@ -468,12 +468,21 @@ mod tests {
         issue(None::<Value>);
     }
 
-    fn issue<T: Select>(payload: Option<T>) -> SdCwtIssuedTagged<T, sha2::Sha256> {
+    #[test]
+    #[wasm_bindgen_test::wasm_bindgen_test]
+    fn should_read_cnf() {
+        let payload = CustomTokenClaims { name: Some("Alice Smith".into()) };
+        let (mut sd_cwt, holder_sk) = issue(Some(payload));
+        let cnf = sd_cwt.0.cnf::<ed25519_dalek::VerifyingKey>().unwrap();
+        assert_eq!(cnf, holder_sk.verifying_key());
+    }
+
+    fn issue<T: Select>(payload: Option<T>) -> (SdCwtIssuedTagged<T, sha2::Sha256>, ed25519_dalek::SigningKey) {
         let holder_signing_key = ed25519_dalek::SigningKey::generate(&mut rand::thread_rng());
         let issuer_signing_key = ed25519_dalek::SigningKey::generate(&mut rand::thread_rng());
         let issuer = Ed25519Issuer::new(issuer_signing_key);
 
-        issuer
+        let sd_cwt = issuer
             .issue_cwt(
                 &mut rand::thread_rng(),
                 IssuerParams {
@@ -494,7 +503,8 @@ mod tests {
                     artificial_time: None,
                 },
             )
-            .unwrap()
+            .unwrap();
+        (sd_cwt, holder_signing_key)
     }
 
     #[allow(dead_code, unused_variables)]
