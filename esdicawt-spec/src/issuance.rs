@@ -1,5 +1,6 @@
 use crate::{CustomClaims, CwtAny, NoClaims, SdHashAlg, Select, alg::Algorithm, blinded_claims::SaltedArray, inlined_cbor::InlinedCbor, redacted_claims::RedactedClaimKeys};
 
+mod accessors;
 mod sd_issued_codec;
 mod sd_payload_codec;
 mod sd_protected_codec;

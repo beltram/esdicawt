@@ -2,10 +2,10 @@ use crate::lookup::TokenQuery;
 use ciborium::Value;
 use coset::iana::CwtClaimName;
 use esdicawt_spec::{
-    issuance::SdCwtIssuedTagged, key_binding::KbtCwtTagged,
+    CustomClaims, Select,
+    issuance::SdCwtIssuedTagged,
+    key_binding::KbtCwtTagged,
     reexports::{coset, coset::iana::EnumI64},
-    CustomClaims,
-    Select,
 };
 use std::borrow::Cow;
 
