@@ -3,6 +3,7 @@
 use ciborium::{Value, value::Integer};
 use cose_key_set::CoseKeySet;
 use esdicawt::{Holder, HolderParams, Issuer, IssuerParams, TimeArg, cwt_label};
+use esdicawt_spec::blinded_claims::Salted;
 use esdicawt_spec::{
     CwtAny, EsdicawtSpecError, NoClaims, SdHashAlg, Select,
     reexports::{coset, coset::iana::Algorithm},
@@ -35,7 +36,9 @@ pub enum CwtLabel {
     InspectorLicenseNumber = 501,
     InspectionDates = 502,
     InspectionLocation = 503,
+    NestedPayload = 504,
 }
+
 cwt_label!(CwtLabel);
 
 impl serde::Serialize for Payload {
@@ -83,10 +86,10 @@ impl Select for Payload {
     fn select(self) -> Result<Value, ciborium::value::Error> {
         let mut map = Vec::with_capacity(4);
 
-        map.push((Value::Integer(500.into()), Value::Bool(self.most_recent_inspection_passed)));
+        map.push((CwtLabel::MostRecentInspectionPassed.into(), Value::Bool(self.most_recent_inspection_passed)));
 
         if let Some(inspector_license_number) = self.inspector_license_number {
-            map.push((sd!(501), Value::Text(inspector_license_number)));
+            map.push((sd!(CwtLabel::InspectorLicenseNumber as i64), Value::Text(inspector_license_number)));
         }
 
         let inspection_dates = self
@@ -95,7 +98,7 @@ impl Select for Payload {
             .enumerate()
             .map(|(i, &d)| if i < 2 { sd!(d) } else { Value::Integer(d.into()) })
             .collect();
-        map.push((Value::Integer(502.into()), Value::Array(inspection_dates)));
+        map.push((CwtLabel::InspectionDates.into(), Value::Array(inspection_dates)));
 
         let mut inspection_location = Vec::with_capacity(3);
         if let Some(country) = self.inspection_location.country {
@@ -107,27 +110,134 @@ impl Select for Payload {
         if let Some(postal_code) = self.inspection_location.postal_code {
             inspection_location.push((sd!(CwtOidcAddressLabel::PostalCode), Value::Text(postal_code)));
         }
-        map.push((Value::Integer(503.into()), Value::Map(inspection_location)));
+        map.push((CwtLabel::InspectionLocation.into(), Value::Map(inspection_location)));
 
         Ok(Value::Map(map))
     }
 }
 
-#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
-pub struct NestedPayload(Payload);
+#[derive(Debug, Clone, PartialEq, derive_builder::Builder)]
+#[builder(pattern = "mutable")]
+pub struct NestedPayload {
+    pub nested: Vec<PayloadLog>,
+}
+
+impl serde::Serialize for NestedPayload {
+    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        let mut map = serializer.serialize_map(Some(1))?;
+        map.serialize_entry(&CwtLabel::NestedPayload, &self.nested)?;
+        map.end()
+    }
+}
+
+impl<'de> serde::Deserialize<'de> for NestedPayload {
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        use serde::de::Error as _;
+
+        // I'm lazy to go with a visitor
+        let value = <Value as serde::Deserialize>::deserialize(deserializer)?;
+        let values = value.into_map().map_err(|_| D::Error::custom("expected a map"))?;
+
+        let mut builder = NestedPayloadBuilder::create_empty();
+
+        for entry in values {
+            match entry {
+                (Value::Integer(i), Value::Array(values)) if i == CwtLabel::NestedPayload => {
+                    let values = values.into_iter().filter(|v| !matches!(v, Value::Tag(_, _))).collect::<Vec<_>>();
+                    builder.nested(Value::Array(values).deserialized().map_err(D::Error::custom)?)
+                }
+                _ => unreachable!("Unexpected claim"),
+            };
+        }
+
+        builder.build().map_err(D::Error::custom)
+    }
+}
 
 impl Select for NestedPayload {
     fn select(self) -> Result<Value, ciborium::value::Error> {
-        let mut map = self.0.select()?;
-        for (k, _) in map.as_map_mut().unwrap() {
-            match k {
-                Value::Integer(i) if i == &mut CwtLabel::InspectionDates => {
-                    *k = sd!(k.clone());
-                }
-                _ => {}
-            }
+        let mut map = Vec::with_capacity(1);
+
+        let nested = self.nested.into_iter().map(|n| sd!(n.select().unwrap())).collect::<Vec<_>>();
+
+        map.push((CwtLabel::NestedPayload.into(), Value::Array(nested)));
+        Ok(Value::Map(map))
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, derive_builder::Builder)]
+#[builder(pattern = "mutable")]
+pub struct PayloadLog {
+    pub most_recent_inspection_passed: bool,
+    #[builder(default, setter(into, strip_option))]
+    pub inspector_license_number: Option<String>,
+    pub inspection_date: u64,
+    pub inspection_location: OidcAddressClaim,
+}
+
+impl serde::Serialize for PayloadLog {
+    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        use serde::ser::Error as _;
+
+        let mut map = serializer.serialize_map(Some(4))?;
+        map.serialize_entry(&CwtLabel::MostRecentInspectionPassed, &self.most_recent_inspection_passed)?;
+        map.serialize_entry(&CwtLabel::InspectorLicenseNumber, &self.inspector_license_number)?;
+        map.serialize_entry(&CwtLabel::InspectionDates, &self.inspection_date)?;
+        let location = self.inspection_location.to_cbor_value().map_err(S::Error::custom)?;
+        map.serialize_entry(&CwtLabel::InspectionLocation, &location)?;
+        map.end()
+    }
+}
+
+impl<'de> serde::Deserialize<'de> for PayloadLog {
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        use serde::de::Error as _;
+
+        // I'm lazy to go with a visitor
+        let value = <Value as serde::Deserialize>::deserialize(deserializer)?;
+        let values = value.into_map().map_err(|_| D::Error::custom("expected a map"))?;
+
+        let mut builder = PayloadLogBuilder::create_empty();
+
+        for entry in values {
+            match entry {
+                (Value::Integer(i), Value::Bool(b)) if i == CwtLabel::MostRecentInspectionPassed => builder.most_recent_inspection_passed(b),
+                (Value::Integer(i), Value::Text(s)) if i == CwtLabel::InspectorLicenseNumber => builder.inspector_license_number(s),
+                (Value::Integer(i), Value::Integer(d)) if i == CwtLabel::InspectionDates => builder.inspection_date(d.try_into().map_err(D::Error::custom)?),
+                (Value::Integer(i), value) if i == CwtLabel::InspectionLocation => builder.inspection_location(value.deserialized().map_err(D::Error::custom)?),
+                _ => unreachable!("Unexpected claim"),
+            };
         }
-        Ok(map)
+
+        builder.build().map_err(D::Error::custom)
+    }
+}
+
+impl Select for PayloadLog {
+    fn select(self) -> Result<Value, ciborium::value::Error> {
+        let mut map = Vec::with_capacity(4);
+
+        map.push((CwtLabel::MostRecentInspectionPassed.into(), Value::Bool(self.most_recent_inspection_passed)));
+
+        if let Some(inspector_license_number) = self.inspector_license_number {
+            map.push((sd!(CwtLabel::InspectorLicenseNumber as i64), Value::Text(inspector_license_number)));
+        }
+
+        map.push((CwtLabel::InspectionDates.into(), Value::Integer(self.inspection_date.into())));
+
+        let mut inspection_location = Vec::with_capacity(3);
+        if let Some(country) = self.inspection_location.country {
+            inspection_location.push((CwtOidcAddressLabel::Country.into(), Value::Text(country)));
+        }
+        if let Some(region) = self.inspection_location.region {
+            inspection_location.push((sd!(CwtOidcAddressLabel::Region), Value::Text(region)));
+        }
+        if let Some(postal_code) = self.inspection_location.postal_code {
+            inspection_location.push((sd!(CwtOidcAddressLabel::PostalCode), Value::Text(postal_code)));
+        }
+        map.push((sd!(Value::Integer((CwtLabel::InspectionLocation as i64).into())), Value::Map(inspection_location)));
+
+        Ok(Value::Map(map))
     }
 }
 
@@ -230,10 +340,32 @@ fn normal_test_vectors() {
 
 #[test]
 fn nested_test_vectors() {
-    let payload = Payload {
+    let payload1 = PayloadLog {
+        most_recent_inspection_passed: true,
+        inspector_license_number: Some("DCBA-101777".into()),
+        inspection_date: 1549560720,
+        inspection_location: OidcAddressClaim {
+            country: Some("us".into()),
+            region: Some("co".into()),
+            postal_code: Some("80302".into()),
+            ..Default::default()
+        },
+    };
+    let payload2 = PayloadLog {
+        most_recent_inspection_passed: true,
+        inspector_license_number: Some("EFGH-789012".into()),
+        inspection_date: 1612560720,
+        inspection_location: OidcAddressClaim {
+            country: Some("us".into()),
+            region: Some("nv".into()),
+            postal_code: Some("89155".into()),
+            ..Default::default()
+        },
+    };
+    let payload3 = PayloadLog {
         most_recent_inspection_passed: true,
         inspector_license_number: Some("ABCD-123456".into()),
-        inspection_dates: vec![1549560720, 1612560720, 17183928],
+        inspection_date: 17183928,
         inspection_location: OidcAddressClaim {
             country: Some("us".into()),
             region: Some("ca".into()),
@@ -242,10 +374,17 @@ fn nested_test_vectors() {
         },
     };
 
-    let spec_sd_cwt_bytes = include_bytes!("../../draft-ietf-spice-sd-cwt/examples/nested_cwt.cbor");
+    let spec_sd_cwt_bytes = include_bytes!("../../draft-ietf-spice-sd-cwt/examples/issuer_nested_cwt.cbor");
     let spec_sd_kbt_bytes = include_bytes!("../../draft-ietf-spice-sd-cwt/examples/nested_kbt.cbor");
 
-    test_vectors::<NestedPayload>(NestedPayload(payload), spec_sd_cwt_bytes, spec_sd_kbt_bytes, true)
+    test_vectors::<NestedPayload>(
+        NestedPayload {
+            nested: vec![payload1, payload2, payload3],
+        },
+        spec_sd_cwt_bytes,
+        spec_sd_kbt_bytes,
+        true,
+    )
 }
 
 fn test_vectors<P: Select>(payload: P, spec_sd_cwt_bytes: &[u8], spec_sd_kbt_bytes: &[u8], nested: bool) {
@@ -305,6 +444,25 @@ fn test_vectors<P: Select>(payload: P, spec_sd_cwt_bytes: &[u8], spec_sd_kbt_byt
 
     assert!(spec_sd_claims.iter().all(|v| v.is_bytes()));
     assert!(esdicawt_sd_claims.iter().all(|v| v.is_bytes()));
+
+    println!(
+        "> {:?}",
+        spec_sd_claims
+            .iter()
+            .map(|d| d.as_bytes().unwrap())
+            .map(|d| Salted::<Value>::from_cbor_bytes(d).unwrap())
+            .collect::<Vec<_>>()
+    );
+    println!(
+        "> {:?}",
+        esdicawt_sd_claims
+            .iter()
+            .map(|d| d.as_bytes().unwrap())
+            .map(|d| Salted::<Value>::from_cbor_bytes(d).unwrap())
+            .collect::<Vec<_>>()
+    );
+    // println!("{:?}", esdicawt_sd_claims);
+
     assert_eq!(spec_sd_claims.len(), esdicawt_sd_claims.len());
 
     let claim = |map: &Vec<(Value, Value)>, i: i64| {

@@ -51,7 +51,7 @@ jobs:
       - uses: taiki-e/install-action@nextest
       - uses: Swatinem/rust-cache@v2
         # temporary pinning the draft because the test vectors fail
-      - run: git submodule init && git submodule update --recursive --remote && cd draft-ietf-spice-sd-cwt && git reset --hard 6b36a43
+      - run: git submodule init && git submodule update --recursive --remote && cd draft-ietf-spice-sd-cwt
       - run: cargo test --all-features
       - run: cargo test --doc
       - run: cargo test --benches
