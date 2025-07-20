@@ -63,5 +63,6 @@ pub fn get_raw(status_bits: StatusBits, status_list: &[u8], index: BitIndex) -> 
     let mask = status_bits.mask();
 
     // 'overflowing_shr' is safe since we '%8' at the end of bit_lower
-    Some(byte.overflowing_shr(bit_offset).0 & mask)
+    let status = byte.overflowing_shr(bit_offset).0 & mask;
+    Some(status)
 }
