@@ -18,11 +18,22 @@ pub type BitIndex = u32;
 #[derive(Debug, Clone, Eq, PartialEq, Hash)]
 pub struct StatusList {
     /// The number of bits used per Referenced Token
-    pub bits: StatusBits,
+    bits: StatusBits,
     /// Byte string (Major Type 2) that contains the status values for all the Referenced Tokens it conveys statuses for. The value MUST be the compressed byte array.
-    pub lst: Lst,
+    lst: Lst,
     /// Text string (Major Type 3) that contains a URI to retrieve the Status List Aggregation for this type of Referenced Token
-    pub aggregation_uri: Option<url::Url>,
+    aggregation_uri: Option<url::Url>,
+}
+
+impl StatusList {
+    /// Builds a new StatusList from an existing immutable list
+    pub fn new(lst: Lst, aggregation_uri: Option<url::Url>) -> Self {
+        Self {
+            bits: lst.status_bits(),
+            lst,
+            aggregation_uri,
+        }
+    }
 }
 
 impl serde::Serialize for StatusList {
