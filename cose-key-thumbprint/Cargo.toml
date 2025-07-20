@@ -18,7 +18,6 @@ p256 = { workspace = true, optional = true }
 p384 = { workspace = true, optional = true }
 subtle.workspace = true
 serde_bytes.workspace = true
-getrandom = { workspace = true, features = ["js"] }
 
 [dev-dependencies]
 ciborium.workspace = true
