@@ -11,6 +11,8 @@ pub use holder::{
     params::{CborPath, HolderParams, Presentation},
     validation::{HolderValidationParams, SdCwtHolderValidationError},
 };
+#[cfg(feature = "status")]
+pub use issuer::params::RevocationParams;
 pub use issuer::{
     Issuer,
     error::{SdCwtIssuerError, SdCwtIssuerResult},
@@ -116,5 +118,6 @@ pub enum CwtStdLabel {
     Cnonce = coset::iana::CwtClaimName::CNonce as i64,
     Cti = coset::iana::CwtClaimName::Cti as i64,
     KeyConfirmation = coset::iana::CwtClaimName::Cnf as i64,
+    Status = coset::iana::CwtClaimName::Status as i64,
 }
 cwt_label!(CwtStdLabel);

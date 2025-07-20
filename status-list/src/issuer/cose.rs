@@ -17,10 +17,10 @@ pub trait StatusListIssuer {
     type Hasher: digest::Digest + Clone;
     type Signature: SignatureEncoding;
 
-    #[cfg(not(any(feature = "pem", feature = "der")))]
+    #[cfg(not(feature = "pem"))]
     type Signer: Signer<Self::Signature> + Keypair;
 
-    #[cfg(any(feature = "pem", feature = "der"))]
+    #[cfg(feature = "pem")]
     type Signer: Signer<Self::Signature> + Keypair + pkcs8::DecodePrivateKey;
 
     fn new(signing_key: Self::Signer) -> Self
@@ -38,7 +38,7 @@ pub trait StatusListIssuer {
         Ok(Self::new(signer))
     }
 
-    #[cfg(feature = "der")]
+    #[cfg(feature = "pem")]
     fn try_from_der(der: &[u8]) -> Result<Self, Self::Error>
     where
         Self: Sized,
@@ -94,14 +94,17 @@ pub trait StatusListIssuer {
 }
 
 #[cfg(test)]
-mod tests {
+pub mod tests {
     use super::*;
     use crate::{Lst, RawStatus, issuer::params::TimeArg};
     use core::time::Duration;
     use coset::AsCborValue;
     use p256::elliptic_curve::JwkEcKey;
 
+    wasm_bindgen_test::wasm_bindgen_test_configure!(run_in_browser);
+
     #[test]
+    #[wasm_bindgen_test::wasm_bindgen_test]
     fn should_pass_rfc_example() {
         let expected = "d2845820a2012610781a6170706c69636174696f6e2f7374617475736c6973742b637774a1044231325850a502782168747470733a2f2f6578616d706c652e636f6d2f7374617475736c697374732f31061a648c5bea041a8898dfea19fffe19a8c019fffda2646269747301636c73744a78dadbb918000217015d584030e39052d23cc3cdeca77c915d5e8763353565fa772c47f5176f77b5e406b11430b3dce2ae21c07f4491fc12acdd7ec82875099d28f035d9b1893e2825e63488";
         let signer = rfc_signer();
@@ -135,17 +138,7 @@ mod tests {
         // assert_eq!(&status_list_token_cbor, expected);
     }
 
-    #[test]
-    fn toto() {
-        let expected = "d2845820a2012610781a6170706c69636174696f6e2f7374617475736c6973742b637774a1044231325850a502782168747470733a2f2f6578616d706c652e636f6d2f7374617475736c697374732f31061a648c5bea041a8898dfea19fffe19a8c019fffda2646269747301636c73744a78dadbb918000217015d584030e39052d23cc3cdeca77c915d5e8763353565fa772c47f5176f77b5e406b11430b3dce2ae21c07f4491fc12acdd7ec82875099d28f035d9b1893e2825e63488";
-        let expected = hex::decode(expected.as_bytes()).unwrap();
-        let value = coset::CoseSign1::from_tagged_slice(&expected).unwrap();
-        // let value = Value::from_cbor_bytes(&expected).unwrap();
-        // println!("{:?}", value);
-        println!("{:?}", value.protected);
-    }
-
-    fn rfc_signer() -> p256::ecdsa::SigningKey {
+    pub fn rfc_signer() -> p256::ecdsa::SigningKey {
         let jwk = serde_json::json!({
             "kty": "EC",
             "d": "xzUEdsyLosZF0acZGRAjTKImb0lQvAvssDK5XIZELd0",

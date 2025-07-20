@@ -17,7 +17,7 @@ digest.workspace = true
 ciborium.workspace = true
 
 [dev-dependencies]
-esdicawt = { workspace = true, features = ["test-utils", "test-vectors", "ed25519", "p256", "p384"] }
+esdicawt = { workspace = true, features = ["test-utils", "test-vectors", "ed25519", "p256", "p384", "status"] }
 rand.workspace = true
 ed25519-dalek = { workspace = true, features = ["rand_core"] }
 sha2.workspace = true

@@ -35,6 +35,7 @@ pub const CWT_CLAIM_EXPIRES_AT: i64 = coset::iana::CwtClaimName::Exp as i64;
 pub const CWT_CLAIM_NOT_BEFORE: i64 = coset::iana::CwtClaimName::Nbf as i64;
 pub const CWT_CLAIM_ISSUED_AT: i64 = coset::iana::CwtClaimName::Iat as i64;
 pub const CWT_CLAIM_KEY_CONFIRMATION: i64 = coset::iana::CwtClaimName::Cnf as i64;
+pub const CWT_CLAIM_STATUS: i64 = coset::iana::CwtClaimName::Status as i64;
 pub const CWT_CLAIM_CNONCE: i64 = coset::iana::CwtClaimName::CNonce as i64;
 pub const CWT_CLAIM_CTI: i64 = coset::iana::CwtClaimName::Cti as i64;
 
@@ -107,6 +108,7 @@ pub enum SdHashAlg {
 #[derive(Debug, Clone, Copy, serde_repr::Serialize_repr, serde_repr::Deserialize_repr)]
 #[repr(i64)]
 #[non_exhaustive]
+// TODO: remove and replace by 'CwtStdLabel'
 pub enum SdCwtStandardClaim {
     Issuer = CWT_CLAIM_ISSUER,
     Subject = CWT_CLAIM_SUBJECT,
@@ -117,6 +119,7 @@ pub enum SdCwtStandardClaim {
     Cnonce = CWT_CLAIM_CNONCE,
     Cti = CWT_CLAIM_CTI,
     KeyConfirmation = CWT_CLAIM_KEY_CONFIRMATION,
+    Status = CWT_CLAIM_STATUS,
 }
 
 impl TryFrom<i64> for SdCwtStandardClaim {
@@ -132,6 +135,7 @@ impl TryFrom<i64> for SdCwtStandardClaim {
             CWT_CLAIM_CNONCE => Self::Cnonce,
             CWT_CLAIM_CTI => Self::Cti,
             CWT_CLAIM_KEY_CONFIRMATION => Self::KeyConfirmation,
+            CWT_CLAIM_STATUS => Self::Status,
             value => return Err(EsdicawtSpecError::UnknownStandardClaim(value)),
         })
     }
@@ -150,6 +154,7 @@ impl TryFrom<&Value> for SdCwtStandardClaim {
             Value::Integer(i) if i == &CWT_CLAIM_CNONCE.into() => Self::Cnonce,
             Value::Integer(i) if i == &CWT_CLAIM_CTI.into() => Self::Cti,
             Value::Integer(i) if i == &CWT_CLAIM_KEY_CONFIRMATION.into() => Self::KeyConfirmation,
+            Value::Integer(i) if i == &CWT_CLAIM_STATUS.into() => Self::Status,
             Value::Integer(i) => return Err(EsdicawtSpecError::UnknownStandardClaim(i64::try_from(*i)?)),
             _ => return Err(EsdicawtSpecError::InputError),
         })

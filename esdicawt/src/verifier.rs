@@ -245,7 +245,7 @@ pub trait Verifier {
             map.retain(|(k, _)| !matches!(k, Value::Integer(i) if *i == Integer::from(CWT_CLAIM_KEY_CONFIRMATION)));
         }
 
-        // TODO: this might fail if `Self::DisclosedClaims` does not support unknown claims (serde flatten etc..)
+        // TODO: this might fail if `Self::IssuerPayloadClaims` does not support unknown claims (serde flatten etc..)
         let sd_cwt_payload = payload.deserialized::<SdInnerPayload<Self::IssuerPayloadClaims>>()?;
         let claimset = sd_cwt_payload.extra;
 
@@ -265,7 +265,7 @@ pub trait Verifier {
 mod tests {
     use super::claims::CustomTokenClaims;
     use crate::{
-        HolderParams, Issuer, IssuerParams, Presentation, SdCwtVerifierError, TimeArg, Verifier, VerifierParams,
+        HolderParams, Issuer, IssuerParams, Presentation, RevocationParams, SdCwtVerifierError, TimeArg, Verifier, VerifierParams,
         holder::Holder,
         signature_verifier::SignatureVerifierError,
         test_utils::{Ed25519Holder, Ed25519Issuer},
@@ -547,6 +547,10 @@ mod tests {
             key_location: "https://auth.acme.io/issuer.cwk",
             holder_confirmation_key: (&holder_signing_key.verifying_key()).try_into().unwrap(),
             artificial_time: None,
+            revocation: RevocationParams {
+                status_list_bit_index: 0,
+                uri: "https://example.com/statuslists/1".parse().unwrap(),
+            },
         }
     }
 

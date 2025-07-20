@@ -5,7 +5,6 @@ use crate::{
     redacted_claims::RedactedClaimKeys,
 };
 use ciborium::Value;
-
 use cose_key_confirmation::KeyConfirmation;
 use serde::ser::SerializeMap;
 
@@ -16,6 +15,11 @@ impl<Extra: CustomClaims> serde::Serialize for SdPayload<Extra> {
         serialize_sd_cwt_payload::<Extra, S>(&self.inner, &mut map)?;
 
         map.serialize_entry(&CWT_CLAIM_KEY_CONFIRMATION, &self.cnf)?;
+        #[cfg(feature = "status")]
+        {
+            use coset::iana::EnumI64 as _;
+            map.serialize_entry(&coset::iana::CwtClaimName::Status.to_i64(), &self.inner.status)?;
+        }
 
         if let Some(redacted_claim_keys) = &self.redacted_claim_keys {
             let label = Value::Simple(RedactedClaimKeys::CWT_LABEL);
@@ -177,11 +181,16 @@ impl<'de, Extra: CustomClaims> serde::Deserialize<'de> for SdInnerPayload<Extra>
                             }
                             Ok(SdCwtStandardClaim::Cnonce) => {
                                 let cnonce = v.into_bytes().map_err(|value| A::Error::custom(format!("cnonce is not a bstr: {value:?}")))?;
-                                builder.cnonce(cnonce);
+                                builder.cnonce(cnonce.into());
                             }
                             Ok(SdCwtStandardClaim::Cti) => {
                                 let cti = v.into_bytes().map_err(|value| A::Error::custom(format!("cti is not a bstr: {value:?}")))?;
-                                builder.cti(cti);
+                                builder.cti(cti.into());
+                            }
+                            #[cfg(feature = "status")]
+                            Ok(SdCwtStandardClaim::Status) => {
+                                let status = v.deserialized().map_err(A::Error::custom)?;
+                                builder.status(status);
                             }
                             _ => {
                                 extra.push((k, v));

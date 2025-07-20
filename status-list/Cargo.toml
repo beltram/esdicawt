@@ -9,7 +9,7 @@ authors.workspace = true
 default = ["issuer"] # for convenience
 issuer = []
 pem = ["dep:pkcs8", "pkcs8?/pem"]
-der = ["dep:pkcs8"]
+rand = ["dep:rand_core", "dep:rand"]
 
 [dependencies]
 serde.workspace = true
@@ -29,10 +29,17 @@ serde_bytes.workspace = true
 coset.workspace = true
 ciborium.workspace = true
 pkcs8 = { workspace = true, optional = true }
+rand_core = { workspace = true, optional = true }
+rand = { workspace = true, optional = true }
+
+[target.'cfg(all(target_arch = "wasm32", target_os = "unknown"))'.dependencies]
+js-sys = "0.3"
+getrandom = { workspace = true, features = ["js"] }
+time = { workspace = true, default-features = false, features = ["wasm-bindgen"] }
 
 [dev-dependencies]
-status-list = { path = "./" }
-ed25519-dalek.workspace = true
+wasm-bindgen-test.workspace = true
+status-list = { path = "./", features = ["rand", "issuer"] }
 p256 = { workspace = true, features = ["jwk"] }
 sha2.workspace = true
 rand.workspace = true

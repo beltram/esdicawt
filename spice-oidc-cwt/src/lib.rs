@@ -805,7 +805,7 @@ mod tests {
 
     use super::{ed25519::*, *};
     use esdicawt::{
-        CborPath, Holder, Issuer, Presentation, TimeArg,
+        CborPath, Holder, Issuer, Presentation, RevocationParams, TimeArg,
         cose_key_set::CoseKeySet,
         spec::{CwtAny, issuance::SdCwtIssuedTagged},
     };
@@ -906,6 +906,10 @@ mod tests {
                     holder_confirmation_key: holder_pk.try_into().unwrap(),
                     artificial_time: None,
                     with_issued_at: false,
+                    revocation: RevocationParams {
+                        status_list_bit_index: 0,
+                        uri: "https://example.com/statuslists/1".parse().unwrap(),
+                    },
                 },
             )
             .unwrap()

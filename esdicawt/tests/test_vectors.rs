@@ -2,7 +2,7 @@
 
 use ciborium::{Value, value::Integer};
 use cose_key_set::CoseKeySet;
-use esdicawt::{Holder, HolderParams, Issuer, IssuerParams, TimeArg, cwt_label};
+use esdicawt::{Holder, HolderParams, Issuer, IssuerParams, RevocationParams, TimeArg, cwt_label};
 use esdicawt_spec::{
     CwtAny, EsdicawtSpecError, NoClaims, SdHashAlg, Select,
     reexports::{coset, coset::iana::Algorithm},
@@ -409,6 +409,10 @@ fn test_vectors<P: Select>(payload: P, spec_sd_cwt_bytes: &[u8], spec_sd_kbt_byt
         artificial_time: Some(core::time::Duration::from_secs(NOW)),
         key_location: "https://issuer.example/cose-key3",
         holder_confirmation_key: holder_signing_key().verifying_key().try_into().unwrap(),
+        revocation: RevocationParams {
+            status_list_bit_index: 0,
+            uri: "https://example.com/statuslists/1".parse().unwrap(),
+        },
     };
 
     let spec_sd_cwt = Value::from_cbor_bytes(spec_sd_cwt_bytes).unwrap();
