@@ -24,7 +24,7 @@ status-list = { path = "status-list" }
 # CBOR
 coset = "0.3"
 ciborium = "0.2"
-dcbor = "0.16"
+dcbor = "0.22"
 
 # crypto
 signature = "2.2"
