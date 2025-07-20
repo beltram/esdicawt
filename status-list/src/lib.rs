@@ -8,39 +8,56 @@ pub mod issuer;
 
 use ciborium::Value;
 use serde::ser::SerializeMap;
+use std::hash::Hash;
 
 pub use error::{StatusListError, StatusListResult};
 pub use lst::Lst;
 
 pub type BitIndex = u32;
 
+pub trait Status: From<u8> + Into<u8> + Clone + Eq + PartialEq + Hash {
+    const BITS: StatusBits;
+}
+
+/// Just a u8 with the right bounds for representing a Status
+#[derive(Debug, Copy, Clone, Eq, PartialEq, Hash)]
+pub struct RawStatus<const B: usize>(pub u8);
+
+impl<const B: usize> Status for RawStatus<B> {
+    const BITS: StatusBits = StatusBits::from_raw(B);
+}
+impl<const B: usize> From<RawStatus<B>> for u8 {
+    fn from(s: RawStatus<B>) -> Self {
+        s.0
+    }
+}
+impl<const B: usize> From<u8> for RawStatus<B> {
+    fn from(s: u8) -> Self {
+        Self(s)
+    }
+}
+
 /// see https://datatracker.ietf.org/doc/html/draft-ietf-oauth-status-list-11#section-4.3
 #[derive(Debug, Clone, Eq, PartialEq, Hash)]
-pub struct StatusList {
-    /// The number of bits used per Referenced Token
-    bits: StatusBits,
+pub struct StatusList<S: Status> {
     /// Byte string (Major Type 2) that contains the status values for all the Referenced Tokens it conveys statuses for. The value MUST be the compressed byte array.
-    lst: Lst,
+    lst: Lst<S>,
     /// Text string (Major Type 3) that contains a URI to retrieve the Status List Aggregation for this type of Referenced Token
     aggregation_uri: Option<url::Url>,
 }
 
-impl StatusList {
+impl<S: Status> StatusList<S> {
     /// Builds a new StatusList from an existing immutable list
-    pub fn new(lst: Lst, aggregation_uri: Option<url::Url>) -> Self {
-        Self {
-            bits: lst.status_bits(),
-            lst,
-            aggregation_uri,
-        }
+    pub fn new(lst: Lst<S>, aggregation_uri: Option<url::Url>) -> Self {
+        Self { lst, aggregation_uri }
     }
 }
 
-impl serde::Serialize for StatusList {
+impl<St: Status> serde::Serialize for StatusList<St> {
     fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
         let size = 2 + self.aggregation_uri.as_ref().map(|_| 1).unwrap_or_default();
         let mut map = serializer.serialize_map(Some(size))?;
-        map.serialize_entry("bits", &self.bits)?;
+        map.serialize_entry("bits", &St::BITS)?;
         let lst = self.lst.status_list_compressed().map_err(serde::ser::Error::custom)?;
         let lst = serde_bytes::ByteBuf::from(lst);
         map.serialize_entry("lst", &lst)?;
@@ -51,12 +68,12 @@ impl serde::Serialize for StatusList {
     }
 }
 
-impl<'de> serde::Deserialize<'de> for StatusList {
+impl<'de, S: Status> serde::Deserialize<'de> for StatusList<S> {
     fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-        struct StatusListVisitor;
+        struct StatusListVisitor<St: Status>(core::marker::PhantomData<St>);
 
-        impl<'de> serde::de::Visitor<'de> for StatusListVisitor {
-            type Value = StatusList;
+        impl<'de, S: Status> serde::de::Visitor<'de> for StatusListVisitor<S> {
+            type Value = StatusList<S>;
 
             fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
                 write!(formatter, "a StatusList")
@@ -73,7 +90,7 @@ impl<'de> serde::Deserialize<'de> for StatusList {
                         }
                         "lst" => {
                             let lst_bytes = map.next_value::<bytes::Bytes>()?;
-                            let lst_bytes = Lst::from_compressed(lst_bytes.as_ref()).map_err(A::Error::custom)?;
+                            let lst_bytes = Lst::<S>::from_compressed(lst_bytes.as_ref()).map_err(A::Error::custom)?;
                             lst.replace(bytes::Bytes::from(lst_bytes));
                         }
                         "aggregation_uri" => {
@@ -84,13 +101,19 @@ impl<'de> serde::Deserialize<'de> for StatusList {
                 }
 
                 let bits = bits.ok_or_else(|| serde::de::Error::custom("bits required in a StatusList"))?;
-                let lst = lst.map(|lst| Lst(lst, bits)).ok_or_else(|| serde::de::Error::custom("lst required in a StatusList"))?;
+                if bits != S::BITS {
+                    return Err(A::Error::custom("Advertised StatusBits do not match the expected ones"));
+                }
 
-                Ok(Self::Value { bits, lst, aggregation_uri })
+                let lst = lst
+                    .map(|lst| Lst::<S>(lst, Default::default()))
+                    .ok_or_else(|| serde::de::Error::custom("lst required in a StatusList"))?;
+
+                Ok(Self::Value::new(lst, aggregation_uri))
             }
         }
 
-        deserializer.deserialize_map(StatusListVisitor)
+        deserializer.deserialize_map(StatusListVisitor::<S>(Default::default()))
     }
 }
 
@@ -104,6 +127,16 @@ pub enum StatusBits {
 }
 
 impl StatusBits {
+    pub const fn from_raw(b: usize) -> Self {
+        match b {
+            1 => Self::One,
+            2 => Self::Two,
+            4 => Self::Four,
+            8 => Self::Eight,
+            _ => unreachable!(),
+        }
+    }
+
     #[inline(always)]
     pub const fn size(&self) -> u8 {
         *self as u8
@@ -164,11 +197,7 @@ mod tests {
 
     #[test]
     fn cbor_example() {
-        let status_list = StatusList {
-            bits: StatusBits::One,
-            lst: Lst::new(vec![0xB9, 0xA3], StatusBits::One),
-            aggregation_uri: None,
-        };
+        let status_list = StatusList::<RawStatus<1>>::new(Lst::from_slice(&[0xB9, 0xA3]), None);
         let expected = "a2646269747301636c73744a78dadbb918000217015d";
         let actual = status_list.to_cbor_bytes().unwrap().encode_hex::<String>();
 
@@ -177,11 +206,7 @@ mod tests {
 
     #[test]
     fn ser_de() {
-        let input = StatusList {
-            bits: StatusBits::One,
-            lst: Lst::new(vec![0xB9, 0xA3], StatusBits::One),
-            aggregation_uri: Some("https://agg.com".parse().unwrap()),
-        };
+        let input = StatusList::<RawStatus<1>>::new(Lst::from_slice(&[0xB9, 0xA3]), Some("https://agg.com".parse().unwrap()));
         let ser = input.to_cbor_bytes().unwrap();
         let output = StatusList::from_cbor_bytes(&ser).unwrap();
         assert_eq!(input, output);

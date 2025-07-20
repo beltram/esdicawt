@@ -1,5 +1,5 @@
 use crate::{
-    CborAny, StatusList, StatusListResult,
+    CborAny, Status, StatusList, StatusListResult,
     issuer::{StatusListIssuerParams, cose::model::StatusListTokenTagged, elapsed_since_epoch},
 };
 use ciborium::Value;
@@ -53,7 +53,7 @@ pub trait StatusListIssuer {
 
     fn cwt_algorithm(&self) -> coset::iana::Algorithm;
 
-    fn issue_raw_status_list_token(&self, status_list: StatusList, params: StatusListIssuerParams) -> StatusListResult<Vec<u8>> {
+    fn issue_raw_status_list_token<S: Status>(&self, status_list: StatusList<S>, params: StatusListIssuerParams) -> StatusListResult<Vec<u8>> {
         let protected = coset::HeaderBuilder::new()
             .algorithm(self.cwt_algorithm())
             .value(LABEL_TYPE, Value::Text(MEDIATYPE_STATUS_LIST_CWT.to_string()))
@@ -88,7 +88,7 @@ pub trait StatusListIssuer {
         Ok(sign1)
     }
 
-    fn issue_status_list_token(&self, status_list: StatusList, params: StatusListIssuerParams) -> StatusListResult<StatusListTokenTagged> {
+    fn issue_status_list_token<S: Status>(&self, status_list: StatusList<S>, params: StatusListIssuerParams) -> StatusListResult<StatusListTokenTagged> {
         StatusListTokenTagged::from_cbor_bytes(&self.issue_raw_status_list_token(status_list, params)?)
     }
 }
@@ -96,7 +96,7 @@ pub trait StatusListIssuer {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{Lst, StatusBits, issuer::params::TimeArg};
+    use crate::{Lst, RawStatus, issuer::params::TimeArg};
     use core::time::Duration;
     use coset::AsCborValue;
     use p256::elliptic_curve::JwkEcKey;
@@ -113,9 +113,8 @@ mod tests {
             expiry: Some(TimeArg::Absolute(Duration::from_secs(2291720170))),
             ttl: Some(Duration::from_secs(43200)),
         };
-        let status_list = StatusList {
-            bits: StatusBits::One,
-            lst: Lst::from_slice(b"abcd", StatusBits::One),
+        let status_list = StatusList::<RawStatus<1>> {
+            lst: Lst::from_slice(b"abcd"),
             aggregation_uri: None,
         };
 
