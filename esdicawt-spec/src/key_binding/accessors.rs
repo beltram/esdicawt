@@ -39,4 +39,12 @@ impl<
     pub fn client_nonce(&mut self) -> EsdicawtSpecResult<Option<&[u8]>> {
         Ok(self.payload.to_value()?.cnonce.as_deref().map(|b| &b[..]))
     }
+
+    /// Signature algorithm of the SD-KBT, not the SD-CWT one !!!
+    pub fn alg(&mut self) -> Option<coset::iana::Algorithm> {
+        match *self.protected.to_value().ok()?.alg {
+            coset::Algorithm::Assigned(alg) => Some(alg),
+            _ => None,
+        }
+    }
 }

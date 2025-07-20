@@ -11,4 +11,12 @@ impl<PayloadClaims: Select, Hasher: digest::Digest + Clone, ProtectedClaims: Cus
     {
         (&self.payload.to_value()?.cnf).try_into().map_err(Into::into)
     }
+
+    /// Signature algorithm of the SD-CWT
+    pub fn alg(&mut self) -> Option<coset::iana::Algorithm> {
+        match *self.protected.to_value().ok()?.alg {
+            coset::Algorithm::Assigned(alg) => Some(alg),
+            _ => None,
+        }
+    }
 }
