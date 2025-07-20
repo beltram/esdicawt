@@ -1,6 +1,7 @@
 #![allow(dead_code)]
 
 use crate::{
+    SdCwtVerified,
     any_digest::AnyDigest,
     spec::{
         ClaimName, CustomClaims, CwtAny, EsdicawtSpecResult, REDACTED_CLAIM_ELEMENT_TAG, Select,
@@ -160,6 +161,19 @@ impl<PayloadClaims: Select, Hasher: digest::Digest + Clone, ProtectedClaims: Cus
     fn query(&mut self, token_query: Query) -> EsdicawtSpecResult<Option<Value>> {
         let payload = Value::from_cbor_bytes(self.payload.to_bytes()?)?;
         self.disclosures_mut()
+            .map(|d| query_inner::<Hasher>(d, &payload, &token_query.elements))
+            .unwrap_or(Ok(None))
+    }
+}
+
+impl<PayloadClaims: Select, Hasher: digest::Digest + Clone, ProtectedClaims: CustomClaims, UnprotectedClaims: CustomClaims> TokenQuery
+    for SdCwtVerified<PayloadClaims, Hasher, ProtectedClaims, UnprotectedClaims>
+{
+    fn query(&mut self, token_query: Query) -> EsdicawtSpecResult<Option<Value>> {
+        let payload = Value::from_cbor_bytes(self.0.0.payload.to_bytes()?)?;
+        self.0
+            .0
+            .disclosures_mut()
             .map(|d| query_inner::<Hasher>(d, &payload, &token_query.elements))
             .unwrap_or(Ok(None))
     }

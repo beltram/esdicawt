@@ -1,11 +1,11 @@
 use enum_variants_strings::EnumVariantsStrings;
 use esdicawt::{
-    EsdicawtReadResult, TokenQuery, cwt_label,
-    spec::{
-        ClaimName, CustomClaims, Select, Value,
-        issuance::{SdCwtIssued, SdCwtIssuedTagged},
-        key_binding::{KbtCwt, KbtCwtTagged},
-    },
+    cwt_label, spec::{
+        issuance::{SdCwtIssued, SdCwtIssuedTagged}, key_binding::{KbtCwt, KbtCwtTagged}, ClaimName, CustomClaims,
+        Select,
+        Value,
+    }, EsdicawtReadResult, SdCwtVerified,
+    TokenQuery,
 };
 use serde::ser::SerializeMap;
 use std::{borrow::Cow, collections::HashMap, sync::LazyLock};
@@ -531,6 +531,88 @@ where
     }
 }
 
+impl<PayloadClaims: Select, Hasher: digest::Digest + Clone, IssuerProtectedClaims: CustomClaims, IssuerUnprotectedClaims: CustomClaims> SpiceOidcSdCwtRead
+    for SdCwtVerified<PayloadClaims, Hasher, IssuerProtectedClaims, IssuerUnprotectedClaims>
+where
+    for<'a> &'a PayloadClaims: Into<&'a SpiceOidcClaims>,
+{
+    fn name(&mut self) -> EsdicawtReadResult<Option<Cow<str>>> {
+        self.0.0.name()
+    }
+
+    fn given_name(&mut self) -> EsdicawtReadResult<Option<Cow<str>>> {
+        self.0.0.given_name()
+    }
+
+    fn family_name(&mut self) -> EsdicawtReadResult<Option<Cow<str>>> {
+        self.0.0.family_name()
+    }
+
+    fn middle_name(&mut self) -> EsdicawtReadResult<Option<Cow<str>>> {
+        self.0.0.middle_name()
+    }
+
+    fn nickname(&mut self) -> EsdicawtReadResult<Option<Cow<str>>> {
+        self.0.0.nickname()
+    }
+
+    fn preferred_username(&mut self) -> EsdicawtReadResult<Option<Cow<str>>> {
+        self.0.0.preferred_username()
+    }
+
+    fn profile(&mut self) -> EsdicawtReadResult<Option<Url>> {
+        self.0.0.profile()
+    }
+
+    fn picture(&mut self) -> EsdicawtReadResult<Option<Url>> {
+        self.0.0.picture()
+    }
+
+    fn website(&mut self) -> EsdicawtReadResult<Option<Url>> {
+        self.0.0.website()
+    }
+
+    fn email(&mut self) -> EsdicawtReadResult<Option<Cow<str>>> {
+        self.0.0.email()
+    }
+
+    fn email_verified(&mut self) -> EsdicawtReadResult<Option<bool>> {
+        self.0.0.email_verified()
+    }
+
+    fn gender(&mut self) -> EsdicawtReadResult<Option<Cow<str>>> {
+        self.0.0.gender()
+    }
+
+    fn birthdate(&mut self) -> EsdicawtReadResult<Option<Cow<str>>> {
+        self.0.0.birthdate()
+    }
+
+    fn zoneinfo(&mut self) -> EsdicawtReadResult<Option<Cow<str>>> {
+        self.0.0.zoneinfo()
+    }
+
+    fn locale(&mut self) -> EsdicawtReadResult<Option<Cow<str>>> {
+        self.0.0.locale()
+    }
+
+    fn phone_number(&mut self) -> EsdicawtReadResult<Option<Cow<str>>> {
+        self.0.0.phone_number()
+    }
+
+    fn phone_number_verified(&mut self) -> EsdicawtReadResult<Option<bool>> {
+        self.0.0.phone_number_verified()
+    }
+
+    fn address(&mut self) -> EsdicawtReadResult<Option<OidcAddressClaim>> {
+        self.0.0.address()
+    }
+
+    fn updated_at(&mut self) -> EsdicawtReadResult<Option<i64>> {
+        self.0.0.updated_at()
+    }
+}
+
 impl<
     IssuerPayloadClaims: Select,
     Hasher: digest::Digest + Clone,
@@ -723,9 +805,9 @@ mod tests {
 
     use super::{ed25519::*, *};
     use esdicawt::{
-        CborPath, Holder, Issuer, Presentation, TimeArg,
-        cose_key_set::CoseKeySet,
-        spec::{CwtAny, issuance::SdCwtIssuedTagged},
+        cose_key_set::CoseKeySet, spec::{issuance::SdCwtIssuedTagged, CwtAny}, CborPath, Holder, Issuer,
+        Presentation,
+        TimeArg,
     };
 
     wasm_bindgen_test::wasm_bindgen_test_configure!(run_in_browser);
@@ -858,8 +940,8 @@ mod tests {
 mod ed25519 {
     use crate::SpiceOidcClaims;
     use esdicawt::{
-        Holder, Issuer,
-        spec::{NoClaims, SdHashAlg, reexports::coset},
+        spec::{reexports::coset, NoClaims, SdHashAlg}, Holder,
+        Issuer,
     };
     use esdicawt_spec::EsdicawtSpecError;
 
