@@ -25,7 +25,10 @@ fn set_bit(word: &mut u8, index: u8, flag: bool) {
 mod tests {
     use super::*;
 
+    wasm_bindgen_test::wasm_bindgen_test_configure!(run_in_browser);
+
     #[test]
+    #[wasm_bindgen_test::wasm_bindgen_test]
     #[allow(clippy::cognitive_complexity)]
     fn write_bit_should_work() {
         // lower bits
@@ -68,6 +71,7 @@ mod tests {
     }
 
     #[test]
+    #[wasm_bindgen_test::wasm_bindgen_test]
     fn should_be_idempotent() {
         assert_eq!(wr_bit(0b01000100, 6, 1, StatusBits::Two), 0b01000100);
     }

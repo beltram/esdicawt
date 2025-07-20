@@ -96,7 +96,10 @@ mod tests {
     use super::*;
     use crate::{Lst, RawStatus, StatusList};
 
+    wasm_bindgen_test::wasm_bindgen_test_configure!(run_in_browser);
+
     #[test]
+    #[wasm_bindgen_test::wasm_bindgen_test]
     fn should_roundtrip() {
         let input = StatusListToken {
             sub: "https://sub.com".parse().unwrap(),

@@ -1,4 +1,4 @@
-mod cose;
+pub(crate) mod cose;
 mod lst_mut;
 mod params;
 

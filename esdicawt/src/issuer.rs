@@ -24,10 +24,10 @@ pub trait Issuer {
     type UnprotectedClaims: CustomClaims;
     type PayloadClaims: Select;
 
-    #[cfg(not(any(feature = "pem", feature = "der")))]
+    #[cfg(not(feature = "pem"))]
     type Signer: Signer<Self::Signature> + Keypair;
 
-    #[cfg(any(feature = "pem", feature = "der"))]
+    #[cfg(feature = "pem")]
     type Signer: Signer<Self::Signature> + Keypair + pkcs8::DecodePrivateKey;
 
     fn new(signing_key: Self::Signer) -> Self
@@ -45,7 +45,7 @@ pub trait Issuer {
         Ok(Self::new(signer))
     }
 
-    #[cfg(feature = "der")]
+    #[cfg(feature = "pem")]
     fn try_from_der(der: &[u8]) -> Result<Self, Self::Error>
     where
         Self: Sized,
@@ -124,6 +124,13 @@ pub trait Issuer {
             payload.push((Value::Integer(CWT_CLAIM_CNONCE.into()), cnonce.into()));
         }
 
+        #[cfg(feature = "status")]
+        {
+            use crate::coset::iana::EnumI64 as _;
+            let status = status_list::referenced::StatusClaim::new(params.revocation.status_list_bit_index, params.revocation.uri);
+            payload.push((Value::Integer(crate::coset::iana::CwtClaimName::Status.to_i64().into()), status.to_cbor_value()?));
+        }
+
         if params.expiry.is_some() || params.with_issued_at || params.with_not_before {
             #[cfg(feature = "test-vectors")]
             let now = params.artificial_time.unwrap_or_else(crate::elapsed_since_epoch);
@@ -175,7 +182,7 @@ pub trait Issuer {
 mod tests {
     use super::{claims::CustomTokenClaims, test_utils::Ed25519Issuer};
     use crate::{
-        CwtStdLabel, Issuer, IssuerParams, TimeArg, elapsed_since_epoch,
+        CwtStdLabel, Issuer, IssuerParams, RevocationParams, TimeArg, elapsed_since_epoch,
         spec::{
             ClaimName, CwtAny, NoClaims, Select, SelectExt,
             blinded_claims::{Salted, SaltedClaim, SaltedElement},
@@ -249,6 +256,10 @@ mod tests {
             key_location: "https://auth.acme.io/issuer.cwk",
             holder_confirmation_key: (&holder_signing_key.verifying_key()).try_into().unwrap(),
             artificial_time: None,
+            revocation: RevocationParams {
+                status_list_bit_index: 0,
+                uri: "https://example.com/statuslists/1".parse().unwrap(),
+            },
         };
 
         let sd_cwt_bytes = issuer.issue_cwt(&mut rand::thread_rng(), params).unwrap().to_cbor_bytes().unwrap();
@@ -277,6 +288,7 @@ mod tests {
                 (Value::Integer(label), Value::Bytes(cti)) if label == CwtStdLabel::Cti => assert_eq!(cti, b"cti"),
                 (Value::Integer(label), Value::Bytes(cnonce)) if label == CwtStdLabel::Cnonce => assert_eq!(cnonce, b"cnonce"),
                 (Value::Integer(label), Value::Map(_)) if label == CwtStdLabel::KeyConfirmation => {}
+                (Value::Integer(label), Value::Map(_)) if label == CwtStdLabel::Status => {}
                 (Value::Simple(label), Value::Bytes(_)) if label == RedactedClaimKeys::CWT_LABEL => {}
                 e => panic!("unexpected: {e:?}"),
             }
@@ -501,6 +513,10 @@ mod tests {
                     key_location: "https://auth.acme.io/issuer.cwk",
                     holder_confirmation_key: (&holder_signing_key.verifying_key()).try_into().unwrap(),
                     artificial_time: None,
+                    revocation: RevocationParams {
+                        status_list_bit_index: 0,
+                        uri: "https://example.com/statuslists/1".parse().unwrap(),
+                    },
                 },
             )
             .unwrap();

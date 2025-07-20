@@ -232,7 +232,7 @@ mod tests {
     use esdicawt_spec::{Select, SelectExt, issuance::SdCwtIssuedTagged, sd};
 
     use crate::{
-        Holder, HolderParams, Issuer, IssuerParams, Presentation,
+        Holder, HolderParams, Issuer, IssuerParams, Presentation, RevocationParams,
         test_utils::{Ed25519Holder, Ed25519Issuer},
     };
 
@@ -330,6 +330,10 @@ mod tests {
             key_location: "https://auth.proton.me/issuer.cwk",
             holder_confirmation_key: (&holder_signing_key.verifying_key()).try_into().unwrap(),
             artificial_time: None,
+            revocation: RevocationParams {
+                status_list_bit_index: 0,
+                uri: "https://example.com/statuslists/1".parse().unwrap(),
+            },
         };
         let sd_cwt = issuer.issue_cwt(&mut rand::thread_rng(), issue_params).unwrap();
         (sd_cwt, holder_signing_key, *issuer_signing_key.as_ref())

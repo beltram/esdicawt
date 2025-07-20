@@ -24,10 +24,10 @@ pub trait Holder {
 
     type Hasher: digest::Digest + Clone;
 
-    #[cfg(not(any(feature = "pem", feature = "der")))]
+    #[cfg(not(feature = "pem"))]
     type Signer: signature::Signer<Self::Signature>;
 
-    #[cfg(any(feature = "pem", feature = "der"))]
+    #[cfg(feature = "pem")]
     type Signer: signature::Signer<Self::Signature> + pkcs8::DecodePrivateKey;
 
     type Signature: signature::SignatureEncoding;
@@ -58,7 +58,7 @@ pub trait Holder {
         Ok(Self::new(signer))
     }
 
-    #[cfg(feature = "der")]
+    #[cfg(feature = "pem")]
     fn try_from_der(der: &[u8]) -> Result<Self, Self::Error>
     where
         Self: Sized,
@@ -289,7 +289,7 @@ impl<PayloadClaims: Select, Hasher: digest::Digest + Clone, ProtectedClaims: Cus
 #[cfg(test)]
 mod tests {
     use super::{claims::CustomTokenClaims, test_utils::Ed25519Holder, *};
-    use crate::{CwtStdLabel, Issuer, IssuerParams, Presentation, TimeArg, holder::params::CborPath, issuer::test_utils::Ed25519Issuer};
+    use crate::{CwtStdLabel, Issuer, IssuerParams, Presentation, RevocationParams, TimeArg, holder::params::CborPath, issuer::test_utils::Ed25519Issuer};
     use ciborium::cbor;
     use cose_key_set::CoseKeySet;
     use esdicawt_spec::{
@@ -330,6 +330,10 @@ mod tests {
             leeway: core::time::Duration::from_secs(1),
             holder_confirmation_key: (&holder_verifying_key).try_into().unwrap(),
             artificial_time: None,
+            revocation: RevocationParams {
+                status_list_bit_index: 0,
+                uri: "https://example.com/statuslists/1".parse().unwrap(),
+            },
         };
         let sd_cwt = issuer.issue_cwt(&mut rand::thread_rng(), issue_params).unwrap().to_cbor_bytes().unwrap();
 
@@ -394,6 +398,10 @@ mod tests {
             leeway: core::time::Duration::from_secs(1),
             holder_confirmation_key: (&holder_verifying_key).try_into().unwrap(),
             artificial_time: None,
+            revocation: RevocationParams {
+                status_list_bit_index: 0,
+                uri: "https://example.com/statuslists/1".parse().unwrap(),
+            },
         };
         let sd_cwt = issuer.issue_cwt(&mut rand::thread_rng(), issue_params).unwrap().to_cbor_bytes().unwrap();
 

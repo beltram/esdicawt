@@ -13,7 +13,7 @@ pub enum SdCwtHolderError<CustomError: Send + Sync> {
     CborDeserializeError(#[from] ciborium::de::Error<std::io::Error>),
     #[error(transparent)]
     CborValueError(#[from] ciborium::value::Error),
-    #[cfg(any(feature = "pem", feature = "der"))]
+    #[cfg(feature = "pem")]
     #[error("{0}")]
     Pkcs8Error(pkcs8::Error),
     #[error(transparent)]
@@ -40,7 +40,7 @@ pub enum SdCwtHolderError<CustomError: Send + Sync> {
     CustomError(CustomError),
 }
 
-#[cfg(any(feature = "pem", feature = "der"))]
+#[cfg(feature = "pem")]
 impl<T> From<pkcs8::Error> for SdCwtHolderError<T>
 where
     T: core::error::Error + Send + Sync,

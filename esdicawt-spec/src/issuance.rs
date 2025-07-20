@@ -51,7 +51,7 @@ pub struct SdPayload<Extra: CwtAny> {
 }
 
 #[derive(Debug, Clone, PartialEq, derive_builder::Builder)]
-#[builder(pattern = "mutable", setter(into, strip_option))]
+#[builder(pattern = "mutable", setter(strip_option))]
 #[builder(derive(Debug))]
 pub struct SdInnerPayload<Extra: CwtAny> {
     pub issuer: String,
@@ -69,6 +69,8 @@ pub struct SdInnerPayload<Extra: CwtAny> {
     pub cti: Option<serde_bytes::ByteBuf>,
     #[builder(default)]
     pub cnonce: Option<serde_bytes::ByteBuf>,
+    #[cfg(feature = "status")]
+    pub status: status_list::referenced::StatusClaim,
     #[builder(default)]
     pub extra: Option<Extra>,
 }

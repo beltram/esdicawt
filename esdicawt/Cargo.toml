@@ -7,13 +7,13 @@ authors.workspace = true
 
 [features]
 default = []
-pem = ["dep:pkcs8", "pkcs8?/pem", "cose-key-set/pem"]
-der = ["dep:pkcs8", "cose-key-set/pem"]
+pem = ["dep:pkcs8", "pkcs8?/pem", "cose-key-set/pem", "status-list?/pem"]
 ed25519 = ["dep:ed25519-dalek", "cose-key-confirmation/ed25519", "dep:sha2"]
 p256 = ["dep:p256", "cose-key-confirmation/p256", "dep:sha2"]
 p384 = ["dep:p384", "cose-key-confirmation/p384", "dep:sha2"]
 test-utils = ["ed25519", "p256", "p384", "dep:sha2", "cose-key-confirmation/ed25519", "cose-key-confirmation/p256", "cose-key-confirmation/p384"]
 test-vectors = ["test-utils"]
+status = ["dep:status-list", "esdicawt-spec/status"]
 
 [dependencies]
 esdicawt-spec.workspace = true
@@ -30,7 +30,9 @@ pkcs8 = { workspace = true, optional = true }
 tailcall.workspace = true
 serde_repr.workspace = true
 enum-variants-strings.workspace = true
+url.workspace = true
 time = { workspace = true, default-features = false }
+status-list = { workspace = true, optional = true }
 
 sha2 = { optional = true, workspace = true }
 ed25519-dalek = { optional = true, workspace = true, features = ["rand_core", "pem", "serde"] }
@@ -43,7 +45,7 @@ getrandom = { workspace = true, features = ["js"] }
 time = { workspace = true, default-features = false, features = ["wasm-bindgen"] }
 
 [dev-dependencies]
-esdicawt = { workspace = true, features = ["pem", "der", "test-utils", "test-vectors", "ed25519", "p256", "p384"] }
+esdicawt = { workspace = true, features = ["pem", "test-utils", "test-vectors", "ed25519", "p256", "p384", "status"] }
 serde = { workspace = true, features = ["derive"] }
 cose-key-confirmation = { workspace = true, features = ["ed25519", "p256", "p384"] }
 rand.workspace = true
@@ -54,7 +56,7 @@ hex.workspace = true
 spice-oidc-cwt = { workspace = true }
 derive_builder.workspace = true
 serde_repr.workspace = true
-blake3 = { version = "1.8" , features = ["traits-preview"]}
+blake3 = { version = "1.8", features = ["traits-preview"] }
 
 [target.'cfg(not(target_arch = "wasm32"))'.dev-dependencies]
 criterion = "0.6"

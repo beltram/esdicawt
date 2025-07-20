@@ -1,6 +1,8 @@
 use status_list::{RawStatus, StatusBits, StatusList, issuer::LstMut};
+wasm_bindgen_test::wasm_bindgen_test_configure!(run_in_browser);
 
 #[test]
+#[wasm_bindgen_test::wasm_bindgen_test]
 fn one_bit_status_list() {
     let expected = "a2646269747301636c737458bd78daeddc010dc0200c0041a88249400ad2903e0f4b
 ba00bd93f002beb7a2a2010000a91e09000000000000000000000000000000807296
@@ -60,6 +62,7 @@ ba00bd93f002beb7a2a2010000a91e09000000000000000000000000000000807296
 }
 
 #[test]
+#[wasm_bindgen_test::wasm_bindgen_test]
 fn two_bit_status_list() {
     let expected = "a2646269747302636c737459013d78daeddb310d00211000412ea1a04004fe5520ed
 357c28c81d3312b6df68bc65480000000000406e2101000000000000000000000000
@@ -80,7 +83,7 @@ fn two_bit_status_list() {
         Valid = 0x00,
         Revoked = 0x01,
         Suspended = 0x02,
-        Unassigned = 0x03,
+        Undefined = 0x03,
     }
 
     impl status_list::Status for Status {
@@ -97,7 +100,7 @@ fn two_bit_status_list() {
                 0x00 => Self::Valid,
                 0x01 => Self::Revoked,
                 0x02 => Self::Suspended,
-                0x03 => Self::Unassigned,
+                0x03 => Self::Undefined,
                 _ => unreachable!(),
             }
         }
@@ -108,14 +111,14 @@ fn two_bit_status_list() {
     assert!(lst.replace(0, Status::Revoked).is_some());
     assert!(lst.replace(1993, Status::Suspended).is_some());
     assert!(lst.replace(25460, Status::Revoked).is_some());
-    assert!(lst.replace(159495, Status::Unassigned).is_some());
+    assert!(lst.replace(159495, Status::Undefined).is_some());
     assert!(lst.replace(495669, Status::Revoked).is_some());
     assert!(lst.replace(554353, Status::Revoked).is_some());
     assert!(lst.replace(645645, Status::Suspended).is_some());
     assert!(lst.replace(723232, Status::Revoked).is_some());
     assert!(lst.replace(854545, Status::Revoked).is_some());
     assert!(lst.replace(934534, Status::Suspended).is_some());
-    assert!(lst.replace(1000345, Status::Unassigned).is_some());
+    assert!(lst.replace(1000345, Status::Undefined).is_some());
 
     let status_list = StatusList::new(lst.into(), None);
 
@@ -127,6 +130,7 @@ fn two_bit_status_list() {
 }
 
 #[test]
+#[wasm_bindgen_test::wasm_bindgen_test]
 fn four_bit_status_list() {
     let expected = "a2646269747304636c737459024878daedd0410d8030100030081f0226908204244c
 025290840414111cecb7e4b8b5123a0e40669b020000000000000000000000000000
@@ -177,6 +181,7 @@ c0cf3daf03000000000000000008ec03dc4c04c0"
 }
 
 #[test]
+#[wasm_bindgen_test::wasm_bindgen_test]
 fn eight_bit_status_list() {
     let expected = "a2646269747308636c73745907b078daedd1639033691886d1ac6ddbb66ddbb66ddb
 b66ddbb66ddbb68d59d4d66cbe496626e94e5e9c53d57fbb9ef7ba2b158028ec2401

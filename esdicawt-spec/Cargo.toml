@@ -5,6 +5,10 @@ version.workspace = true
 description = "SD-CWT structs"
 authors.workspace = true
 
+[features]
+default = []
+status = ["dep:status-list"]
+
 [dependencies]
 serde = { workspace = true, features = ["derive"] }
 serde_repr.workspace = true
@@ -16,6 +20,7 @@ ciborium.workspace = true
 thiserror.workspace = true
 cose-key-confirmation.workspace = true
 digest.workspace = true
+status-list = { workspace = true, optional = true }
 
 [lints]
 workspace = true
