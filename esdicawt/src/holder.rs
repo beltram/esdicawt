@@ -92,13 +92,11 @@ pub trait Holder {
         // verify time claims
         #[cfg(not(feature = "test-vectors"))] // FIXME: draft samples are expired
         {
-            let now = params
-                .artificial_time
-                .unwrap_or_else(|| core::time::Duration::from_secs(time::OffsetDateTime::now_utc().unix_timestamp() as u64));
+            let now = params.artificial_time.unwrap_or_else(|| crate::elapsed_since_epoch());
             let iat = payload.inner.issued_at;
             let exp = payload.inner.expiration;
             let nbf = payload.inner.not_before;
-            crate::time::verify_time_claims(now.as_secs() as i64, params.leeway, iat, exp, nbf, params.time_verification)?;
+            crate::time::verify_time_claims(now.as_secs(), params.leeway, iat, exp, nbf, params.time_verification)?;
         }
 
         // subject
@@ -182,13 +180,11 @@ pub trait Holder {
         #[cfg(not(feature = "test-vectors"))] // FIXME: draft samples are expired
         {
             let payload = sd_cwt.0.0.payload.to_value()?;
-            let now = params
-                .artificial_time
-                .unwrap_or_else(|| core::time::Duration::from_secs(time::OffsetDateTime::now_utc().unix_timestamp() as u64));
+            let now = params.artificial_time.unwrap_or_else(|| crate::elapsed_since_epoch());
             let iat = payload.inner.issued_at;
             let exp = payload.inner.expiration;
             let nbf = payload.inner.not_before;
-            crate::time::verify_time_claims(now.as_secs() as i64, params.leeway, iat, exp, nbf, params.time_verification)?;
+            crate::time::verify_time_claims(now.as_secs(), params.leeway, iat, exp, nbf, params.time_verification)?;
         }
 
         // --- building the kbt ---
