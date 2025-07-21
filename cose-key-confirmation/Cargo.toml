@@ -31,6 +31,7 @@ hex.workspace = true
 esdicawt-spec.workspace = true
 sha2.workspace = true
 wasm-bindgen-test.workspace = true
+getrandom = { workspace = true, features = ["js"] }
 
 [lints]
 workspace = true
