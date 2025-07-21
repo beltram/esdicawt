@@ -64,14 +64,14 @@ thumbprint_compute!(48, digest::typenum::U48);
 thumbprint_compute!(64, digest::typenum::U64);
 
 impl<const N: usize> CoseKeyThumbprint<N> {
-    fn _compute(key: impl TryInto<cose_key::CoseKey, Error: Into<error::CoseKeyThumbprintError>>) -> Result<Vec<u8>, error::CoseKeyThumbprintError> {
+    fn _compute(key: impl TryInto<cose_key::CoseKey, Error: Into<CoseKeyThumbprintError>>) -> Result<Vec<u8>, CoseKeyThumbprintError> {
         use coset::iana::{self, EnumI64 as _};
 
         let key: cose_key::CoseKey = key.try_into().map_err(Into::into)?;
 
         let mut value = Value::serialized(&key)?;
         let Some(claims) = value.as_map_mut() else {
-            return Err(error::CoseKeyThumbprintError::InvalidCoseKey);
+            return Err(CoseKeyThumbprintError::InvalidCoseKey);
         };
 
         // Construct a COSE_Key structure (see Section 7 of [RFC9052]) containing only the required parameters representing the key
@@ -144,7 +144,7 @@ impl<const N: usize> CoseKeyThumbprint<N> {
 
         // Apply the deterministic encoding described in Section 4.2.1 of [RFC8949]
         // see https://datatracker.ietf.org/doc/html/rfc9679#section-3-2.2.1
-        let cbor_encoded = value.deterministically_serialize()?;
+        let cbor_encoded = value.deterministically_serialize_map()?;
 
         Ok(cbor_encoded)
     }
@@ -155,7 +155,33 @@ mod tests {
     use super::*;
     use cose_key::CoseKey;
     use coset::iana;
+    use ed25519_dalek::pkcs8::DecodePublicKey;
+    use hex::ToHex;
+
     wasm_bindgen_test::wasm_bindgen_test_configure!(run_in_browser);
+
+    #[test]
+    #[wasm_bindgen_test::wasm_bindgen_test]
+    fn should_deterministically_encode() {
+        const P256_PUBLIC_KEY: &str = r#"-----BEGIN PUBLIC KEY-----
+MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEbLKIr8bJL1GeiW1c1vP4lOosOJoM
+Q9mzMjln8rpfX6NJ+P2zO5qMMJvR4ITtmAFLPq4YzLrA9l3PtRuIvDU8AA==
+-----END PUBLIC KEY-----"#;
+        const EXPECTED_P256_PUBLIC_KEY_ENCODING: &str =
+            r#"a4010220012158206cb288afc6c92f519e896d5cd6f3f894ea2c389a0c43d9b3323967f2ba5f5fa322582049f8fdb33b9a8c309bd1e084ed98014b3eae18ccbac0f65dcfb51b88bc353c00"#;
+        const ED25519_PUBLIC_KEY: &str = r#"-----BEGIN PUBLIC KEY-----
+MCowBQYDK2VwAyEAAPT6nOPM+sC2JTf5mjzxSA1noZJND75aQjWqw80LLcM=
+-----END PUBLIC KEY-----"#;
+        const EXPECTED_ED25519_PUBLIC_KEY_ENCODING: &str = r#"a30101200621582000f4fa9ce3ccfac0b62537f99a3cf1480d67a1924d0fbe5a4235aac3cd0b2dc3"#;
+
+        let p256_key = p256::PublicKey::from_public_key_pem(P256_PUBLIC_KEY).unwrap();
+        let thumbprint = CoseKeyThumbprint::<32>::_compute(p256_key).unwrap().encode_hex::<String>();
+        assert_eq!(thumbprint, EXPECTED_P256_PUBLIC_KEY_ENCODING);
+
+        let ed25519_key = ed25519_dalek::VerifyingKey::from_public_key_pem(ED25519_PUBLIC_KEY).unwrap();
+        let thumbprint = CoseKeyThumbprint::<32>::_compute(ed25519_key).unwrap().encode_hex::<String>();
+        assert_eq!(thumbprint, EXPECTED_ED25519_PUBLIC_KEY_ENCODING);
+    }
 
     // see https://datatracker.ietf.org/doc/html/rfc9679#section-6
     #[test]
