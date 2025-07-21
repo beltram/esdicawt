@@ -1,3 +1,5 @@
+//! See https://www.ietf.org/archive/id/draft-ietf-spice-oidc-cwt-01.html
+
 use enum_variants_strings::EnumVariantsStrings;
 use esdicawt::{
     EsdicawtReadResult, SdCwtVerified, TokenQuery, cwt_label,
@@ -128,9 +130,7 @@ impl serde::Serialize for SpiceOidcClaims {
             map.serialize_entry(&CwtOidcLabel::PhoneNumberVerified, phone_number_verified)?;
         }
         if let Some(address) = &self.address {
-            if let Ok(address_json) = serde_json::to_string(&address) {
-                map.serialize_entry(&CwtOidcLabel::Address, &address_json)?;
-            }
+            map.serialize_entry(&CwtOidcLabel::Address, &address)?;
         }
         if let Some(updated_at) = &self.updated_at {
             map.serialize_entry(&CwtOidcLabel::UpdatedAt, updated_at)?;
@@ -356,7 +356,7 @@ pub trait SpiceOidcSdCwtRead {
     fn phone_number(&mut self) -> EsdicawtReadResult<Option<Cow<str>>>;
     fn phone_number_verified(&mut self) -> EsdicawtReadResult<Option<bool>>;
     fn address(&mut self) -> EsdicawtReadResult<Option<OidcAddressClaim>>;
-    fn updated_at(&mut self) -> EsdicawtReadResult<Option<i64>>;
+    fn updated_at(&mut self) -> EsdicawtReadResult<Option<u64>>;
 }
 
 impl<PayloadClaims: Select, Hasher: digest::Digest + Clone, IssuerProtectedClaims: CustomClaims, IssuerUnprotectedClaims: CustomClaims> SpiceOidcSdCwtRead
@@ -444,7 +444,7 @@ where
         Ok(self.query(vec![CwtOidcLabel::Address.into()].into())?.as_ref().map(Value::deserialized).transpose()?)
     }
 
-    fn updated_at(&mut self) -> EsdicawtReadResult<Option<i64>> {
+    fn updated_at(&mut self) -> EsdicawtReadResult<Option<u64>> {
         Ok(self.query(vec![CwtOidcLabel::UpdatedAt.into()].into())?.as_ref().map(Value::deserialized).transpose()?)
     }
 }
@@ -526,7 +526,7 @@ where
         self.0.address()
     }
 
-    fn updated_at(&mut self) -> EsdicawtReadResult<Option<i64>> {
+    fn updated_at(&mut self) -> EsdicawtReadResult<Option<u64>> {
         self.0.updated_at()
     }
 }
@@ -608,7 +608,7 @@ where
         self.0.0.address()
     }
 
-    fn updated_at(&mut self) -> EsdicawtReadResult<Option<i64>> {
+    fn updated_at(&mut self) -> EsdicawtReadResult<Option<u64>> {
         self.0.0.updated_at()
     }
 }
@@ -705,7 +705,7 @@ where
         Ok(self.query(vec![CwtOidcLabel::Address.into()].into())?.as_ref().map(Value::deserialized).transpose()?)
     }
 
-    fn updated_at(&mut self) -> EsdicawtReadResult<Option<i64>> {
+    fn updated_at(&mut self) -> EsdicawtReadResult<Option<u64>> {
         Ok(self.query(vec![CwtOidcLabel::UpdatedAt.into()].into())?.as_ref().map(Value::deserialized).transpose()?)
     }
 }
@@ -794,7 +794,7 @@ where
         self.0.address()
     }
 
-    fn updated_at(&mut self) -> EsdicawtReadResult<Option<i64>> {
+    fn updated_at(&mut self) -> EsdicawtReadResult<Option<u64>> {
         self.0.updated_at()
     }
 }
@@ -814,6 +814,7 @@ mod tests {
 
     #[test]
     #[wasm_bindgen_test::wasm_bindgen_test]
+    #[allow(clippy::cognitive_complexity)]
     fn can_issue_and_present_oidc_claim_token() {
         let issuer_signing_key = ed25519_dalek::SigningKey::generate(&mut rand::thread_rng());
         let issuer = Ed25519Issuer::new(issuer_signing_key.clone());
@@ -824,20 +825,47 @@ mod tests {
 
         let _bob_holder = Ed25519Holder::new(ed25519_dalek::SigningKey::generate(&mut rand::thread_rng()));
 
-        let alice = get_alice();
+        let alice = alice();
         let alice_subject = alice.preferred_username.clone().unwrap();
-        let mut alice_sd_cwt = issue_oidc_claim(&issuer, alice, &alice_holder.signer().verifying_key(), &alice_subject);
+        let mut alice_sd_cwt = issue_oidc_claim(&issuer, alice.clone(), &alice_holder.signer().verifying_key(), &alice_subject);
 
         let name = alice_sd_cwt.name().unwrap().unwrap().to_string();
         let given_name = alice_sd_cwt.given_name().unwrap().unwrap().to_string();
         let family_name = alice_sd_cwt.family_name().unwrap().unwrap().to_string();
         let nickname = alice_sd_cwt.nickname().unwrap().unwrap().to_string();
         let preferred_username = alice_sd_cwt.preferred_username().unwrap().unwrap().to_string();
-        assert_eq!(name, "Alice".to_string());
-        assert_eq!(given_name, "Alice Smith".to_string());
-        assert_eq!(family_name, "Smith".to_string());
-        assert_eq!(nickname, "alice".to_string());
-        assert_eq!(preferred_username, "alice".to_string());
+        let profile = alice_sd_cwt.profile().unwrap().unwrap();
+        let picture = alice_sd_cwt.picture().unwrap().unwrap();
+        let website = alice_sd_cwt.website().unwrap().unwrap();
+        let email = alice_sd_cwt.email().unwrap().unwrap().to_string();
+        let email_verified = alice_sd_cwt.email_verified().unwrap().unwrap();
+        let gender = alice_sd_cwt.gender().unwrap().unwrap().to_string();
+        let birthdate = alice_sd_cwt.birthdate().unwrap().unwrap().to_string();
+        let zoneinfo = alice_sd_cwt.zoneinfo().unwrap().unwrap().to_string();
+        let locale = alice_sd_cwt.locale().unwrap().unwrap().to_string();
+        let phone_number = alice_sd_cwt.phone_number().unwrap().unwrap().to_string();
+        let phone_number_verified = alice_sd_cwt.phone_number_verified().unwrap().unwrap();
+        let address = alice_sd_cwt.address().unwrap().unwrap();
+        let updated_at = alice_sd_cwt.updated_at().unwrap().unwrap();
+
+        assert_eq!(&name, alice.name.as_ref().unwrap());
+        assert_eq!(&given_name, alice.given_name.as_ref().unwrap());
+        assert_eq!(&family_name, alice.family_name.as_ref().unwrap());
+        assert_eq!(&nickname, alice.nickname.as_ref().unwrap());
+        assert_eq!(&preferred_username, alice.preferred_username.as_ref().unwrap());
+        assert_eq!(&profile, alice.profile.as_ref().unwrap());
+        assert_eq!(&picture, alice.picture.as_ref().unwrap());
+        assert_eq!(&website, alice.website.as_ref().unwrap());
+        assert_eq!(&email, alice.email.as_ref().unwrap());
+        assert_eq!(&email_verified, alice.email_verified.as_ref().unwrap());
+        assert_eq!(&gender, alice.gender.as_ref().unwrap());
+        assert_eq!(&birthdate, alice.birthdate.as_ref().unwrap());
+        assert_eq!(&zoneinfo, alice.zoneinfo.as_ref().unwrap());
+        assert_eq!(&locale, alice.locale.as_ref().unwrap());
+        assert_eq!(&phone_number, alice.phone_number.as_ref().unwrap());
+        assert_eq!(&phone_number_verified, alice.phone_number_verified.as_ref().unwrap());
+        assert_eq!(&address, alice.address.as_ref().unwrap());
+        assert_eq!(updated_at, alice.updated_at.unwrap());
 
         let presentation = Presentation::Path(Box::new(|path| {
             matches!(path, [CborPath::Int(i)] if *i == CwtOidcLabel::Name
@@ -874,11 +902,38 @@ mod tests {
         let family_name = alice_kbt.family_name().unwrap().unwrap().to_string();
         let nickname = alice_kbt.nickname().unwrap().unwrap().to_string();
         let preferred_username = alice_kbt.preferred_username().unwrap().unwrap().to_string();
-        assert_eq!(name, "Alice".to_string());
-        assert_eq!(given_name, "Alice Smith".to_string());
-        assert_eq!(family_name, "Smith".to_string());
-        assert_eq!(nickname, "alice".to_string());
-        assert_eq!(preferred_username, "alice".to_string());
+        let profile = alice_kbt.profile().unwrap().unwrap();
+        let picture = alice_kbt.picture().unwrap().unwrap();
+        let website = alice_kbt.website().unwrap().unwrap();
+        let email = alice_kbt.email().unwrap().unwrap().to_string();
+        let email_verified = alice_kbt.email_verified().unwrap().unwrap();
+        let gender = alice_kbt.gender().unwrap().unwrap().to_string();
+        let birthdate = alice_kbt.birthdate().unwrap().unwrap().to_string();
+        let zoneinfo = alice_kbt.zoneinfo().unwrap().unwrap().to_string();
+        let locale = alice_kbt.locale().unwrap().unwrap().to_string();
+        let phone_number = alice_kbt.phone_number().unwrap().unwrap().to_string();
+        let phone_number_verified = alice_kbt.phone_number_verified().unwrap().unwrap();
+        let address = alice_kbt.address().unwrap().unwrap();
+        let updated_at = alice_kbt.updated_at().unwrap().unwrap();
+
+        assert_eq!(&name, alice.name.as_ref().unwrap());
+        assert_eq!(&given_name, alice.given_name.as_ref().unwrap());
+        assert_eq!(&family_name, alice.family_name.as_ref().unwrap());
+        assert_eq!(&nickname, alice.nickname.as_ref().unwrap());
+        assert_eq!(&preferred_username, alice.preferred_username.as_ref().unwrap());
+        assert_eq!(&profile, alice.profile.as_ref().unwrap());
+        assert_eq!(&picture, alice.picture.as_ref().unwrap());
+        assert_eq!(&website, alice.website.as_ref().unwrap());
+        assert_eq!(&email, alice.email.as_ref().unwrap());
+        assert_eq!(&email_verified, alice.email_verified.as_ref().unwrap());
+        assert_eq!(&gender, alice.gender.as_ref().unwrap());
+        assert_eq!(&birthdate, alice.birthdate.as_ref().unwrap());
+        assert_eq!(&zoneinfo, alice.zoneinfo.as_ref().unwrap());
+        assert_eq!(&locale, alice.locale.as_ref().unwrap());
+        assert_eq!(&phone_number, alice.phone_number.as_ref().unwrap());
+        assert_eq!(&phone_number_verified, alice.phone_number_verified.as_ref().unwrap());
+        assert_eq!(&address, alice.address.as_ref().unwrap());
+        assert_eq!(updated_at, alice.updated_at.unwrap());
     }
 
     fn issue_oidc_claim(
@@ -915,24 +970,33 @@ mod tests {
             .unwrap()
     }
 
-    fn get_alice() -> SpiceOidcClaims {
+    fn alice() -> SpiceOidcClaims {
         SpiceOidcClaims {
             name: Some("Alice".into()),
             given_name: Some("Alice Smith".into()),
             family_name: Some("Smith".into()),
-            nickname: Some("alice".into()),
+            nickname: Some("alice-nickname".into()),
             preferred_username: Some("alice".into()),
-            ..Default::default()
-        }
-    }
-
-    fn _get_bob() -> SpiceOidcClaims {
-        SpiceOidcClaims {
-            name: Some("Bob".into()),
-            given_name: Some("Bob Martin".into()),
-            family_name: Some("Martin".into()),
-            nickname: Some("bob".into()),
-            preferred_username: Some("bob".into()),
+            profile: Some("https://example.com/profile".parse().unwrap()),
+            picture: Some("https://example.com/picture".parse().unwrap()),
+            website: Some("https://example.com/website".parse().unwrap()),
+            email: Some("alice@mail.com".into()),
+            email_verified: Some(true),
+            gender: Some("gender".into()),
+            birthdate: Some("birthdate".into()),
+            zoneinfo: Some("zoneinfo".into()),
+            locale: Some("locale".into()),
+            phone_number: Some("phonenumber".into()),
+            phone_number_verified: Some(true),
+            address: Some(OidcAddressClaim {
+                formatted: Some("1234 Hollywood Blvd. Los Angeles CA, 90210 United States of America".into()),
+                street_address: Some("1234 Hollywood Blvd.".into()),
+                locality: Some("Los Angeles".into()),
+                region: Some("CA".into()),
+                postal_code: Some("90210".into()),
+                country: Some("United States of America".into()),
+            }),
+            updated_at: Some(42),
             ..Default::default()
         }
     }
