@@ -3,6 +3,7 @@ use crate::StatusBits;
 /// Set a bit in the given u8
 /// see https://graphics.stanford.edu/~seander/bithacks.html#ConditionalSetOrClearBitsWithoutBranching
 #[inline(always)]
+#[allow(dead_code)]
 pub fn write_bit(word: &mut u8, index: u8, flag: u8, status_bits: StatusBits) {
     let size = status_bits.size();
     for i in 0..size {
@@ -14,6 +15,7 @@ pub fn write_bit(word: &mut u8, index: u8, flag: u8, status_bits: StatusBits) {
 /// Set a bit in the given u8
 /// see https://graphics.stanford.edu/~seander/bithacks.html#ConditionalSetOrClearBitsWithoutBranching
 #[inline(always)]
+#[allow(dead_code)]
 fn set_bit(word: &mut u8, index: u8, flag: bool) {
     let m = 1u8.wrapping_shl(index as u32);
     let f = -(flag as i8);
