@@ -24,6 +24,12 @@ pub enum CoseKeyError {
     InvalidKeyLength(usize, usize),
     #[error("{0}")]
     InvalidCborIntegerClaimKey(core::num::TryFromIntError),
+    #[error(transparent)]
+    CborDeserializationError(#[from] ciborium::de::Error<std::io::Error>),
+    #[error(transparent)]
+    CborSerializationError(#[from] ciborium::ser::Error<std::io::Error>),
+    #[error(transparent)]
+    CborValueError(#[from] ciborium::value::Error),
     #[error("Signature error {0}")]
     SignatureError(String),
 }
