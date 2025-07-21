@@ -44,8 +44,9 @@ pub mod test_utils {
 
 #[cfg(all(target_arch = "wasm32", target_os = "unknown"))]
 pub(crate) fn elapsed_since_epoch() -> core::time::Duration {
-    let val = js_sys::Date::now();
-    std::time::Duration::from_millis(val as u64)
+    let js_date = js_sys::Date::new_0();
+    let timestamp_millis = js_date.get_time() as u64;
+    std::time::Duration::from_millis(timestamp_millis)
 }
 
 #[cfg(not(all(target_arch = "wasm32", target_os = "unknown")))]

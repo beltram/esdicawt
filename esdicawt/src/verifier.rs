@@ -5,6 +5,7 @@ mod walk;
 use crate::{
     ShallowVerifierParams, VerifierParams,
     any_digest::AnyDigest,
+    elapsed_since_epoch,
     signature_verifier::validate_signature,
     time::verify_time_claims,
     verifier::error::{SdCwtVerifierError, SdCwtVerifierResult},
@@ -19,7 +20,6 @@ use esdicawt_spec::{
     verified::KbtCwtVerified,
 };
 use std::collections::HashMap;
-use time::OffsetDateTime;
 
 pub trait Verifier {
     type Error: core::error::Error + Send + Sync;
@@ -116,7 +116,7 @@ pub trait Verifier {
         let kbt_payload = kbt.0.payload.to_value()?;
 
         // verify time claims of the SD-KBT
-        let now = OffsetDateTime::now_utc().unix_timestamp();
+        let now = elapsed_since_epoch().as_secs();
         let (iat, exp, nbf) = (Some(kbt_payload.issued_at), kbt_payload.expiration, kbt_payload.not_before);
         verify_time_claims(now, params.sd_kbt_leeway, iat, exp, nbf, params.sd_kbt_time_verification)?;
 

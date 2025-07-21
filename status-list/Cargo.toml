@@ -32,10 +32,11 @@ pkcs8 = { workspace = true, optional = true }
 rand_core = { workspace = true, optional = true }
 rand = { workspace = true, optional = true }
 
+time = "0.3.41"
+
 [target.'cfg(all(target_arch = "wasm32", target_os = "unknown"))'.dependencies]
 js-sys = "0.3"
 getrandom = { workspace = true, features = ["js"] }
-time = { workspace = true, default-features = false, features = ["wasm-bindgen"] }
 
 [dev-dependencies]
 wasm-bindgen-test.workspace = true
