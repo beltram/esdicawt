@@ -204,8 +204,11 @@ impl<
 > TokenQuery for KbtCwtVerified<IssuerPayloadClaims, KbtPayloadClaims, IssuerProtectedClaims, IssuerUnprotectedClaims, KbtProtectedClaims, KbtUnprotectedClaims>
 {
     fn query(&mut self, token_query: Query) -> EsdicawtSpecResult<Option<Value>> {
-        let payload = self.payload.to_cbor_value()?;
-        query_inner::<AnyDigest>(&mut SaltedArray::new(), &payload, &token_query.elements)
+        if let Some(Ok(claimset)) = self.claimset.as_mut().map(|cs| cs.to_cbor_value()) {
+            query_inner::<AnyDigest>(&mut SaltedArray::new(), &claimset, &token_query.elements)
+        } else {
+            Ok(None)
+        }
     }
 }
 
