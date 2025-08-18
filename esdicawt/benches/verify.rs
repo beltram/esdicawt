@@ -155,7 +155,7 @@ fn issuer<H: digest::Digest + Clone>(
 ) -> (
     ThreadRng,
     Ed25519Issuer<VarSizePayload, H>,
-    IssuerParams<VarSizePayload>,
+    IssuerParams<'_, VarSizePayload>,
     CoseKeySet,
     Ed25519Holder<VarSizePayload, H>,
 ) {
@@ -187,7 +187,7 @@ fn issuer<H: digest::Digest + Clone>(
     (rng, issuer, issuer_params, cks, holder)
 }
 
-fn holder<H: digest::Digest + Clone>(i: &usize) -> (Ed25519Holder<VarSizePayload, H>, HolderParams, SdCwtVerified<VarSizePayload, H>, CoseKeySet) {
+fn holder<H: digest::Digest + Clone>(i: &usize) -> (Ed25519Holder<VarSizePayload, H>, HolderParams<'_>, SdCwtVerified<VarSizePayload, H>, CoseKeySet) {
     let (mut rng, issuer, issuer_params, cks, holder) = issuer::<H>(i);
     let sd_cwt = issuer.issue_cwt(&mut rng, issuer_params).unwrap();
 
@@ -208,7 +208,7 @@ fn holder<H: digest::Digest + Clone>(i: &usize) -> (Ed25519Holder<VarSizePayload
     (holder, holder_params, sd_cwt, cks)
 }
 
-fn verifier<H: digest::Digest + Clone>(i: &usize) -> (Ed25519Verifier<VarSizePayload>, Vec<u8>, VerifierParams, CoseKeySet) {
+fn verifier<H: digest::Digest + Clone>(i: &usize) -> (Ed25519Verifier<VarSizePayload>, Vec<u8>, VerifierParams<'_>, CoseKeySet) {
     let (holder, holder_params, sd_cwt, cks) = holder::<H>(i);
 
     let sd_kbt = holder.new_presentation_raw(sd_cwt, holder_params).unwrap();
@@ -243,6 +243,7 @@ fn shallow_verifier<H: digest::Digest + Clone>(i: &usize) -> (Ed25519Verifier<Va
         sd_kbt_leeway: Default::default(),
         sd_cwt_time_verification: Default::default(),
         sd_kbt_time_verification: Default::default(),
+        artificial_time: None,
     };
 
     (verifier, sd_kbt, params, cks)

@@ -16,15 +16,15 @@ use std::borrow::Cow;
 pub trait SdCwtRead: TokenQuery {
     type PayloadClaims: CustomClaims;
 
-    fn sub(&mut self) -> EsdicawtReadResult<Option<Cow<str>>> {
+    fn sub(&mut self) -> EsdicawtReadResult<Option<Cow<'_, str>>> {
         Ok(self.query(vec![CwtClaimName::Sub.to_i64().into()].into())?.as_ref().map(Value::deserialized).transpose()?)
     }
 
-    fn iss(&mut self) -> EsdicawtReadResult<Option<Cow<str>>> {
+    fn iss(&mut self) -> EsdicawtReadResult<Option<Cow<'_, str>>> {
         Ok(self.query(vec![CwtClaimName::Iss.to_i64().into()].into())?.as_ref().map(Value::deserialized).transpose()?)
     }
 
-    fn aud(&mut self) -> EsdicawtReadResult<Option<Cow<str>>> {
+    fn aud(&mut self) -> EsdicawtReadResult<Option<Cow<'_, str>>> {
         Ok(self.query(vec![CwtClaimName::Aud.to_i64().into()].into())?.as_ref().map(Value::deserialized).transpose()?)
     }
 
@@ -61,7 +61,7 @@ impl<IssuerPayloadClaims: Select, Hasher: digest::Digest + Clone, IssuerProtecte
     type PayloadClaims = IssuerPayloadClaims;
 
     // sub is not redactable so we read it directly from the SD-CWT
-    fn sub(&mut self) -> EsdicawtReadResult<Option<Cow<str>>> {
+    fn sub(&mut self) -> EsdicawtReadResult<Option<Cow<'_, str>>> {
         SdCwtRead::sub(&mut self.0)
     }
 }
@@ -72,7 +72,7 @@ impl<IssuerPayloadClaims: Select, Hasher: digest::Digest + Clone, IssuerProtecte
     type PayloadClaims = IssuerPayloadClaims;
 
     // sub is not redactable so we read it directly from the SD-CWT
-    fn sub(&mut self) -> EsdicawtReadResult<Option<Cow<str>>> {
+    fn sub(&mut self) -> EsdicawtReadResult<Option<Cow<'_, str>>> {
         Ok(self.payload.to_value()?.inner.subject.as_deref().map(Cow::Borrowed))
     }
 }
@@ -82,7 +82,7 @@ impl<IssuerPayloadClaims: Select, Hasher: digest::Digest + Clone, IssuerProtecte
 {
     type PayloadClaims = IssuerPayloadClaims;
 
-    fn sub(&mut self) -> EsdicawtReadResult<Option<Cow<str>>> {
+    fn sub(&mut self) -> EsdicawtReadResult<Option<Cow<'_, str>>> {
         SdCwtRead::sub(&mut self.0.0)
     }
 }

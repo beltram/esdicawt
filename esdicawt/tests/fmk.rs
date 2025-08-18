@@ -111,6 +111,7 @@ pub mod ed25519 {
 pub mod es_256 {
     use super::*;
 
+    #[allow(dead_code)]
     pub struct P256Holder<T: Select> {
         signing_key: p256::ecdsa::SigningKey,
         verifying_key: p256::ecdsa::VerifyingKey,

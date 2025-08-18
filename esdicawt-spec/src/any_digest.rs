@@ -1,5 +1,6 @@
 use digest::{FixedOutput, FixedOutputReset, Output, OutputSizeUser, Reset, Update, consts::U32};
 
+#[allow(dead_code)]
 #[derive(Clone)]
 pub struct AnyDigest;
 
