@@ -26,6 +26,7 @@ impl VerifierParams<'_> {
             sd_kbt_leeway: self.sd_kbt_leeway,
             sd_cwt_time_verification: self.sd_cwt_time_verification,
             sd_kbt_time_verification: self.sd_kbt_time_verification,
+            artificial_time: self.artificial_time,
         }
     }
 }
@@ -40,4 +41,6 @@ pub struct ShallowVerifierParams {
     pub sd_cwt_time_verification: TimeVerification,
     /// verification of SD-KBT time claims
     pub sd_kbt_time_verification: TimeVerification,
+    /// when verifying a delayed message or testing
+    pub artificial_time: Option<i64>,
 }

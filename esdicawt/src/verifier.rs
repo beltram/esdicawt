@@ -116,9 +116,9 @@ pub trait Verifier {
         let kbt_payload = kbt.0.payload.to_value()?;
 
         // verify time claims of the SD-KBT
-        let now = elapsed_since_epoch().as_secs();
+        let validation_time = params.artificial_time.map_or_else(|| elapsed_since_epoch().as_secs(), |t| t as u64);
         let (iat, exp, nbf) = (Some(kbt_payload.issued_at), kbt_payload.expiration, kbt_payload.not_before);
-        verify_time_claims(now, params.sd_kbt_leeway, iat, exp, nbf, params.sd_kbt_time_verification)?;
+        verify_time_claims(validation_time, params.sd_kbt_leeway, iat, exp, nbf, params.sd_kbt_time_verification)?;
 
         // After validation, the SD-CWT MUST be extracted from the kcwt header, and validated as described in Section 7.2 of [RFC8392].
         // verify signature if a verifying key supplied
@@ -126,7 +126,7 @@ pub trait Verifier {
 
         // verify time claims of the SD-CWT
         let (iat, exp, nbf) = (sd_cwt_payload.inner.issued_at, sd_cwt_payload.inner.expiration, sd_cwt_payload.inner.not_before);
-        verify_time_claims(now, params.sd_cwt_leeway, iat, exp, nbf, params.sd_cwt_time_verification)?;
+        verify_time_claims(validation_time, params.sd_cwt_leeway, iat, exp, nbf, params.sd_cwt_time_verification)?;
 
         // TODO: verify SD-CWT revocation status w/ Status List
 
