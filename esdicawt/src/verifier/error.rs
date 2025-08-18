@@ -46,8 +46,27 @@ pub enum SdCwtVerifierError<CustomError: Send + Sync> {
     UnexpectedKeyConfirmation,
     #[error("Disclosure hash collision")]
     DisclosureHashCollision,
+    #[cfg(feature = "status")]
+    #[error(transparent)]
+    StatusError(#[from] SdCwtStatusVerifierError),
     #[error("Malformed SD-CWT because {0}")]
     MalformedSdCwt(&'static str),
     #[error(transparent)]
     CustomError(CustomError),
+}
+
+#[cfg(feature = "status")]
+#[derive(Debug, thiserror::Error)]
+pub enum SdCwtStatusVerifierError {
+    #[error("Status not found at {0:?}")]
+    StatusNotFound(url::Url),
+    #[error("Status at index {0} was not found at {1:?}")]
+    StatusIndexNotFound(status_list::BitIndex, url::Url),
+    #[error("Status for this token was deemed not valid at {0:?}")]
+    StatusInvalid(url::Url),
+    /// It's okay to differentiate from [StatusInvalid], the StatusList is public so this cannot be used as an oracle
+    #[error("Status index out of bounds at {0:?}")]
+    IndexOutOfBounds(url::Url),
+    #[error(transparent)]
+    InvalidStatusTokenSignature(#[from] SignatureVerifierError),
 }

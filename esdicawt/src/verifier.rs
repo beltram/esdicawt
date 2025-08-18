@@ -63,7 +63,7 @@ pub trait Verifier {
         params: ShallowVerifierParams,
         // not mandatory in case the verifier does not have access to it
         holder_verifier: Option<&Self::HolderVerifier>,
-        keyset: &cose_key_set::CoseKeySet,
+        cks: &cose_key_set::CoseKeySet,
     ) -> Result<
         KbtCwtTagged<
             Self::IssuerPayloadClaims,
@@ -122,13 +122,11 @@ pub trait Verifier {
 
         // After validation, the SD-CWT MUST be extracted from the kcwt header, and validated as described in Section 7.2 of [RFC8392].
         // verify signature if a verifying key supplied
-        validate_signature(&sd_cwt_cose_sign1, keyset)?;
+        validate_signature(&sd_cwt_cose_sign1, cks)?;
 
         // verify time claims of the SD-CWT
         let (iat, exp, nbf) = (sd_cwt_payload.inner.issued_at, sd_cwt_payload.inner.expiration, sd_cwt_payload.inner.not_before);
         verify_time_claims(validation_time, params.sd_cwt_leeway, iat, exp, nbf, params.sd_cwt_time_verification)?;
-
-        // TODO: verify SD-CWT revocation status w/ Status List
 
         Ok(kbt)
     }
@@ -140,7 +138,7 @@ pub trait Verifier {
         params: VerifierParams,
         // not mandatory in case the verifier does not have access to it
         holder_verifier: Option<&Self::HolderVerifier>,
-        keyset: &cose_key_set::CoseKeySet,
+        cks: &cose_key_set::CoseKeySet,
     ) -> Result<
         KbtCwtVerified<
             Self::IssuerPayloadClaims,
@@ -152,7 +150,7 @@ pub trait Verifier {
         >,
         SdCwtVerifierError<Self::Error>,
     > {
-        let mut kbt = self.shallow_verify_sd_kbt(raw_sd_kbt, params.shallow(), holder_verifier, keyset)?;
+        let mut kbt = self.shallow_verify_sd_kbt(raw_sd_kbt, params.shallow(), holder_verifier, cks)?;
 
         let kbt_protected = kbt.0.protected.to_value_mut()?;
         let sd_cwt = kbt_protected.kcwt.to_value_mut()?;
@@ -211,8 +209,6 @@ pub trait Verifier {
             });
         }
 
-        // TODO: verify revocation status w/ Status List
-
         let mut payload = sd_cwt_payload.to_cbor_value()?;
         let sd_alg = sd_cwt.0.protected.to_value_mut()?.sd_alg;
 
@@ -261,19 +257,96 @@ pub trait Verifier {
     }
 }
 
+#[cfg(feature = "status")]
+#[allow(dead_code)]
+pub trait VerifierWithStatus: Verifier {
+    #[allow(clippy::type_complexity)]
+    async fn verify_sd_kbt_with_status<S: status_list::Status>(
+        &mut self,
+        raw_sd_kbt: &[u8],
+        params: VerifierParams<'_>,
+        status_list_params: crate::verifier::params::StatusListVerifierParams,
+        // not mandatory in case the verifier does not have access to it
+        holder_verifier: Option<&Self::HolderVerifier>,
+        cks: &cose_key_set::CoseKeySet,
+        // in case the issuer of the StatusList is different from the SD-CWT issuer
+        status_list_cks: &cose_key_set::CoseKeySet,
+    ) -> Result<
+        KbtCwtVerified<
+            Self::IssuerPayloadClaims,
+            Self::KbtPayloadClaims,
+            Self::IssuerProtectedClaims,
+            Self::IssuerUnprotectedClaims,
+            Self::KbtProtectedClaims,
+            Self::KbtUnprotectedClaims,
+        >,
+        SdCwtVerifierError<Self::Error>,
+    > {
+        use crate::verifier::error::SdCwtStatusVerifierError;
+
+        let mut kbt = self.shallow_verify_sd_kbt(raw_sd_kbt, params.shallow(), holder_verifier, cks)?;
+
+        let kbt_protected = kbt.0.protected.to_value_mut()?;
+        let sd_cwt = kbt_protected.kcwt.to_value_mut()?;
+        let sd_cwt_payload = sd_cwt.0.payload.to_value_mut()?;
+
+        // Read the StatusClaim from the SD-CWT to know where to fetch the Status from
+        // Note: no StatusList for the SD-KBT as it is self-issued by a Holder
+        let (idx, status_url) = sd_cwt_payload.inner.status.get();
+        // we then ask the Verifier to resolve the Status, so either:
+        // - get it from a local in-memory cache
+        // - get it from a database in case it was already set by another thread
+        // - last, fetch it from Status issuer in case it's nowhere to be found
+        let Some(raw_status_token) = self.get_status(status_url).await.map_err(SdCwtVerifierError::CustomError)? else {
+            return Err(SdCwtStatusVerifierError::StatusNotFound(status_url.clone()).into());
+        };
+
+        let status_token = status_list::issuer::StatusListToken::<S>::from_cbor_bytes(raw_status_token)?;
+        let status_token_sign1 = CoseSign1::from_tagged_slice(raw_status_token)?;
+
+        // We validate the signature of the StatusListToken
+        validate_signature(&status_token_sign1, status_list_cks).map_err(SdCwtStatusVerifierError::InvalidStatusTokenSignature)?;
+
+        // verify time claims of the SD-CWT
+        let validation_time = status_list_params.artificial_time.map_or_else(|| elapsed_since_epoch().as_secs(), |t| t as u64);
+        let (iat, exp, nbf) = (Some(status_token.iat), status_token.exp, None);
+        verify_time_claims(validation_time, status_list_params.leeway, iat, exp, nbf, status_list_params.time_verification)?;
+
+        // now let's verify the status of the SD-KBT in the StatusList
+
+        if idx > status_token.status_list.max_index() {
+            return Err(SdCwtStatusVerifierError::IndexOutOfBounds(status_url.clone()).into());
+        }
+
+        let Some(status) = status_token.status_list.lst().get_raw(idx) else {
+            return Err(SdCwtStatusVerifierError::StatusIndexNotFound(idx, status_url.clone()).into());
+        };
+
+        if !status.is_valid() {
+            return Err(SdCwtStatusVerifierError::StatusInvalid(status_url.clone()).into());
+        }
+
+        self.verify_sd_kbt(raw_sd_kbt, params, holder_verifier, cks)
+    }
+
+    fn get_status(&mut self, status_url: &url::Url) -> impl Future<Output = Result<Option<&[u8]>, Self::Error>>;
+}
+
 #[cfg(test)]
 mod tests {
     use super::claims::CustomTokenClaims;
+    use crate::verifier::error::SdCwtStatusVerifierError;
     use crate::{
-        HolderParams, Issuer, IssuerParams, Presentation, RevocationParams, SdCwtVerifierError, TimeArg, Verifier, VerifierParams,
+        HolderParams, Issuer, IssuerParams, Presentation, SdCwtVerifierError, StatusParams, TimeArg, Verifier, VerifierParams,
         holder::Holder,
         signature_verifier::SignatureVerifierError,
         test_utils::{Ed25519Holder, Ed25519Issuer},
-        verifier::test_utils::HybridVerifier,
+        verifier::{VerifierWithStatus, params::StatusListVerifierParams, test_utils::HybridVerifier},
     };
     use ciborium::{Value, cbor};
     use cose_key_set::CoseKeySet;
     use esdicawt_spec::{CustomClaims, CwtAny, NoClaims, Select, verified::KbtCwtVerified};
+    use status_list::{OauthStatus, StatusList, issuer::StatusListIssuerParams};
 
     wasm_bindgen_test::wasm_bindgen_test_configure!(run_in_browser);
 
@@ -298,8 +371,8 @@ mod tests {
     fn should_verify_signature() {
         let holder_signing_key = ed25519_dalek::SigningKey::generate(&mut rand::thread_rng());
         let issuer_params = default_issuer_params(None::<Value>, &holder_signing_key);
-        let (cks, sd_kbt) = generate(issuer_params.clone(), default_holder_params::<NoClaims>(), &holder_signing_key);
-        let verifier = HybridVerifier::<Value, NoClaims> { _marker: Default::default() };
+        let (cks, sd_kbt, ..) = generate_sd_kbt(issuer_params.clone(), default_holder_params::<NoClaims>(), &holder_signing_key);
+        let verifier = HybridVerifier::<Value, NoClaims>::default();
 
         // verifying Holder signature
         let holder_verifying_key_bis = ed25519_dalek::SigningKey::generate(&mut rand::thread_rng()).verifying_key();
@@ -336,8 +409,8 @@ mod tests {
         holder_params.audience = "kbt-aud-a";
         holder_params.cnonce.replace(b"kbt-cnonce-a");
 
-        let (cks, sd_kbt) = generate(issuer_params.clone(), holder_params, &holder_signing_key);
-        let verifier = HybridVerifier::<Value, NoClaims> { _marker: Default::default() };
+        let (cks, sd_kbt, ..) = generate_sd_kbt(issuer_params.clone(), holder_params, &holder_signing_key);
+        let verifier = HybridVerifier::<Value, NoClaims>::default();
 
         // by default do not validate anything
         verifier.verify_sd_kbt(&sd_kbt, Default::default(), Some(&holder_verifying_key), &cks).unwrap();
@@ -488,20 +561,130 @@ mod tests {
         assert_eq!(verified.payload.extra.unwrap().foo, "bar".to_string());
     }
 
+    #[tokio::test]
+    #[wasm_bindgen_test::wasm_bindgen_test]
+    async fn should_verify_status() {
+        use status_list::issuer::StatusListIssuer;
+
+        let holder_signing_key = ed25519_dalek::SigningKey::generate(&mut rand::thread_rng());
+        let mut issuer_params = default_issuer_params(None::<Value>, &holder_signing_key);
+
+        let status_uri = "https://example.com/statuslists/1".parse::<url::Url>().unwrap();
+        issuer_params.status.uri = status_uri.clone();
+        issuer_params.status.status_list_bit_index = 64;
+
+        let (cks, sd_kbt, issuer_signing_key) = generate_sd_kbt(issuer_params.clone(), default_holder_params::<NoClaims>(), &holder_signing_key);
+        let status_list_cks = &cks; // since status_list_token is issued by the SD-KBT issuer
+        let mut verifier = HybridVerifier::<Value, NoClaims>::default();
+
+        let mut status_list = StatusList::<OauthStatus>::with_capacity(1 << 10, None);
+
+        let status_list_issuer_params = StatusListIssuerParams {
+            uri: status_uri.clone(),
+            artificial_time: None,
+            expiry: None,
+            ttl: None,
+            key_id: None,
+        };
+        let status_issuer = Ed25519Issuer::<Value> {
+            signer: issuer_signing_key,
+            _marker: Default::default(),
+        };
+        let status_token = status_issuer.issue_status_list_token(&status_list, status_list_issuer_params.clone()).unwrap();
+
+        // 1. nominal case, status_token is found, status at index is valid
+        verifier.insert_status_in_cache(&status_uri, status_token.to_cbor_bytes().unwrap());
+
+        let status_list_verifier_params = StatusListVerifierParams {
+            leeway: Default::default(),
+            time_verification: Default::default(),
+            artificial_time: None,
+        };
+        let verifier_params = VerifierParams {
+            expected_subject: None,
+            expected_issuer: None,
+            expected_audience: None,
+            expected_kbt_audience: None,
+            expected_cnonce: None,
+            sd_cwt_leeway: Default::default(),
+            sd_kbt_leeway: Default::default(),
+            sd_cwt_time_verification: Default::default(),
+            sd_kbt_time_verification: Default::default(),
+            artificial_time: None,
+        };
+        verifier
+            .verify_sd_kbt_with_status::<OauthStatus>(&sd_kbt, verifier_params, status_list_verifier_params, None, &cks, status_list_cks)
+            .await
+            .unwrap();
+
+        // 2. cache is empty, status_token not found
+        verifier.clear_cache();
+        let err = verifier
+            .verify_sd_kbt_with_status::<OauthStatus>(&sd_kbt, verifier_params, status_list_verifier_params, None, &cks, status_list_cks)
+            .await
+            .unwrap_err();
+        assert!(matches!(err, SdCwtVerifierError::StatusError(SdCwtStatusVerifierError::StatusNotFound(uri)) if uri == status_uri));
+
+        // 3. status at index is not valid
+        status_list.replace(64, OauthStatus::Invalid);
+        let status_token = status_issuer.issue_status_list_token(&status_list, status_list_issuer_params.clone()).unwrap();
+        verifier.insert_status_in_cache(&status_uri, status_token.to_cbor_bytes().unwrap());
+        let err = verifier
+            .verify_sd_kbt_with_status::<OauthStatus>(&sd_kbt, verifier_params, status_list_verifier_params, None, &cks, status_list_cks)
+            .await
+            .unwrap_err();
+        assert!(matches!(err, SdCwtVerifierError::StatusError(SdCwtStatusVerifierError::StatusInvalid(uri)) if uri == status_uri));
+
+        // 4. index is out of bounds
+        let short_status_list = StatusList::<OauthStatus>::with_capacity(1 << 6, None);
+        let short_status_token = status_issuer.issue_status_list_token(&short_status_list, status_list_issuer_params.clone()).unwrap();
+        verifier.insert_status_in_cache(&status_uri, short_status_token.to_cbor_bytes().unwrap());
+        let err = verifier
+            .verify_sd_kbt_with_status::<OauthStatus>(&sd_kbt, verifier_params, status_list_verifier_params, None, &cks, status_list_cks)
+            .await
+            .unwrap_err();
+        assert!(matches!(err, SdCwtVerifierError::StatusError(SdCwtStatusVerifierError::IndexOutOfBounds(uri)) if uri == status_uri));
+
+        // 5. ensure we don't have an off by one issue
+        issuer_params.status.status_list_bit_index = 63;
+        let (cks, sd_kbt, issuer_signing_key) = generate_sd_kbt(issuer_params.clone(), default_holder_params::<NoClaims>(), &holder_signing_key);
+        let status_list_cks = &cks;
+        let status_issuer = Ed25519Issuer::<Value> {
+            signer: issuer_signing_key,
+            _marker: Default::default(),
+        };
+        let status_token = status_issuer.issue_status_list_token(&status_list, status_list_issuer_params.clone()).unwrap();
+        verifier.insert_status_in_cache(&status_uri, status_token.to_cbor_bytes().unwrap());
+
+        verifier
+            .verify_sd_kbt_with_status::<OauthStatus>(&sd_kbt, verifier_params, status_list_verifier_params, None, &cks, status_list_cks)
+            .await
+            .unwrap();
+
+        // 6. should fail if status_token not signed by expected issuer
+        let fake_status_token_signer = ed25519_dalek::SigningKey::generate(&mut rand::thread_rng());
+        let fake_status_list_cks = CoseKeySet::new(&fake_status_token_signer.verifying_key()).unwrap();
+        let err = verifier
+            .verify_sd_kbt_with_status::<OauthStatus>(&sd_kbt, verifier_params, status_list_verifier_params, None, &cks, &fake_status_list_cks)
+            .await
+            .unwrap_err();
+        assert!(matches!(err, SdCwtVerifierError::StatusError(SdCwtStatusVerifierError::InvalidStatusTokenSignature(_))));
+    }
+
     fn verify<T: Select, U: CustomClaims>(issuer_params: IssuerParams<T>, holder_params: HolderParams<U>, holder_signing_key: &ed25519_dalek::SigningKey) -> KbtCwtVerified<T, U> {
-        let (cks, sd_kbt) = generate(issuer_params.clone(), holder_params, holder_signing_key);
-        let verifier = HybridVerifier::<T, U> { _marker: Default::default() };
+        let (cks, sd_kbt, ..) = generate_sd_kbt(issuer_params.clone(), holder_params, holder_signing_key);
+        let verifier = HybridVerifier::<T, U>::default();
         verifier
             .verify_sd_kbt(&sd_kbt, Default::default(), Some(&holder_signing_key.verifying_key()), &cks)
             .unwrap()
     }
 
     #[allow(clippy::type_complexity)]
-    fn generate<T: Select, U: CustomClaims>(
+    fn generate_sd_kbt<T: Select, U: CustomClaims>(
         issuer_params: IssuerParams<T>,
         holder_params: HolderParams<'_, U>,
         holder_signing_key: &ed25519_dalek::SigningKey,
-    ) -> (CoseKeySet, Vec<u8>) {
+    ) -> (CoseKeySet, Vec<u8>, ed25519_dalek::SigningKey) {
         let issuer_signing_key = ed25519_dalek::SigningKey::generate(&mut rand::thread_rng());
 
         let issuer = Ed25519Issuer::new(issuer_signing_key.clone());
@@ -511,7 +694,7 @@ mod tests {
         let cks = CoseKeySet::new(&issuer_signing_key).unwrap();
         let sd_cwt = holder.verify_sd_cwt(&sd_cwt, Default::default(), &cks).unwrap();
         let sd_kbt = holder.new_presentation(sd_cwt, holder_params).unwrap();
-        (cks, sd_kbt.to_cbor_bytes().unwrap())
+        (cks, sd_kbt.to_cbor_bytes().unwrap(), issuer_signing_key)
     }
 
     fn default_holder_params<'a, U: CustomClaims>() -> HolderParams<'a, U> {
@@ -547,7 +730,7 @@ mod tests {
             key_location: "https://auth.acme.io/issuer.cwk",
             holder_confirmation_key: (&holder_signing_key.verifying_key()).try_into().unwrap(),
             artificial_time: None,
-            revocation: RevocationParams {
+            status: StatusParams {
                 status_list_bit_index: 0,
                 uri: "https://example.com/statuslists/1".parse().unwrap(),
             },
@@ -598,12 +781,34 @@ pub mod claims {
 pub mod test_utils {
     use super::*;
     use esdicawt_spec::NoClaims;
+    use url::Url;
 
     // TODO: turn generic again
     #[allow(dead_code)]
-    #[derive(Debug, Clone, Default)]
+    #[derive(Debug, Clone)]
     pub struct HybridVerifier<DisclosedClaims: CustomClaims, KbtClaims: CustomClaims> {
+        pub status_cache: HashMap<url::Url, Vec<u8>>,
         pub _marker: core::marker::PhantomData<(DisclosedClaims, KbtClaims)>,
+    }
+
+    impl<T: Select, U: CustomClaims> Default for HybridVerifier<T, U> {
+        fn default() -> Self {
+            Self {
+                status_cache: Default::default(),
+                _marker: Default::default(),
+            }
+        }
+    }
+
+    #[allow(unused)]
+    impl<T: Select, U: CustomClaims> HybridVerifier<T, U> {
+        pub(crate) fn clear_cache(&mut self) {
+            self.status_cache.clear();
+        }
+
+        pub(crate) fn insert_status_in_cache(&mut self, status_url: &Url, status_token: Vec<u8>) {
+            self.status_cache.entry(status_url.clone()).insert_entry(status_token);
+        }
     }
 
     impl<T: Select, U: CustomClaims> Verifier for HybridVerifier<T, U> {
@@ -616,5 +821,11 @@ pub mod test_utils {
         type KbtPayloadClaims = U;
         type KbtProtectedClaims = NoClaims;
         type KbtUnprotectedClaims = NoClaims;
+    }
+
+    impl<T: Select, U: CustomClaims> VerifierWithStatus for HybridVerifier<T, U> {
+        async fn get_status(&mut self, status_url: &Url) -> Result<Option<&[u8]>, Self::Error> {
+            Ok(self.status_cache.get(status_url).map(Vec::as_slice))
+        }
     }
 }

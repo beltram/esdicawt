@@ -1,14 +1,14 @@
 use crate::spec::reexports::coset::{Algorithm, CoseSign1, iana, iana::EnumI64};
 
-pub fn validate_signature(cose_sign1_sd_cwt: &CoseSign1, keyset: &cose_key_set::CoseKeySet) -> Result<(), SignatureVerifierError> {
-    let alg = cose_sign1_sd_cwt.protected.header.alg.as_ref().ok_or(SignatureVerifierError::InvalidCwt)?;
+pub fn validate_signature(sign1: &CoseSign1, cks: &cose_key_set::CoseKeySet) -> Result<(), SignatureVerifierError> {
+    let alg = sign1.protected.header.alg.as_ref().ok_or(SignatureVerifierError::InvalidCwt)?;
     let alg = match alg {
         Algorithm::Assigned(i) => iana::Algorithm::from_i64(i.to_i64()).ok_or(SignatureVerifierError::UnsupportedAlgorithm)?,
         _ => return Err(SignatureVerifierError::UnsupportedAlgorithm),
     };
 
-    cose_sign1_sd_cwt.verify_signature(&[], |#[allow(unused_variables)] signature, #[allow(unused_variables)] raw_data| {
-        for key in keyset.find_keys(&alg) {
+    sign1.verify_signature(&[], |#[allow(unused_variables)] signature, #[allow(unused_variables)] raw_data| {
+        for key in cks.find_keys(&alg) {
             match key.crv() {
                 #[cfg(feature = "ed25519")]
                 Some(iana::EllipticCurve::Ed25519) => {
@@ -44,7 +44,7 @@ pub enum SignatureVerifierError {
     UnsupportedAlgorithm,
     #[error("Invalid CWT")]
     InvalidCwt,
-    #[error("No signer found for this SD-CWT in this KeySet")]
+    #[error("No signer found for this CWT in this CoseKeySet")]
     NoSigner,
     #[error(transparent)]
     CoseKeyError(#[from] cose_key::CoseKeyError),

@@ -13,6 +13,7 @@ pub struct StatusListIssuerParams {
     /// The time to live claim, if present, MUST specify the maximum amount of time, in seconds, that the Status List Token can be cached by a consumer before a fresh copy SHOULD be retrieved.
     /// The value of the claim MUST be a positive number
     pub ttl: Option<Duration>,
+    pub key_id: Option<Vec<u8>>,
 }
 
 #[derive(Debug, Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash)]

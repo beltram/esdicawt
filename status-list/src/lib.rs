@@ -1,7 +1,8 @@
 mod error;
 mod inner;
 mod lst;
-pub mod referenced;
+mod referenced;
+mod statuses;
 mod twiddling;
 
 #[cfg(feature = "issuer")]
@@ -11,13 +12,19 @@ use ciborium::Value;
 use serde::ser::SerializeMap;
 use std::hash::Hash;
 
-pub use error::{StatusListError, StatusListResult};
-pub use lst::Lst;
+pub use {
+    error::{StatusListError, StatusListResult},
+    lst::Lst,
+    referenced::{StatusClaim, StatusListClaim},
+    statuses::{OauthStatus, RawStatus},
+};
 
 pub type BitIndex = u64;
 
 pub trait Status: From<u8> + Into<u8> + Clone + Eq + PartialEq + Hash {
     const BITS: StatusBits;
+
+    fn is_valid(&self) -> bool;
 }
 
 /// Marker for statuses with a state representing that they have not yet been assigned a value
@@ -25,27 +32,9 @@ pub trait StatusUndefined {
     fn is_undefined(&self) -> bool;
 }
 
-/// Just an u8 with the right bounds for representing a Status
-#[derive(Debug, Copy, Clone, Eq, PartialEq, Hash)]
-pub struct RawStatus<const B: usize>(pub u8);
-
-impl<const B: usize> Status for RawStatus<B> {
-    const BITS: StatusBits = StatusBits::from_raw(B);
-}
-impl<const B: usize> From<RawStatus<B>> for u8 {
-    fn from(s: RawStatus<B>) -> Self {
-        s.0
-    }
-}
-impl<const B: usize> From<u8> for RawStatus<B> {
-    fn from(s: u8) -> Self {
-        Self(s)
-    }
-}
-
 /// see https://datatracker.ietf.org/doc/html/draft-ietf-oauth-status-list-11#section-4.3
 #[derive(Debug, Clone, Eq, PartialEq, Hash)]
-pub struct StatusList<S: Status> {
+pub struct StatusList<S: Status = u8> {
     /// Byte string (Major Type 2) that contains the status values for all the Referenced Tokens it conveys statuses for. The value MUST be the compressed byte array.
     lst: Lst<S>,
     /// Text string (Major Type 3) that contains a URI to retrieve the Status List Aggregation for this type of Referenced Token
@@ -53,9 +42,59 @@ pub struct StatusList<S: Status> {
 }
 
 impl<S: Status> StatusList<S> {
+    /// Create a new StatusList.
+    /// It is RECOMMENDED that the size of a Status List in bits is divisible in bytes (8 bits) without a remainder.
+    /// Arguments:
+    /// * capacity: in bits
+    pub fn with_capacity(bit_capacity: usize, aggregation_uri: Option<url::Url>) -> Self {
+        Self {
+            lst: Lst::with_capacity(bit_capacity),
+            aggregation_uri,
+        }
+    }
+
+    pub fn from_slice(bits: &[u8], aggregation_uri: Option<url::Url>) -> Self {
+        Self {
+            lst: Lst::from_slice(bits),
+            aggregation_uri,
+        }
+    }
+
+    pub fn from_vec(bits: Vec<u8>, aggregation_uri: Option<url::Url>) -> Self {
+        Self {
+            lst: Lst::from_vec(bits),
+            aggregation_uri,
+        }
+    }
+
     /// Builds a new StatusList from an existing immutable list
-    pub fn new(lst: Lst<S>, aggregation_uri: Option<url::Url>) -> Self {
+    pub fn from_lst(lst: Lst<S>, aggregation_uri: Option<url::Url>) -> Self {
         Self { lst, aggregation_uri }
+    }
+
+    /// Builds a new StatusList from an existing mutable list
+    #[cfg(feature = "issuer")]
+    pub fn from_lst_mut(lst: issuer::LstMut<S>, aggregation_uri: Option<url::Url>) -> Self {
+        Self { lst: lst.into(), aggregation_uri }
+    }
+
+    /// Flips a status.
+    /// Note: will only copy the underlying bytes if there is another StatusList with the same content ; this
+    /// should rarely happen with large enough lists (except at initialization which is expected).
+    #[cfg(feature = "issuer")]
+    pub fn replace(&mut self, index: BitIndex, new: impl Into<S>) -> Option<S> {
+        let mut lst_mut = issuer::LstMut::from(self.lst.clone());
+        let old_status = lst_mut.replace(index, new);
+        self.lst = lst_mut.into();
+        old_status
+    }
+
+    pub fn lst(&self) -> &Lst<S> {
+        &self.lst
+    }
+
+    pub fn max_index(&self) -> BitIndex {
+        self.lst.max_index()
     }
 }
 
@@ -115,7 +154,7 @@ impl<'de, S: Status> serde::Deserialize<'de> for StatusList<S> {
                     .map(|lst| Lst::<S>(lst, Default::default()))
                     .ok_or_else(|| serde::de::Error::custom("lst required in a StatusList"))?;
 
-                Ok(Self::Value::new(lst, aggregation_uri))
+                Ok(Self::Value::from_lst(lst, aggregation_uri))
             }
         }
 
@@ -207,7 +246,7 @@ mod tests {
     #[test]
     #[wasm_bindgen_test::wasm_bindgen_test]
     fn cbor_example() {
-        let status_list = StatusList::<RawStatus<1>>::new(Lst::from_slice(&[0xB9, 0xA3]), None);
+        let status_list = StatusList::<RawStatus<1>>::from_slice(&[0xB9, 0xA3], None);
         let expected = "a2646269747301636c73744a78dadbb918000217015d";
         let actual = status_list.to_cbor_bytes().unwrap().encode_hex::<String>();
 
@@ -217,7 +256,7 @@ mod tests {
     #[test]
     #[wasm_bindgen_test::wasm_bindgen_test]
     fn ser_de() {
-        let input = StatusList::<RawStatus<1>>::new(Lst::from_slice(&[0xB9, 0xA3]), Some("https://agg.com".parse().unwrap()));
+        let input = StatusList::<RawStatus<1>>::from_slice(&[0xB9, 0xA3], Some("https://agg.com".parse().unwrap()));
         let ser = input.to_cbor_bytes().unwrap();
         let output = StatusList::from_cbor_bytes(&ser).unwrap();
         assert_eq!(input, output);
