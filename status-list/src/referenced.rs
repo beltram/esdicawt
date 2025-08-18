@@ -21,7 +21,7 @@ impl StatusClaim {
 }
 
 #[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
-struct StatusListClaim {
+pub struct StatusListClaim {
     #[serde(rename = "idx")]
     idx: BitIndex,
     #[serde(rename = "uri")]

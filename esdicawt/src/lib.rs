@@ -12,7 +12,7 @@ pub use holder::{
     validation::{HolderValidationParams, SdCwtHolderValidationError},
 };
 #[cfg(feature = "status")]
-pub use issuer::params::RevocationParams;
+pub use issuer::params::StatusParams;
 pub use issuer::{
     Issuer,
     error::{SdCwtIssuerError, SdCwtIssuerResult},

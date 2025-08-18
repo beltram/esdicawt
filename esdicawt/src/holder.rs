@@ -285,7 +285,7 @@ impl<PayloadClaims: Select, Hasher: digest::Digest + Clone, ProtectedClaims: Cus
 #[cfg(test)]
 mod tests {
     use super::{claims::CustomTokenClaims, test_utils::Ed25519Holder, *};
-    use crate::{CwtStdLabel, Issuer, IssuerParams, Presentation, RevocationParams, TimeArg, holder::params::CborPath, issuer::test_utils::Ed25519Issuer};
+    use crate::{CwtStdLabel, Issuer, IssuerParams, Presentation, StatusParams, TimeArg, holder::params::CborPath, issuer::test_utils::Ed25519Issuer};
     use ciborium::cbor;
     use cose_key_set::CoseKeySet;
     use esdicawt_spec::{
@@ -326,7 +326,7 @@ mod tests {
             leeway: core::time::Duration::from_secs(1),
             holder_confirmation_key: (&holder_verifying_key).try_into().unwrap(),
             artificial_time: None,
-            revocation: RevocationParams {
+            status: StatusParams {
                 status_list_bit_index: 0,
                 uri: "https://example.com/statuslists/1".parse().unwrap(),
             },
@@ -394,7 +394,7 @@ mod tests {
             leeway: core::time::Duration::from_secs(1),
             holder_confirmation_key: (&holder_verifying_key).try_into().unwrap(),
             artificial_time: None,
-            revocation: RevocationParams {
+            status: StatusParams {
                 status_list_bit_index: 0,
                 uri: "https://example.com/statuslists/1".parse().unwrap(),
             },

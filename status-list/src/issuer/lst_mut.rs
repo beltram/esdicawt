@@ -1,55 +1,40 @@
-use crate::{BitIndex, Lst, Status, StatusBits, StatusListResult, StatusUndefined};
+use crate::{BitIndex, Lst, Status, StatusListResult, StatusUndefined};
 
 #[derive(Clone, Eq, PartialEq, Hash, serde::Serialize, serde::Deserialize)]
-pub struct LstMut<S: Status> {
-    status_list: bytes::BytesMut,
-    len: usize,
-    _marker: core::marker::PhantomData<S>,
-}
+#[repr(transparent)]
+pub struct LstMut<S: Status = u8>(bytes::BytesMut, core::marker::PhantomData<S>);
 
 impl<S: Status> LstMut<S> {
-    #[inline(always)]
-    pub fn new(bits: Vec<u8>) -> Self {
-        Self {
-            len: bits.len() / S::BITS.size() as usize,
-            status_list: bytes::Bytes::from(bits).into(),
-            _marker: Default::default(),
-        }
-    }
-
     /// Create a new StatusList.
     /// It is RECOMMENDED that the size of a Status List in bits is divisible in bytes (8 bits) without a remainder.
     /// Arguments:
     /// * capacity: in bits
-    pub fn with_capacity(capacity: usize) -> Self {
-        Self {
-            len: 0,
-            status_list: bytes::BytesMut::zeroed(capacity / 8),
-            _marker: Default::default(),
-        }
+    pub fn with_capacity(bit_capacity: usize) -> Self {
+        Self(bytes::BytesMut::zeroed(bit_capacity / 8), Default::default())
     }
 
     #[inline(always)]
-    pub fn status_list(&self) -> &[u8] {
-        &self.status_list
+    pub fn from_vec(bits: Vec<u8>) -> Self {
+        Self(bytes::Bytes::from(bits).into(), Default::default())
     }
 
-    pub fn from_slice(bits: &[u8], status_bits: StatusBits) -> Self {
-        Self {
-            len: bits.len() / status_bits.size() as usize,
-            status_list: bits.into(),
-            _marker: Default::default(),
-        }
-    }
-
-    #[allow(unused)]
-    fn status_list_compressed(&self) -> StatusListResult<Vec<u8>> {
-        crate::inner::status_list_compressed(self.status_list())
+    pub fn from_slice(bits: &[u8]) -> Self {
+        Self(bits.into(), Default::default())
     }
 
     #[allow(unused)]
     fn from_compressed(bytes: &[u8]) -> StatusListResult<Vec<u8>> {
         crate::inner::from_compressed(bytes)
+    }
+
+    #[inline(always)]
+    pub fn status_list(&self) -> &[u8] {
+        &self.0
+    }
+
+    #[allow(unused)]
+    fn status_list_compressed(&self) -> StatusListResult<Vec<u8>> {
+        crate::inner::status_list_compressed(self.status_list())
     }
 
     fn byte_offset(index: BitIndex) -> usize {
@@ -88,7 +73,7 @@ impl<S: Status> LstMut<S> {
 
     fn get_byte_mut(&mut self, index: BitIndex) -> Option<&mut u8> {
         let byte_offset = Self::byte_offset(index);
-        self.status_list.get_mut(byte_offset)
+        self.0.get_mut(byte_offset)
     }
 
     /// Highest bit index possible with the current list
@@ -107,7 +92,13 @@ impl<S: Status + StatusUndefined> LstMut<S> {
 
 impl<S: Status> From<LstMut<S>> for Lst<S> {
     fn from(lst: LstMut<S>) -> Self {
-        Self(lst.status_list.into(), Default::default())
+        Self(lst.0.into(), Default::default())
+    }
+}
+
+impl<S: Status> From<Lst<S>> for LstMut<S> {
+    fn from(lst: Lst<S>) -> Self {
+        Self(bytes::BytesMut::from(lst.0), Default::default())
     }
 }
 
@@ -122,7 +113,7 @@ mod tests {
     #[test]
     #[wasm_bindgen_test::wasm_bindgen_test]
     fn should_replace_in_example1() {
-        let mut status = LstMut::<RawStatus<1>>::new(vec![0xB9, 0xA3]);
+        let mut status = LstMut::<RawStatus<1>>::from_vec(vec![0xB9, 0xA3]);
         assert_eq!(status.get_raw_unchecked(0), 1.into());
         assert_eq!(status.replace(0, 0).unwrap(), 1.into());
         assert_eq!(status.get_raw_unchecked(0), 0.into());
@@ -152,7 +143,7 @@ mod tests {
     #[test]
     #[wasm_bindgen_test::wasm_bindgen_test]
     fn should_replace_in_example2() {
-        let mut status = LstMut::<RawStatus<2>>::new(vec![0xC9, 0x44, 0xF9]);
+        let mut status = LstMut::<RawStatus<2>>::from_vec(vec![0xC9, 0x44, 0xF9]);
         assert_eq!(status.get_raw_unchecked(0), 1.into());
         assert_eq!(status.replace(0, 3).unwrap(), 1.into());
         assert_eq!(status.get_raw_unchecked(0), 3.into());

@@ -2,20 +2,28 @@ use crate::{BitIndex, Status, StatusListResult, StatusUndefined};
 
 #[derive(Clone, Eq, PartialEq, Hash)]
 #[repr(transparent)]
-pub struct Lst<S: Status>(pub(crate) bytes::Bytes, pub(crate) core::marker::PhantomData<S>);
+pub struct Lst<S: Status = u8>(pub(crate) bytes::Bytes, pub(crate) core::marker::PhantomData<S>);
 
 impl<S: Status> Lst<S> {
-    pub fn new(bits: Vec<u8>) -> Self {
+    /// Create a new StatusList.
+    /// It is RECOMMENDED that the size of a Status List in bits is divisible in bytes (8 bits) without a remainder.
+    /// Arguments:
+    /// * capacity: in bits
+    pub fn with_capacity(bit_capacity: usize) -> Self {
+        Self(bytes::BytesMut::zeroed(bit_capacity / 8).into(), Default::default())
+    }
+
+    pub fn from_vec(bits: Vec<u8>) -> Self {
         Self(bits.into(), Default::default())
+    }
+
+    pub fn from_slice(bits: &[u8]) -> Self {
+        Self(bytes::Bytes::copy_from_slice(bits), Default::default())
     }
 
     #[inline(always)]
     pub fn status_list(&self) -> &[u8] {
         &self.0
-    }
-
-    pub fn from_slice(bits: &[u8]) -> Self {
-        Self(bytes::Bytes::copy_from_slice(bits), Default::default())
     }
 
     pub(crate) fn status_list_compressed(&self) -> StatusListResult<Vec<u8>> {
@@ -78,7 +86,7 @@ mod tests {
     #[test]
     #[wasm_bindgen_test::wasm_bindgen_test]
     fn example1() {
-        let status = Lst::<RawStatus<1>>::new(vec![0xB9, 0xA3]);
+        let status = Lst::<RawStatus<1>>::from_vec(vec![0xB9, 0xA3]);
         assert_eq!(status.get_raw_unchecked(0), RawStatus(1));
         assert_eq!(status.get_raw_unchecked(1), RawStatus(0));
         assert_eq!(status.get_raw_unchecked(2), RawStatus(0));
@@ -101,7 +109,7 @@ mod tests {
     #[test]
     #[wasm_bindgen_test::wasm_bindgen_test]
     fn example2() {
-        let status = Lst::<RawStatus<2>>::new(vec![0xC9, 0x44, 0xF9]);
+        let status = Lst::<RawStatus<2>>::from_vec(vec![0xC9, 0x44, 0xF9]);
         assert_eq!(status.get_raw_unchecked(0), RawStatus(1));
         assert_eq!(status.get_raw_unchecked(1), RawStatus(2));
         assert_eq!(status.get_raw_unchecked(2), RawStatus(0));
@@ -119,7 +127,7 @@ mod tests {
     #[test]
     #[wasm_bindgen_test::wasm_bindgen_test]
     fn should_roundtrip() {
-        let input = Lst::<RawStatus<1>>::new(vec![0xB9, 0xA3]);
+        let input = Lst::<RawStatus<1>>::from_vec(vec![0xB9, 0xA3]);
         let compressed = input.status_list_compressed().unwrap();
         let decompressed = Lst::<RawStatus<1>>::from_compressed(&compressed).unwrap();
         assert_eq!(input.status_list(), &decompressed);
@@ -139,6 +147,10 @@ mod tests {
 
         impl crate::Status for Status {
             const BITS: StatusBits = StatusBits::Two;
+
+            fn is_valid(&self) -> bool {
+                matches!(self, Self::Valid)
+            }
         }
         impl StatusUndefined for Status {
             fn is_undefined(&self) -> bool {
@@ -162,7 +174,7 @@ mod tests {
             }
         }
 
-        let mut lst = LstMut::<Status>::new(vec![0xff; 1_000_000]);
+        let mut lst = LstMut::<Status>::from_vec(vec![0xff; 1_000_000]);
         let mut rng = rand::thread_rng();
 
         // there's 0.1% chance this fails, fine :D

@@ -296,7 +296,7 @@ pub trait CustomClaims: std::fmt::Debug + PartialEq + CwtAny + Clone {}
 
 impl<T> CustomClaims for T where T: std::fmt::Debug + PartialEq + CwtAny + Clone {}
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Default, Debug, Clone, PartialEq, Eq)]
 pub struct NoClaims;
 
 impl serde::Serialize for NoClaims {

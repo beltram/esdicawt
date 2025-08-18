@@ -1,6 +1,7 @@
+use crate::issuer::StatusListToken;
 use crate::{
     CborAny, Status, StatusList, StatusListResult,
-    issuer::{StatusListIssuerParams, cose::model::StatusListTokenTagged, elapsed_since_epoch},
+    issuer::{StatusListIssuerParams, elapsed_since_epoch},
 };
 use ciborium::Value;
 use coset::{CborSerializable, TaggedCborSerializable, iana::CwtClaimName};
@@ -13,53 +14,27 @@ pub const LABEL_TYPE: i64 = 16;
 pub const MEDIATYPE_STATUS_LIST_CWT: &str = "application/statuslist+cwt";
 
 pub trait StatusListIssuer {
-    type Error: core::error::Error + Send + Sync;
-    type Hasher: digest::Digest + Clone;
-    type Signature: SignatureEncoding;
+    type StatusListIssuerError: core::error::Error + Send + Sync;
+    type StatusListIssuerHasher: digest::Digest + Clone;
+    type StatusListIssuerSignature: SignatureEncoding;
 
-    #[cfg(not(feature = "pem"))]
-    type Signer: Signer<Self::Signature> + Keypair;
+    type StatusListIssuerSigner: Signer<Self::StatusListIssuerSignature> + Keypair;
 
-    #[cfg(feature = "pem")]
-    type Signer: Signer<Self::Signature> + Keypair + pkcs8::DecodePrivateKey;
+    fn status_list_token_signer(&self) -> &Self::StatusListIssuerSigner;
 
-    fn new(signing_key: Self::Signer) -> Self
-    where
-        Self: Sized;
+    fn status_list_token_cwt_algorithm(&self) -> coset::iana::Algorithm;
 
-    #[cfg(feature = "pem")]
-    fn try_from_pem(pem: &str) -> Result<Self, Self::Error>
-    where
-        Self: Sized,
-        Self::Error: From<pkcs8::Error>,
-    {
-        use pkcs8::DecodePrivateKey as _;
-        let signer = Self::Signer::from_pkcs8_pem(pem)?;
-        Ok(Self::new(signer))
-    }
-
-    #[cfg(feature = "pem")]
-    fn try_from_der(der: &[u8]) -> Result<Self, Self::Error>
-    where
-        Self: Sized,
-        Self::Error: From<pkcs8::Error>,
-    {
-        use pkcs8::DecodePrivateKey as _;
-        let signer = Self::Signer::from_pkcs8_der(der)?;
-        Ok(Self::new(signer))
-    }
-
-    fn signer(&self) -> &Self::Signer;
-
-    fn cwt_algorithm(&self) -> coset::iana::Algorithm;
-
-    fn issue_raw_status_list_token<S: Status>(&self, status_list: StatusList<S>, params: StatusListIssuerParams) -> StatusListResult<Vec<u8>> {
+    fn issue_raw_status_list_token<S: Status>(&self, status_list: &StatusList<S>, mut params: StatusListIssuerParams) -> StatusListResult<Vec<u8>> {
         let protected = coset::HeaderBuilder::new()
-            .algorithm(self.cwt_algorithm())
+            .algorithm(self.status_list_token_cwt_algorithm())
             .value(LABEL_TYPE, Value::Text(MEDIATYPE_STATUS_LIST_CWT.to_string()))
             .build();
 
-        let unprotected = coset::HeaderBuilder::new().key_id(b"12".to_vec()).build();
+        let mut unprotected_builder = coset::HeaderBuilder::new();
+        if let Some(kid) = params.key_id.take() {
+            unprotected_builder = unprotected_builder.key_id(kid);
+        }
+        let unprotected = unprotected_builder.build();
 
         let mut payload = coset::cwt::ClaimsSetBuilder::new().subject(params.uri.to_string());
 
@@ -75,21 +50,21 @@ pub trait StatusListIssuer {
 
         let payload = payload.build().to_vec()?;
 
-        let sign1 = coset::CoseSign1Builder::new()
+        Ok(coset::CoseSign1Builder::new()
             .protected(protected)
             .unprotected(unprotected)
             .payload(payload)
             .try_create_signature(&[], |tbs| {
-                let signature = self.signer().try_sign(tbs)?;
+                let signature = self.status_list_token_signer().try_sign(tbs)?;
                 Result::<_, signature::Error>::Ok(signature.to_bytes().as_ref().to_vec())
             })?
             .build()
-            .to_tagged_vec()?;
-        Ok(sign1)
+            .to_tagged_vec()?)
     }
 
-    fn issue_status_list_token<S: Status>(&self, status_list: StatusList<S>, params: StatusListIssuerParams) -> StatusListResult<StatusListTokenTagged> {
-        StatusListTokenTagged::from_cbor_bytes(&self.issue_raw_status_list_token(status_list, params)?)
+    fn issue_status_list_token<S: Status>(&self, status_list: &StatusList<S>, params: StatusListIssuerParams) -> StatusListResult<StatusListToken<S>> {
+        let status_list_token = self.issue_raw_status_list_token(status_list, params)?;
+        StatusListToken::from_cbor_bytes(&status_list_token)
     }
 }
 
@@ -108,20 +83,21 @@ pub mod tests {
     fn should_pass_rfc_example() {
         let expected = "d2845820a2012610781a6170706c69636174696f6e2f7374617475736c6973742b637774a1044231325850a502782168747470733a2f2f6578616d706c652e636f6d2f7374617475736c697374732f31061a648c5bea041a8898dfea19fffe19a8c019fffda2646269747301636c73744a78dadbb918000217015d584030e39052d23cc3cdeca77c915d5e8763353565fa772c47f5176f77b5e406b11430b3dce2ae21c07f4491fc12acdd7ec82875099d28f035d9b1893e2825e63488";
         let signer = rfc_signer();
-        let issuer = P256StatusListIssuer::new(signer);
+        let issuer = P256StatusListIssuer { signer };
 
         let params = StatusListIssuerParams {
             uri: "https://example.com/statuslists/1".parse().unwrap(),
             artificial_time: Some(Duration::from_secs(1686920170)),
             expiry: Some(TimeArg::Absolute(Duration::from_secs(2291720170))),
             ttl: Some(Duration::from_secs(43200)),
+            key_id: Some(b"12".to_vec()),
         };
         let status_list = StatusList::<RawStatus<1>> {
             lst: Lst::from_slice(b"abcd"),
             aggregation_uri: None,
         };
 
-        let status_list_token = issuer.issue_raw_status_list_token(status_list, params).unwrap();
+        let status_list_token = issuer.issue_raw_status_list_token(&status_list, params).unwrap();
         let actual_token = coset::CoseSign1::from_tagged_slice(&status_list_token).unwrap();
         let _status_list_token_cbor = hex::encode(status_list_token);
 
@@ -156,23 +132,16 @@ pub mod tests {
     }
 
     impl StatusListIssuer for P256StatusListIssuer {
-        type Error = core::convert::Infallible;
-        type Hasher = sha2::Sha256;
-        type Signature = p256::ecdsa::Signature;
-        type Signer = p256::ecdsa::SigningKey;
+        type StatusListIssuerError = core::convert::Infallible;
+        type StatusListIssuerHasher = sha2::Sha256;
+        type StatusListIssuerSignature = p256::ecdsa::Signature;
+        type StatusListIssuerSigner = p256::ecdsa::SigningKey;
 
-        fn new(signer: Self::Signer) -> Self
-        where
-            Self: Sized,
-        {
-            Self { signer }
-        }
-
-        fn signer(&self) -> &Self::Signer {
+        fn status_list_token_signer(&self) -> &Self::StatusListIssuerSigner {
             &self.signer
         }
 
-        fn cwt_algorithm(&self) -> coset::iana::Algorithm {
+        fn status_list_token_cwt_algorithm(&self) -> coset::iana::Algorithm {
             coset::iana::Algorithm::ES256
         }
     }
