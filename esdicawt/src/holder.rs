@@ -92,7 +92,7 @@ pub trait Holder {
         // verify time claims
         #[cfg(not(feature = "test-vectors"))] // FIXME: draft samples are expired
         {
-            let now = params.artificial_time.unwrap_or_else(|| crate::elapsed_since_epoch());
+            let now = params.artificial_time.unwrap_or_else(crate::elapsed_since_epoch);
             let iat = payload.inner.issued_at;
             let exp = payload.inner.expiration;
             let nbf = payload.inner.not_before;
@@ -100,13 +100,13 @@ pub trait Holder {
         }
 
         // subject
-        if let Some((actual, expected)) = payload.inner.subject.as_ref().zip(params.expected_subject) {
-            if actual != expected {
-                return Err(SdCwtHolderError::ValidationError(SdCwtHolderValidationError::SubMismatch {
-                    actual: actual.to_owned(),
-                    expected: expected.to_owned(),
-                }));
-            }
+        if let Some((actual, expected)) = payload.inner.subject.as_ref().zip(params.expected_subject)
+            && actual != expected
+        {
+            return Err(SdCwtHolderError::ValidationError(SdCwtHolderValidationError::SubMismatch {
+                actual: actual.to_owned(),
+                expected: expected.to_owned(),
+            }));
         }
 
         // issuer
@@ -121,23 +121,23 @@ pub trait Holder {
         }
 
         // audience
-        if let Some((actual, expected)) = payload.inner.audience.as_ref().zip(params.expected_audience) {
-            if actual != expected {
-                return Err(SdCwtHolderError::ValidationError(SdCwtHolderValidationError::AudienceMismatch {
-                    actual: actual.to_owned(),
-                    expected: expected.to_owned(),
-                }));
-            }
+        if let Some((actual, expected)) = payload.inner.audience.as_ref().zip(params.expected_audience)
+            && actual != expected
+        {
+            return Err(SdCwtHolderError::ValidationError(SdCwtHolderValidationError::AudienceMismatch {
+                actual: actual.to_owned(),
+                expected: expected.to_owned(),
+            }));
         }
 
         // cnonce
-        if let Some((actual, expected)) = payload.inner.cnonce.as_ref().zip(params.expected_cnonce) {
-            if actual != expected {
-                return Err(SdCwtHolderError::ValidationError(SdCwtHolderValidationError::CnonceMismatch {
-                    actual: actual.to_vec(),
-                    expected: expected.to_owned(),
-                }));
-            }
+        if let Some((actual, expected)) = payload.inner.cnonce.as_ref().zip(params.expected_cnonce)
+            && actual != expected
+        {
+            return Err(SdCwtHolderError::ValidationError(SdCwtHolderValidationError::CnonceMismatch {
+                actual: actual.to_vec(),
+                expected: expected.to_owned(),
+            }));
         }
 
         // key confirmation
@@ -180,7 +180,7 @@ pub trait Holder {
         #[cfg(not(feature = "test-vectors"))] // FIXME: draft samples are expired
         {
             let payload = sd_cwt.0.0.payload.to_value()?;
-            let now = params.artificial_time.unwrap_or_else(|| crate::elapsed_since_epoch());
+            let now = params.artificial_time.unwrap_or_else(crate::elapsed_since_epoch);
             let iat = payload.inner.issued_at;
             let exp = payload.inner.expiration;
             let nbf = payload.inner.not_before;

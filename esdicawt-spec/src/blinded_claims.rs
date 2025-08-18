@@ -273,7 +273,7 @@ impl SaltedArray {
         self.0.iter_mut().map(InlinedCbor::to_value_mut)
     }
 
-    pub fn digested<Hasher: digest::Digest>(&self) -> EsdicawtSpecResult<HashMap<Vec<u8>, Cow<Salted<Value>>>> {
+    pub fn digested<Hasher: digest::Digest>(&self) -> EsdicawtSpecResult<HashMap<Vec<u8>, Cow<'_, Salted<Value>>>> {
         self.as_iter()
             .map(|d| match d {
                 Ok(salted) => {
