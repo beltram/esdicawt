@@ -30,8 +30,13 @@ pub enum CoseKeyError {
     CborSerializationError(#[from] ciborium::ser::Error<std::io::Error>),
     #[error(transparent)]
     CborValueError(#[from] ciborium::value::Error),
+    #[cfg(feature = "pem")]
+    #[error(transparent)]
+    Pkcs8Error(#[from] pkcs8::spki::Error),
     #[error("Signature error {0}")]
     SignatureError(String),
+    #[error(transparent)]
+    InfallibleError(#[from] core::convert::Infallible),
 }
 
 #[cfg(feature = "ed25519")]

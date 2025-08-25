@@ -120,6 +120,27 @@ impl KeyConfirmation {
     }
 }
 
+#[cfg(feature = "pem")]
+mod pem {
+    use super::*;
+    use cose_key::{CoseKey, CoseKeyError};
+
+    impl pkcs8::EncodePublicKey for KeyConfirmation {
+        fn to_public_key_der(&self) -> pkcs8::spki::Result<pkcs8::Document> {
+            match self {
+                Self::CoseKey(cose_key) => cose_key.to_public_key_der(),
+                _ => Err(pkcs8::spki::Error::AlgorithmParametersMissing),
+            }
+        }
+    }
+
+    impl KeyConfirmation {
+        pub fn from_public_key_pem<K: pkcs8::DecodePublicKey + TryInto<CoseKey, Error = E>, E: Into<CoseKeyError>>(s: &str) -> Result<Self, error::CoseKeyConfirmationError> {
+            Ok(Self::CoseKey(CoseKey::from_public_key_pem::<K, E>(s)?))
+        }
+    }
+}
+
 #[cfg(feature = "thumbprint")]
 impl KeyConfirmation {
     pub fn new_thumbprint(pk: impl TryInto<cose_key::CoseKey, Error: Into<error::CoseKeyConfirmationError>>) -> Result<Self, error::CoseKeyConfirmationError> {
