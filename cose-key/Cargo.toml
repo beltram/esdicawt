@@ -20,14 +20,13 @@ ciborium.workspace = true
 ed25519-dalek = { workspace = true, optional = true }
 p256 = { workspace = true, optional = true }
 p384 = { workspace = true, optional = true }
-pkcs8 = { workspace = true, optional = true }
+pkcs8 = { workspace = true, optional = true, features = ["std"] }
 
 [dev-dependencies]
 rand.workspace = true
 cose-key = { path = ".", features = ["ed25519", "p256", "p384", "pem"] }
 ed25519-dalek = { workspace = true, features = ["rand_core"] }
 getrandom = { workspace = true, features = ["js"] }
-
 
 [lints]
 workspace = true
