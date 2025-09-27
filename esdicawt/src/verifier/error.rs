@@ -46,12 +46,6 @@ pub enum SdCwtVerifierError<CustomError: Send + Sync> {
     UnexpectedKeyConfirmation,
     #[error("Disclosure hash collision")]
     DisclosureHashCollision,
-    #[error("CWT 'iat' is in the future")]
-    ClockDrift,
-    #[error("CWT not valid yet")]
-    NotValidYet,
-    #[error("CWT expired")]
-    Expired,
     #[error("Malformed SD-CWT because {0}")]
     MalformedSdCwt(&'static str),
     #[error(transparent)]
