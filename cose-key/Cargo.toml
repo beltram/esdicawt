@@ -1,8 +1,8 @@
 [package]
 name = "cose-key"
-edition = "2021"
+edition.workspace = true
 version.workspace = true
-description.workspace = true
+description = "CoseKey [RFC 8152]"
 authors.workspace = true
 
 [dependencies]

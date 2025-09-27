@@ -1,19 +1,19 @@
 [package]
 name = "spice-oidc-cwt"
-edition = "2021"
+edition.workspace = true
 version.workspace = true
-description.workspace = true
+description = "OIDC standard claims for CWTs"
 authors.workspace = true
 
 [dependencies]
-esdicawt = { path = "../esdicawt" }
-esdicawt-spec = { path = "../esdicawt-spec" }
+esdicawt.workspace = true
+esdicawt-spec.workspace = true
 serde = { workspace = true, features = ["derive"] }
-serde_json = { version = "1.0", features = ["preserve_order"] }
+serde_json = { workspace = true, features = ["preserve_order"] }
 url = { workspace = true, features = ["serde"] }
 
 [dev-dependencies]
-esdicawt = { path = "../esdicawt", features = ["test-utils", "ed25519", "p256", "p384"] }
+esdicawt = { workspace = true, features = ["test-utils", "ed25519", "p256", "p384"] }
 rand.workspace = true
 ed25519-dalek = { workspace = true, features = ["rand_core"] }
 sha2.workspace = true

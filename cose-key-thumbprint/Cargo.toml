@@ -1,12 +1,12 @@
 [package]
 name = "cose-key-thumbprint"
-edition = "2021"
+edition.workspace = true
 version.workspace = true
-description.workspace = true
+description = "CoseKey Thumbprint [RFC 9679]"
 authors.workspace = true
 
 [dependencies]
-cose-key = { path = "../cose-key", features = ["deterministic-encoding"] }
+cose-key = { workspace = true, features = ["deterministic-encoding"] }
 hex.workspace = true
 coset.workspace = true
 ciborium.workspace = true
@@ -26,7 +26,7 @@ ed25519-dalek = { workspace = true, features = ["rand_core"] }
 p256.workspace = true
 p384.workspace = true
 rand.workspace = true
-cose-key = { path = "../cose-key", features = ["p256", "p384", "ed25519"] }
+cose-key = { workspace = true, features = ["p256", "p384", "ed25519"] }
 
 [features]
 default = []
