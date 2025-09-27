@@ -4,8 +4,8 @@ use crate::{
 };
 
 use super::{SdCwtPayload, SdCwtPayloadBuilder, SelectiveDisclosurePayload};
-use serde::ser::SerializeMap;
 use cose_key_confirmation::KeyConfirmation;
+use serde::ser::SerializeMap;
 
 impl<E: CustomClaims> serde::Serialize for SelectiveDisclosurePayload<E> {
     fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {

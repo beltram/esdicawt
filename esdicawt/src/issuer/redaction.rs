@@ -147,11 +147,11 @@ where
 mod tests {
     use super::*;
     use ciborium::cbor;
-    use rand_chacha::rand_core::SeedableRng as _;
     use esdicawt_spec::{
         blinded_claims::{Decoy, SaltedClaim, SaltedElement},
         REDACTED_CLAIM_ELEMENT_TAG,
     };
+    use rand_chacha::rand_core::SeedableRng as _;
     use sha2::Digest as _;
 
     #[test]

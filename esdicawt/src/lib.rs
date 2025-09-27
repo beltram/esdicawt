@@ -1,4 +1,6 @@
 pub use {
+    cose_key_confirmation::{error::CoseKeyConfirmationError, EncryptedCoseKey, KeyConfirmation},
+    esdicawt_spec as spec,
     holder::{
         error::{SdCwtHolderError, SdCwtHolderResult},
         params::{CwtPresentationParams, Presentation},
@@ -8,9 +10,7 @@ pub use {
         error::{SdCwtIssuerError, SdCwtIssuerResult},
         IssueCwtParams, Issuer,
     },
-    read::{SdCwtRead, EsdicawtReadError, EsdicawtReadResult},
-    cose_key_confirmation::{error::CoseKeyConfirmationError, EncryptedCoseKey, KeyConfirmation},
-    esdicawt_spec as spec,
+    read::{EsdicawtReadError, EsdicawtReadResult, SdCwtRead},
     signature::Keypair,
     verifier::{
         error::{SdCwtVerifierError, SdCwtVerifierResult},

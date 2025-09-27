@@ -1,6 +1,6 @@
-use cose_key_confirmation::KeyConfirmation;
 use crate::alg::Algorithm;
 use crate::{blinded_claims::SaltedArray, inlined_cbor::InlinedCbor, redacted_claims::RedactedClaimKeys, CustomClaims, EsdicawtSpecResult, SelectiveDisclosureHashAlg};
+use cose_key_confirmation::KeyConfirmation;
 
 mod sd_issued_payload_codec;
 mod sd_payload_codec;

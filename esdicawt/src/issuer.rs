@@ -205,8 +205,8 @@ pub mod tests {
     };
     use ciborium::{cbor, Value};
     use digest::Digest as _;
-    use rand_core::SeedableRng;
     use esdicawt_spec::{blinded_claims::Salted, issuance::SelectiveDisclosureIssuedTagged, AnyMap, ClaimName, CustomClaims, CwtAny, MapKey, NoClaims};
+    use rand_core::SeedableRng;
 
     #[test]
     fn should_generate_sd_cwt() {
