@@ -295,7 +295,6 @@ pub trait Select: CustomClaims {
     where
         <Self as Select>::Error: From<ciborium::value::Error>,
     {
-        // by default, do not select anything
         let mut value = Value::serialized(&self)?;
         let value = select_all(&mut value);
         Ok(value)
