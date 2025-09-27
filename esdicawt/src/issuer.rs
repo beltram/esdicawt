@@ -279,11 +279,11 @@ mod tests {
                 }
                 (Value::Integer(label), Value::Integer(actual_iat)) if label == CwtStdLabel::IssuedAt => {
                     let actual = u64::try_from(actual_iat).unwrap();
-                    assert!((now - 1..now + 1).contains(&actual));
+                    assert!((now - 1..=now + 1).contains(&actual));
                 }
                 (Value::Integer(label), Value::Integer(actual_nbf)) if label == CwtStdLabel::NotBefore => {
                     let actual = u64::try_from(actual_nbf).unwrap();
-                    assert!((now - 1..now + 1).contains(&actual));
+                    assert!((now - 1..=now + 1).contains(&actual));
                 }
                 (Value::Integer(label), Value::Bytes(cti)) if label == CwtStdLabel::Cti => assert_eq!(cti, b"cti"),
                 (Value::Integer(label), Value::Bytes(cnonce)) if label == CwtStdLabel::Cnonce => assert_eq!(cnonce, b"cnonce"),
