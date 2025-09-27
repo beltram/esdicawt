@@ -38,7 +38,7 @@ p384 = { optional = true, workspace = true }
 js-sys = "0.3"
 
 [dev-dependencies]
-esdicawt = { workspace = true, features = ["pem", "der", "test-utils"] }
+esdicawt = { workspace = true, features = ["pem", "der", "test-utils", "test-vectors"] }
 serde = { workspace = true, features = ["derive"] }
 cose-key-confirmation = { workspace = true, features = ["ed25519", "p256", "p384"] }
 rand_chacha.workspace = true
@@ -47,7 +47,7 @@ thiserror.workspace = true
 wasm-bindgen-test.workspace = true
 hex.workspace = true
 spice-oidc-cwt = { workspace = true }
-anyhow.workspace = true
+derive_builder.workspace = true
 
 [lints]
 workspace = true

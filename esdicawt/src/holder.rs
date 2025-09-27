@@ -34,7 +34,6 @@ pub trait Holder {
 
     fn cwt_algorithm(&self) -> coset::iana::Algorithm;
     fn hash_algorithm(&self) -> SdHashAlg;
-    fn hash(&self, msg: &[u8]) -> Vec<u8>;
 
     /// Build a new instance of a Holder by providing a signing key
     fn new(signing_key: Self::Signer) -> Self
@@ -113,9 +112,13 @@ pub trait Holder {
         .map_err(|_| SdCwtHolderError::ImplementationError("Failed mapping kbt protected to COSE header"))?;
 
         // --- payload ---
-        let now = unix_timestamp(Some(params.leeway));
-        let expiration = Some((now + params.expiry.as_secs()) as i64);
-        let not_before = Some(now as i64);
+        #[cfg(feature = "test-vectors")]
+        let now = params.now.map(|d| d.as_secs()).unwrap_or_else(now);
+        #[cfg(not(feature = "test-vectors"))]
+        let now = now();
+
+        let expiration = params.expiry.map(|exp| (now + exp.as_secs()) as i64);
+        let not_before = params.with_not_before.then_some(now as i64);
         let issued_at = now as i64;
 
         let payload = KbtPayload {
@@ -139,10 +142,6 @@ pub trait Holder {
             .to_tagged_vec()?;
         Ok(KbtCwtTagged::from_cbor_bytes(&sign1)?)
     }
-}
-
-pub fn unix_timestamp(leeway: Option<core::time::Duration>) -> u64 {
-    now() - leeway.unwrap_or_default().as_secs()
 }
 
 #[cfg(test)]
@@ -175,12 +174,18 @@ mod tests {
             protected_claims: None,
             unprotected_claims: None,
             payload: Some(payload),
-            subject: "mimi://example.com/u/alice.smith",
             issuer: "mimi://example.com/i/acme.io",
+            subject: Some("mimi://example.com/u/alice.smith"),
+            audience: Default::default(),
+            cti: Default::default(),
+            cnonce: Default::default(),
             key_location: "https://auth.acme.io/issuer.cwk",
-            expiry: core::time::Duration::from_secs(90),
+            expiry: Some(core::time::Duration::from_secs(90)),
+            with_not_before: false,
+            with_issued_at: false,
             leeway: core::time::Duration::from_secs(1),
             holder_confirmation_key: (&holder_signing_key.verifying_key()).try_into().unwrap(),
+            now: None,
         };
         let sd_cwt = issuer.issue_cwt(&mut csprng, issue_params).unwrap().to_cbor_bytes().unwrap();
 
@@ -195,11 +200,13 @@ mod tests {
         let presentation_params = HolderParams {
             presentation,
             audience: "mimi://example.com/r/alice-bob-group",
-            expiry: core::time::Duration::from_secs(90 * 24 * 3600),
+            expiry: Some(core::time::Duration::from_secs(90 * 24 * 3600)),
+            with_not_before: false,
             leeway: core::time::Duration::from_secs(3600),
             extra_kbt_unprotected: None,
             extra_kbt_protected: None,
             extra_kbt_payload: None,
+            now: None,
         };
 
         let mut sd_cwt_kbt = holder.new_presentation(&sd_cwt, presentation_params).unwrap();
@@ -309,11 +316,6 @@ pub mod test_utils {
 
         fn hash_algorithm(&self) -> esdicawt_spec::SdHashAlg {
             esdicawt_spec::SdHashAlg::Sha256
-        }
-
-        fn hash(&self, msg: &[u8]) -> Vec<u8> {
-            use digest::Digest as _;
-            sha2::Sha256::digest(msg).to_vec()
         }
     }
 }

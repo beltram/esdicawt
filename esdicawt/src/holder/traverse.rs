@@ -317,7 +317,7 @@ mod tests {
     fn array() {
         let [array, a] = traverse([
             salted!(obj => "array", cbor!([
-                Required::<_, 60>(salted!(digest => cbor!("a"))),
+                Required::<_, 59>(salted!(digest => cbor!("a"))),
             ])),
             salted!("a"),
         ]);
@@ -330,7 +330,7 @@ mod tests {
         let [array, a] = traverse([
             salted!("a"),
             salted!(obj => "array", cbor!([
-                Required::<_, 60>(salted!(digest => cbor!("a"))),
+                Required::<_, 59>(salted!(digest => cbor!("a"))),
             ])),
         ]);
         assert_eq!(array, vec![CborPath::Str("array".into())]);
@@ -341,8 +341,8 @@ mod tests {
     fn array_many_elements() {
         let [array, a, b] = traverse([
             salted!(obj => "array", cbor!([
-                Required::<_, 60>(salted!(digest => cbor!("a"))),
-                Required::<_, 60>(salted!(digest => cbor!("b"))),
+                Required::<_, 59>(salted!(digest => cbor!("a"))),
+                Required::<_, 59>(salted!(digest => cbor!("b"))),
             ])),
             salted!("a"),
             salted!("b"),
@@ -356,12 +356,12 @@ mod tests {
     fn array_nested_redacted_array() {
         let [array1, array2, a] = traverse([
             salted!(obj => "array", cbor!([
-                Required::<_, 60>(salted!(digest => cbor!([
-                    Required::<_, 60>(salted!(digest => cbor!("a")))
+                Required::<_, 59>(salted!(digest => cbor!([
+                    Required::<_, 59>(salted!(digest => cbor!("a")))
                 ]))),
             ])),
             salted!(obj => cbor!([
-                Required::<_, 60>(salted!(digest => cbor!("a")))
+                Required::<_, 59>(salted!(digest => cbor!("a")))
             ])),
             salted!("a"),
         ]);
@@ -375,11 +375,11 @@ mod tests {
         let [array, a, b, c] = traverse([
             salted!(obj => "array", cbor!([
                 [
-                    Required::<_, 60>(salted!(digest => cbor!("a"))),
-                    Required::<_, 60>(salted!(digest => cbor!("b"))),
+                    Required::<_, 59>(salted!(digest => cbor!("a"))),
+                    Required::<_, 59>(salted!(digest => cbor!("b"))),
                 ],
                 [
-                    Required::<_, 60>(salted!(digest => cbor!("c"))),
+                    Required::<_, 59>(salted!(digest => cbor!("c"))),
                 ],
             ])),
             salted!("a"),
@@ -398,7 +398,7 @@ mod tests {
             salted!(obj => "array", cbor!([
                 [
                     [
-                        Required::<_, 60>(salted!(digest => cbor!("a"))),
+                        Required::<_, 59>(salted!(digest => cbor!("a"))),
                     ]
                 ]
             ])),
@@ -412,7 +412,7 @@ mod tests {
     fn array_nested_redacted_mapping() {
         let [array, map, a] = traverse([
             salted!(obj => "array", cbor!([
-                Required::<_, 60>(salted!(digest => cbor!({
+                Required::<_, 59>(salted!(digest => cbor!({
                     Simple(59) => [salted!(digest => "a", cbor!(1))]
                 }))),
             ])),
