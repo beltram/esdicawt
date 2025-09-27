@@ -19,6 +19,7 @@ pub const COSE_SD_KBT: i64 = 18;
 /// Used for redacted claims in an array
 /// TODO: Pending IANA registration. Later on we should get it via coset
 pub const REDACTED_CLAIM_ELEMENT_TAG: u64 = 60;
+pub const TO_BE_REDACTED_TAG: u64 = 58;
 
 pub const CWT_CLAIM_ALG: i64 = 1;
 pub const CWT_CLAIM_SD_ALG: i64 = 12;
@@ -67,10 +68,13 @@ pub enum EsdicawtSpecError {
     CborSerializationError(#[from] ciborium::ser::Error<std::io::Error>),
     #[error(transparent)]
     CborValueError(#[from] ciborium::value::Error),
+    #[error("{0}")]
+    ImplementationError(&'static str),
 }
 
 pub type EsdicawtSpecResult<T> = Result<T, EsdicawtSpecError>;
 
+use crate::redacted_claims::RedactedClaimKeys;
 pub use ciborium::{Value, cbor};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, serde_repr::Serialize_repr, serde_repr::Deserialize_repr)]
@@ -140,13 +144,35 @@ impl TryFrom<i64> for KbtStandardClaim {
     }
 }
 
-#[derive(Debug, Clone, Hash, PartialEq, Eq)]
+#[derive(Clone, Hash, PartialEq, Eq)]
 pub enum ClaimName {
     Integer(i64),
     Text(String),
     TaggedInteger(u64, i64),
     TaggedText(u64, String),
     SimpleValue(u8),
+}
+
+impl ClaimName {
+    pub fn untag(&self) -> Option<Self> {
+        match self {
+            Self::TaggedText(tag, label) if *tag == TO_BE_REDACTED_TAG => Some(Self::Text(label.to_owned())),
+            Self::TaggedInteger(tag, label) if *tag == TO_BE_REDACTED_TAG => Some(Self::Integer(label.to_owned())),
+            _ => None,
+        }
+    }
+}
+
+impl std::fmt::Debug for ClaimName {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Integer(i) => write!(f, "{i}"),
+            Self::Text(s) => write!(f, "{s}"),
+            Self::TaggedInteger(t, i) => write!(f, "#6.{t}({i})"),
+            Self::TaggedText(t, s) => write!(f, "#6.{t}({s})"),
+            Self::SimpleValue(st) => write!(f, "simple({st})"),
+        }
+    }
 }
 
 impl serde::Serialize for ClaimName {
@@ -216,6 +242,7 @@ impl<T> CwtAny for T where T: serde::Serialize + for<'de> serde::Deserialize<'de
 pub type AnyMap = HashMap<MapKey, Value>;
 
 pub trait CustomClaims: std::fmt::Debug + CwtAny + Clone + Into<AnyMap> + TryFrom<AnyMap> {}
+
 impl<T> CustomClaims for T where T: std::fmt::Debug + CwtAny + Clone + Into<AnyMap> + TryFrom<AnyMap> {}
 
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
@@ -259,4 +286,109 @@ impl std::ops::DerefMut for Salt {
     fn deref_mut(&mut self) -> &mut Self::Target {
         &mut self.0
     }
+}
+
+pub trait Select: CustomClaims {
+    type Error: std::error::Error;
+
+    fn select(self) -> Result<SelectiveDisclosure, <Self as Select>::Error>
+    where
+        <Self as Select>::Error: From<ciborium::value::Error>,
+    {
+        // by default, do not select anything
+        let mut value = Value::serialized(&self)?;
+        let value = select_all(&mut value);
+        Ok(value)
+    }
+}
+
+pub fn select_all(value: &mut Value) -> SelectiveDisclosure {
+    let value = match value {
+        Value::Map(map) => {
+            for (l, v) in map {
+                match v {
+                    Value::Map(_) | Value::Array(_) => *v = select_all(v).0,
+                    _ => {}
+                };
+                *l = sd(l.clone())
+            }
+            value
+        }
+        Value::Array(array) => {
+            for item in array {
+                select_all(item);
+            }
+            value
+        }
+        v => {
+            *v = sd(v.clone());
+            v
+        }
+    };
+    value.clone().into()
+}
+
+pub fn select_root(value: &mut Value) -> SelectiveDisclosure {
+    let value = match value {
+        Value::Map(map) => {
+            for (l, _) in map {
+                *l = sd(l.clone())
+            }
+            value
+        }
+        value => value,
+    };
+    value.clone().into()
+}
+
+pub fn select_none(value: &mut Value) -> SelectiveDisclosure {
+    value.clone().into()
+}
+
+impl Select for AnyMap {
+    type Error = EsdicawtSpecError;
+}
+
+// TODO:
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+#[serde(transparent)]
+pub struct SelectiveDisclosure(pub Value);
+
+impl SelectiveDisclosure {
+    pub fn take_rcks(&mut self) -> Result<Option<RedactedClaimKeys>, EsdicawtSpecError> {
+        let map = self.0.as_map_mut().ok_or(EsdicawtSpecError::ImplementationError("SD-CWT payload must be a mapping"))?;
+
+        let mut found_rcks = None;
+        for (i, (label, value)) in map.iter().enumerate() {
+            if let (Value::Simple(CWT_LABEL_REDACTED_KEYS), array @ Value::Array(_)) = (label, value) {
+                let rcks = Value::deserialized::<RedactedClaimKeys>(array)?;
+                found_rcks = Some((i, rcks))
+            }
+        }
+
+        if let Some((pos, rcks)) = found_rcks {
+            map.remove(pos);
+            Ok(Some(rcks))
+        } else {
+            Ok(None)
+        }
+    }
+}
+
+impl std::ops::Deref for SelectiveDisclosure {
+    type Target = Value;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+impl From<Value> for SelectiveDisclosure {
+    fn from(v: Value) -> Self {
+        Self(v)
+    }
+}
+
+pub fn sd(v: Value) -> Value {
+    Value::Tag(TO_BE_REDACTED_TAG, Box::new(v))
 }

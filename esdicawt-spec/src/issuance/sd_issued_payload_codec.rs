@@ -2,11 +2,9 @@ use ciborium::Value;
 use serde::ser::SerializeSeq;
 
 use super::SdCwtIssued;
-use crate::{CustomClaims, issuance::SdCwtIssuedBuilder};
+use crate::{CustomClaims, Select, issuance::SdCwtIssuedBuilder};
 
-impl<DisclosableClaims: CustomClaims, ProtectedClaims: CustomClaims, UnprotectedClaims: CustomClaims, PayloadClaims: CustomClaims> serde::Serialize
-    for SdCwtIssued<DisclosableClaims, ProtectedClaims, UnprotectedClaims, PayloadClaims>
-{
+impl<ProtectedClaims: CustomClaims, UnprotectedClaims: CustomClaims, PayloadClaims: Select> serde::Serialize for SdCwtIssued<ProtectedClaims, UnprotectedClaims, PayloadClaims> {
     fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
         let mut seq = serializer.serialize_seq(Some(4))?;
         seq.serialize_element(&self.protected)?;
@@ -17,18 +15,18 @@ impl<DisclosableClaims: CustomClaims, ProtectedClaims: CustomClaims, Unprotected
     }
 }
 
-impl<'de, DisclosableClaims: CustomClaims, ProtectedClaims: CustomClaims, UnprotectedClaims: CustomClaims, PayloadClaims: CustomClaims> serde::Deserialize<'de>
-    for SdCwtIssued<DisclosableClaims, ProtectedClaims, UnprotectedClaims, PayloadClaims>
+impl<'de, ProtectedClaims: CustomClaims, UnprotectedClaims: CustomClaims, PayloadClaims: Select> serde::Deserialize<'de>
+    for SdCwtIssued<ProtectedClaims, UnprotectedClaims, PayloadClaims>
 {
     fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-        struct SdIssuedVisitor<DisclosableClaims: CustomClaims, ProtectedClaims: CustomClaims, UnprotectedClaims: CustomClaims, PayloadClaims: CustomClaims>(
-            std::marker::PhantomData<(ProtectedClaims, UnprotectedClaims, PayloadClaims, DisclosableClaims)>,
+        struct SdIssuedVisitor<ProtectedClaims: CustomClaims, UnprotectedClaims: CustomClaims, PayloadClaims: Select>(
+            std::marker::PhantomData<(ProtectedClaims, UnprotectedClaims, PayloadClaims)>,
         );
 
-        impl<'de, DisclosableClaims: CustomClaims, ProtectedClaims: CustomClaims, UnprotectedClaims: CustomClaims, PayloadClaims: CustomClaims> serde::de::Visitor<'de>
-            for SdIssuedVisitor<DisclosableClaims, ProtectedClaims, UnprotectedClaims, PayloadClaims>
+        impl<'de, ProtectedClaims: CustomClaims, UnprotectedClaims: CustomClaims, PayloadClaims: Select> serde::de::Visitor<'de>
+            for SdIssuedVisitor<ProtectedClaims, UnprotectedClaims, PayloadClaims>
         {
-            type Value = SdCwtIssued<DisclosableClaims, ProtectedClaims, UnprotectedClaims, PayloadClaims>;
+            type Value = SdCwtIssued<ProtectedClaims, UnprotectedClaims, PayloadClaims>;
 
             fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
                 write!(formatter, "a sd-issued payload")
@@ -69,10 +67,7 @@ impl<'de, DisclosableClaims: CustomClaims, ProtectedClaims: CustomClaims, Unprot
                     index += 1;
                 }
 
-                issued_builder
-                    ._disclosable(Default::default())
-                    .build()
-                    .map_err(|e| A::Error::custom(format!("Cannot build sd-issued: {e}")))
+                issued_builder.build().map_err(|e| A::Error::custom(format!("Cannot build sd-issued: {e}")))
             }
         }
 

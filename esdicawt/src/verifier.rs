@@ -6,7 +6,7 @@ use ::time::OffsetDateTime;
 use ciborium::Value;
 use cose_key_confirmation::{KeyConfirmation, error::CoseKeyConfirmationError};
 use esdicawt_spec::{
-    CustomClaims, CwtAny, SdHashAlg,
+    CustomClaims, CwtAny, SdHashAlg, Select,
     blinded_claims::{Salted, SaltedClaim, SaltedElement},
     issuance::SdInnerPayload,
     key_binding::KbtCwtTagged,
@@ -29,11 +29,10 @@ pub trait Verifier {
 
     type IssuerProtectedClaims: CustomClaims;
     type IssuerUnprotectedClaims: CustomClaims;
-    type IssuerPayloadClaims: CustomClaims;
+    type IssuerPayloadClaims: Select;
     type KbtUnprotectedClaims: CustomClaims;
     type KbtProtectedClaims: CustomClaims;
     type KbtPayloadClaims: CustomClaims;
-    type DisclosedClaims: CustomClaims;
 
     fn deserialize_issuer_signature(&self, bytes: &[u8]) -> Result<Self::IssuerSignature, Self::Error>;
     fn deserialize_holder_signature(&self, bytes: &[u8]) -> Result<Self::HolderSignature, Self::Error>;
@@ -53,7 +52,6 @@ pub trait Verifier {
         params: VerifyCwtParams,
     ) -> Result<
         KbtCwtVerified<
-            Self::DisclosedClaims,
             Self::IssuerProtectedClaims,
             Self::IssuerUnprotectedClaims,
             Self::IssuerPayloadClaims,
@@ -64,7 +62,6 @@ pub trait Verifier {
         SdCwtVerifierError<Self::Error>,
     > {
         let kbt_tagged = KbtCwtTagged::<
-            Self::DisclosedClaims,
             Self::IssuerProtectedClaims,
             Self::IssuerUnprotectedClaims,
             Self::IssuerPayloadClaims,
@@ -79,7 +76,6 @@ pub trait Verifier {
     fn verify_sd_kbt(
         &self,
         kbt: &KbtCwtTagged<
-            Self::DisclosedClaims,
             Self::IssuerProtectedClaims,
             Self::IssuerUnprotectedClaims,
             Self::IssuerPayloadClaims,
@@ -90,7 +86,6 @@ pub trait Verifier {
         params: VerifyCwtParams,
     ) -> Result<
         KbtCwtVerified<
-            Self::DisclosedClaims,
             Self::IssuerProtectedClaims,
             Self::IssuerUnprotectedClaims,
             Self::IssuerPayloadClaims,
@@ -187,7 +182,7 @@ pub trait Verifier {
         walk_payload(&mut payload, &mut disclosures)?;
 
         // TODO: this might fail if `Self::DisclosedClaims` does not support unknown claims (serde flatten etc..)
-        let sd_cwt_payload = payload.deserialized::<SdInnerPayload<Self::DisclosedClaims>>()?;
+        let sd_cwt_payload = payload.deserialized::<SdInnerPayload<Self::IssuerPayloadClaims>>()?;
         let claimset = sd_cwt_payload
             .extra
             .ok_or(SdCwtVerifierError::MalformedSdCwt("Could not find disclosed claims in verified payload"))?;
@@ -248,6 +243,7 @@ where
             for element in array {
                 // not all the array elements are redacted, we might have partial redactions
                 let Ok(e) = element.deserialized::<RedactedClaimElement>() else {
+                    walk_payload(element, disclosures)?;
                     continue;
                 };
                 if let Some(salted) = disclosures.remove(&*e) {
@@ -282,21 +278,23 @@ mod tests {
         CwtPresentationParams, IssueCwtParams, Issuer, Presentation, Verifier, VerifyCwtParams,
         holder::Holder,
         issuer::claims::CustomTokenClaims,
+        spec::EsdicawtSpecError,
         test_utils::{Ed25519Holder, P256IssuerClaims},
         verifier::test_utils::HybridVerifier,
     };
     use ciborium::{Value, cbor};
-    use esdicawt_spec::{AnyMap, ClaimName, CustomClaims, CwtAny, MapKey, NoClaims, key_binding::KbtCwtTagged, verified::KbtCwtVerified};
+    use esdicawt_spec::{AnyMap, ClaimName, CwtAny, MapKey, NoClaims, Select, key_binding::KbtCwtTagged, verified::KbtCwtVerified};
     use rand_core::SeedableRng as _;
+
     wasm_bindgen_test::wasm_bindgen_test_configure!(run_in_browser);
 
     #[test]
     #[wasm_bindgen_test::wasm_bindgen_test]
     fn should_verify_valid_sd_cwt() {
-        let disclosable_claims = CustomTokenClaims { name: "Alice Smith".into() };
+        let disclosable_claims = CustomTokenClaims { name: Some("Alice Smith".into()) };
         let verified = verify(disclosable_claims);
 
-        assert_eq!(verified.claimset.name, "Alice Smith");
+        assert_eq!(verified.claimset.name.as_deref(), Some("Alice Smith"));
         assert_eq!(verified.sd_cwt().payload.subject, Some("mimi://example.com/u/alice.smith".into()));
     }
 
@@ -333,9 +331,9 @@ mod tests {
         verifying(cbor!({ "a" => [0, 1] }));
     }
 
-    fn verify<D: CustomClaims>(disclosable_claims: D) -> KbtCwtVerified<D, NoClaims, NoClaims, D, NoClaims, NoClaims, NoClaims> {
+    fn verify<T: Select<Error = EsdicawtSpecError>>(disclosable_claims: T) -> KbtCwtVerified<NoClaims, NoClaims, T, NoClaims, NoClaims, NoClaims> {
         let (issuer_signing_key, holder_signing_key, sd_kbt) = generate(disclosable_claims);
-        let verifier = HybridVerifier::<D> {
+        let verifier = HybridVerifier::<T> {
             issuer_verifying_key: *issuer_signing_key.verifying_key(),
             holder_verifying_key: holder_signing_key.verifying_key(),
             _marker: Default::default(),
@@ -348,12 +346,12 @@ mod tests {
     }
 
     #[allow(clippy::type_complexity)]
-    fn generate<D: CustomClaims>(
-        disclosable_claims: D,
+    fn generate<T: Select<Error = EsdicawtSpecError>>(
+        disclosable_claims: T,
     ) -> (
         p256::ecdsa::SigningKey,
         ed25519_dalek::SigningKey,
-        KbtCwtTagged<D, NoClaims, NoClaims, D, NoClaims, NoClaims, NoClaims>,
+        KbtCwtTagged<NoClaims, NoClaims, T, NoClaims, NoClaims, NoClaims>,
     ) {
         let mut csprng = rand_chacha::ChaCha20Rng::from_entropy();
 
@@ -365,8 +363,7 @@ mod tests {
         let issue_params = IssueCwtParams {
             protected_claims: None,
             unprotected_claims: None,
-            payload_claims: None,
-            disclosable_claims,
+            payload_claims: Some(disclosable_claims),
             subject: "mimi://example.com/u/alice.smith",
             identifier: "mimi://example.com/i/acme.io",
             expiry: core::time::Duration::from_secs(90),
@@ -401,7 +398,6 @@ mod tests {
                     KbtProtectedClaims = NoClaims,
                     KbtUnprotectedClaims = NoClaims,
                     KbtPayloadClaims = NoClaims,
-                    DisclosedClaims = NoClaims,
                     Error = std::convert::Infallible,
                     Hasher = sha2::Sha256,
                     HolderSignature = ed25519_dalek::Signature,
@@ -425,7 +421,7 @@ pub mod test_utils {
         pub _marker: core::marker::PhantomData<DisclosedClaims>,
     }
 
-    impl<DisclosedClaims: CustomClaims> Verifier for HybridVerifier<DisclosedClaims> {
+    impl<T: Select> Verifier for HybridVerifier<T> {
         type Error = std::convert::Infallible;
         type IssuerSignature = p256::ecdsa::Signature;
         type IssuerVerifier = p256::ecdsa::VerifyingKey;
@@ -434,11 +430,10 @@ pub mod test_utils {
         type Hasher = sha2::Sha256;
         type IssuerProtectedClaims = NoClaims;
         type IssuerUnprotectedClaims = NoClaims;
-        type IssuerPayloadClaims = DisclosedClaims;
+        type IssuerPayloadClaims = T;
         type KbtUnprotectedClaims = NoClaims;
         type KbtProtectedClaims = NoClaims;
         type KbtPayloadClaims = NoClaims;
-        type DisclosedClaims = DisclosedClaims;
 
         fn deserialize_issuer_signature(&self, bytes: &[u8]) -> Result<Self::IssuerSignature, Self::Error> {
             Ok(p256::ecdsa::Signature::try_from(bytes).unwrap())

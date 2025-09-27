@@ -1,4 +1,4 @@
-use crate::{CustomClaims, EsdicawtSpecResult, SdHashAlg, alg::Algorithm, blinded_claims::SaltedArray, inlined_cbor::InlinedCbor, redacted_claims::RedactedClaimKeys};
+use crate::{CustomClaims, EsdicawtSpecResult, SdHashAlg, Select, alg::Algorithm, blinded_claims::SaltedArray, inlined_cbor::InlinedCbor, redacted_claims::RedactedClaimKeys};
 
 mod sd_issued_payload_codec;
 mod sd_payload_codec;
@@ -7,12 +7,11 @@ mod unprotected_issued_codec;
 
 #[derive(Debug, Clone, PartialEq, derive_builder::Builder)]
 #[builder(pattern = "mutable")]
-pub struct SdCwtIssued<DisclosableClaims: CustomClaims, ProtectedClaims: CustomClaims, UnprotectedClaims: CustomClaims, PayloadClaims: CustomClaims> {
+pub struct SdCwtIssued<ProtectedClaims: CustomClaims, UnprotectedClaims: CustomClaims, PayloadClaims: Select> {
     pub protected: InlinedCbor<SdProtected<ProtectedClaims>>,
     pub sd_unprotected: SdUnprotected<UnprotectedClaims>,
     pub payload: InlinedCbor<SdPayload<PayloadClaims>>,
     pub signature: Vec<u8>,
-    pub _disclosable: core::marker::PhantomData<DisclosableClaims>,
 }
 
 #[derive(Debug, Clone, PartialEq, derive_builder::Builder)]
@@ -59,12 +58,10 @@ pub struct SdInnerPayload<Extra: CustomClaims> {
     pub extra: Option<Extra>,
 }
 
-pub type SdCwtIssuedTagged<DisclosableClaims, ProtectedClaims, UnprotectedClaims, PayloadClaims> =
-    ciborium::tag::Required<SdCwtIssued<DisclosableClaims, ProtectedClaims, UnprotectedClaims, PayloadClaims>, { <coset::CoseSign1 as coset::TaggedCborSerializable>::TAG }>;
+pub type SdCwtIssuedTagged<ProtectedClaims, UnprotectedClaims, PayloadClaims> =
+    ciborium::tag::Required<SdCwtIssued<ProtectedClaims, UnprotectedClaims, PayloadClaims>, { <coset::CoseSign1 as coset::TaggedCborSerializable>::TAG }>;
 
-impl<DisclosableClaims: CustomClaims, ProtectedClaims: CustomClaims, UnprotectedClaims: CustomClaims, PayloadClaims: CustomClaims>
-    SdCwtIssued<DisclosableClaims, ProtectedClaims, UnprotectedClaims, PayloadClaims>
-{
+impl<ProtectedClaims: CustomClaims, UnprotectedClaims: CustomClaims, PayloadClaims: Select> SdCwtIssued<ProtectedClaims, UnprotectedClaims, PayloadClaims> {
     pub fn disclosures(&mut self) -> EsdicawtSpecResult<&SaltedArray> {
         self.sd_unprotected.sd_claims.to_value()
     }

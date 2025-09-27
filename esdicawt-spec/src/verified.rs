@@ -1,17 +1,16 @@
 use crate::{
-    CustomClaims, EsdicawtSpecError,
+    CustomClaims, EsdicawtSpecError, Select,
     alg::Algorithm,
     issuance::{SdCwtIssued, SdInnerPayload, SdProtected, SdUnprotected},
     key_binding::{KbtPayload, KbtProtected, KbtUnprotected},
 };
 
 #[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
-#[serde(bound = "IssuerProtectedClaims: CustomClaims, DisclosedClaims: CustomClaims")]
+#[serde(bound = "IssuerProtectedClaims: Select")]
 pub struct KbtCwtVerified<
-    DisclosedClaims: CustomClaims,
     IssuerProtectedClaims: CustomClaims,
     IssuerUnprotectedClaims: CustomClaims,
-    IssuerPayloadClaims: CustomClaims,
+    IssuerPayloadClaims: Select,
     KbtProtectedClaims: CustomClaims,
     KbtUnprotectedClaims: CustomClaims,
     KbtPayloadClaims: CustomClaims,
@@ -19,18 +18,17 @@ pub struct KbtCwtVerified<
     pub protected: KbtCwtProtectedVerified<IssuerProtectedClaims, IssuerUnprotectedClaims, IssuerPayloadClaims, KbtProtectedClaims>,
     pub unprotected: KbtUnprotected<KbtUnprotectedClaims>,
     pub payload: KbtPayload<KbtPayloadClaims>,
-    pub claimset: DisclosedClaims,
+    pub claimset: IssuerPayloadClaims,
 }
 
 impl<
-    DisclosedClaims: CustomClaims,
     IssuerProtectedClaims: CustomClaims,
     IssuerUnprotectedClaims: CustomClaims,
-    IssuerPayloadClaims: CustomClaims,
+    IssuerPayloadClaims: Select,
     KbtProtectedClaims: CustomClaims,
     KbtUnprotectedClaims: CustomClaims,
     KbtPayloadClaims: CustomClaims,
-> KbtCwtVerified<DisclosedClaims, IssuerProtectedClaims, IssuerUnprotectedClaims, IssuerPayloadClaims, KbtProtectedClaims, KbtUnprotectedClaims, KbtPayloadClaims>
+> KbtCwtVerified<IssuerProtectedClaims, IssuerUnprotectedClaims, IssuerPayloadClaims, KbtProtectedClaims, KbtUnprotectedClaims, KbtPayloadClaims>
 {
     pub fn sd_cwt(&self) -> &SdIssuedVerified<IssuerProtectedClaims, IssuerUnprotectedClaims, IssuerPayloadClaims> {
         &self.protected.issuer_sd_cwt
@@ -39,19 +37,19 @@ impl<
 
 #[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 #[serde(bound = "IssuerProtectedClaims: CustomClaims")]
-pub struct KbtCwtProtectedVerified<IssuerProtectedClaims: CustomClaims, IssuerUnprotectedClaims: CustomClaims, IssuerPayloadClaims: CustomClaims, Extra: CustomClaims> {
+pub struct KbtCwtProtectedVerified<IssuerProtectedClaims: CustomClaims, IssuerUnprotectedClaims: CustomClaims, IssuerPayloadClaims: Select, Extra: CustomClaims> {
     pub alg: Algorithm,
     pub issuer_sd_cwt: SdIssuedVerified<IssuerProtectedClaims, IssuerUnprotectedClaims, IssuerPayloadClaims>,
     pub claims: Option<Extra>,
 }
 
-impl<DisclosedClaims: CustomClaims, IssuerProtectedClaims: CustomClaims, IssuerUnprotectedClaims: CustomClaims, IssuerPayloadClaims: CustomClaims, Extra: CustomClaims>
-    TryFrom<KbtProtected<DisclosedClaims, IssuerProtectedClaims, IssuerUnprotectedClaims, IssuerPayloadClaims, Extra>>
+impl<IssuerProtectedClaims: CustomClaims, IssuerUnprotectedClaims: CustomClaims, IssuerPayloadClaims: Select, Extra: CustomClaims>
+    TryFrom<KbtProtected<IssuerProtectedClaims, IssuerUnprotectedClaims, IssuerPayloadClaims, Extra>>
     for KbtCwtProtectedVerified<IssuerProtectedClaims, IssuerUnprotectedClaims, IssuerPayloadClaims, Extra>
 {
     type Error = EsdicawtSpecError;
 
-    fn try_from(v: KbtProtected<DisclosedClaims, IssuerProtectedClaims, IssuerUnprotectedClaims, IssuerPayloadClaims, Extra>) -> Result<Self, Self::Error> {
+    fn try_from(v: KbtProtected<IssuerProtectedClaims, IssuerUnprotectedClaims, IssuerPayloadClaims, Extra>) -> Result<Self, Self::Error> {
         Ok(Self {
             alg: v.alg,
             issuer_sd_cwt: v.kcwt.try_into_value()?.0.try_into()?,
@@ -68,12 +66,12 @@ pub struct SdIssuedVerified<ProtectedClaims: CustomClaims, UnprotectedClaims: Cu
     pub payload: SdInnerPayload<PayloadClaims>,
 }
 
-impl<DisclosableClaims: CustomClaims, ProtectedClaims: CustomClaims, UnprotectedClaims: CustomClaims, PayloadClaims: CustomClaims>
-    TryFrom<SdCwtIssued<DisclosableClaims, ProtectedClaims, UnprotectedClaims, PayloadClaims>> for SdIssuedVerified<ProtectedClaims, UnprotectedClaims, PayloadClaims>
+impl<ProtectedClaims: CustomClaims, UnprotectedClaims: CustomClaims, PayloadClaims: Select> TryFrom<SdCwtIssued<ProtectedClaims, UnprotectedClaims, PayloadClaims>>
+    for SdIssuedVerified<ProtectedClaims, UnprotectedClaims, PayloadClaims>
 {
     type Error = EsdicawtSpecError;
 
-    fn try_from(v: SdCwtIssued<DisclosableClaims, ProtectedClaims, UnprotectedClaims, PayloadClaims>) -> Result<Self, Self::Error> {
+    fn try_from(v: SdCwtIssued<ProtectedClaims, UnprotectedClaims, PayloadClaims>) -> Result<Self, Self::Error> {
         Ok(Self {
             protected: v.protected.try_into_value()?,
             sd_unprotected: v.sd_unprotected.into(),
