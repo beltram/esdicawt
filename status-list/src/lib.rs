@@ -170,12 +170,14 @@ impl StatusBits {
 }
 
 pub(crate) trait CborAny: serde::Serialize + for<'de> serde::Deserialize<'de> + Clone {
+    #[allow(dead_code)]
     fn to_cbor_bytes(&self) -> StatusListResult<Vec<u8>> {
         let mut buf = vec![];
         ciborium::into_writer(self, &mut buf)?;
         Ok(buf)
     }
 
+    #[allow(dead_code)]
     fn from_cbor_bytes(bytes: &[u8]) -> StatusListResult<Self>
     where
         Self: Sized,
