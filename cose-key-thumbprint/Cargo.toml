@@ -6,7 +6,7 @@ description = "CoseKey Thumbprint [RFC 9679]"
 authors.workspace = true
 
 [dependencies]
-cose-key = { workspace = true, features = ["deterministic-encoding"] }
+cose-key.workspace = true
 hex.workspace = true
 coset.workspace = true
 ciborium.workspace = true
@@ -22,7 +22,7 @@ serde_bytes.workspace = true
 [dev-dependencies]
 ciborium.workspace = true
 sha2.workspace = true
-ed25519-dalek = { workspace = true, features = ["rand_core"] }
+ed25519-dalek = { workspace = true, features = ["rand_core", "pem"] }
 p256.workspace = true
 p384.workspace = true
 rand.workspace = true

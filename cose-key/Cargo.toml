@@ -5,6 +5,13 @@ version.workspace = true
 description = "CoseKey [RFC 8152]"
 authors.workspace = true
 
+[features]
+default = []
+ed25519 = ["dep:ed25519-dalek"]
+p256 = ["dep:p256"]
+p384 = ["dep:p384"]
+pem = ["dep:pkcs8", "pkcs8/pem", "ed25519-dalek?/pem", "p256?/pem", "p384?/pem"]
+
 [dependencies]
 serde.workspace = true
 thiserror.workspace = true
@@ -13,7 +20,6 @@ ciborium.workspace = true
 ed25519-dalek = { workspace = true, optional = true }
 p256 = { workspace = true, optional = true }
 p384 = { workspace = true, optional = true }
-dcbor = { workspace = true, optional = true }
 pkcs8 = { workspace = true, optional = true }
 
 [dev-dependencies]
@@ -22,13 +28,6 @@ cose-key = { path = ".", features = ["ed25519", "p256", "p384", "pem"] }
 ed25519-dalek = { workspace = true, features = ["rand_core"] }
 getrandom = { workspace = true, features = ["js"] }
 
-[features]
-default = []
-ed25519 = ["dep:ed25519-dalek"]
-p256 = ["dep:p256"]
-p384 = ["dep:p384"]
-deterministic-encoding = ["dcbor"]
-pem = ["dep:pkcs8", "pkcs8/pem", "ed25519-dalek?/pem", "p256?/pem", "p384?/pem"]
 
 [lints]
 workspace = true
