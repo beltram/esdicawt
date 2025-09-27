@@ -199,7 +199,7 @@ mod tests {
     };
     use ciborium::{Value, cbor};
     use digest::Digest as _;
-    use esdicawt_spec::{ClaimName, CwtAny, EsdicawtSpecError, NoClaims, Select, SelectiveDisclosure, issuance::SdCwtIssuedTagged};
+    use esdicawt_spec::{ClaimName, CwtAny, EsdicawtSpecError, NoClaims, Select, SelectiveDisclosure, issuance::SdCwtIssuedTagged, select_none};
     use rand_core::SeedableRng;
 
     wasm_bindgen_test::wasm_bindgen_test_configure!(run_in_browser);
@@ -279,6 +279,27 @@ mod tests {
     #[test]
     #[wasm_bindgen_test::wasm_bindgen_test]
     fn should_selectively_disclose() {
+        #[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
+        pub struct Model {
+            pub name: Option<String>,
+            pub age: Option<u32>,
+        }
+
+        impl Select for Model {
+            type Error = EsdicawtSpecError;
+
+            fn select(self) -> Result<SelectiveDisclosure, <Self as Select>::Error> {
+                let mut map = Vec::with_capacity(2);
+                if let Some(name) = self.name {
+                    map.push((sd(Value::Text("name".into())), Value::Text(name)));
+                }
+                if let Some(age) = self.age {
+                    map.push((Value::Text("age".into()), age.into()));
+                }
+                Ok(Value::Map(map).into())
+            }
+        }
+
         let model = Model {
             name: Some("Alice Smith".to_string()),
             age: Some(42),
@@ -305,35 +326,37 @@ mod tests {
 
     #[test]
     #[wasm_bindgen_test::wasm_bindgen_test]
-    #[ignore] // TODO:
     fn should_work_when_no_disclosure() {
-        /*let model = Model {
+        #[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
+        pub struct ModelPublic {
+            pub name: Option<String>,
+            pub age: Option<u32>,
+        }
+
+        impl Select for ModelPublic {
+            type Error = EsdicawtSpecError;
+
+            fn select(self) -> Result<SelectiveDisclosure, <Self as Select>::Error> {
+                Ok(select_none(&mut Value::serialized(&self)?))
+            }
+        }
+
+        let model = ModelPublic {
             name: Some("Alice".to_string()),
             age: Some(42),
         };
-        let sd_cwt = issue(model);*/
-        todo!()
-    }
+        let mut sd_cwt = issue(model);
 
-    #[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
-    pub struct Model {
-        pub name: Option<String>,
-        pub age: Option<u32>,
-    }
+        let mut payload = sd_cwt.0.payload.clone();
+        let payload = payload.to_value().unwrap().clone();
+        let model = payload.inner.extra.unwrap();
 
-    impl Select for Model {
-        type Error = EsdicawtSpecError;
+        // nothing redacted
+        assert!(model.age.is_some());
+        assert!(model.name.is_some());
 
-        fn select(self) -> Result<SelectiveDisclosure, <Self as Select>::Error> {
-            let mut map = Vec::with_capacity(2);
-            if let Some(name) = self.name {
-                map.push((sd(Value::Text("name".into())), Value::Text(name)));
-            }
-            if let Some(age) = self.age {
-                map.push((Value::Text("age".into()), age.into()));
-            }
-            Ok(Value::Map(map).into())
-        }
+        let mut disclosures = sd_cwt.0.disclosures().unwrap().iter().map(|d| d.unwrap());
+        assert!(disclosures.next().is_none());
     }
 
     fn issue<T: Select<Error = EsdicawtSpecError>>(payload: T) -> SdCwtIssuedTagged<T> {
