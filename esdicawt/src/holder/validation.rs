@@ -111,7 +111,7 @@ where
 #[cfg(test)]
 mod tests {
     use crate::{
-        HolderValidationParams, IssuerParams, SdCwtHolderError, SdCwtHolderValidationError,
+        HolderValidationParams, IssuerParams, RevocationParams, SdCwtHolderError, SdCwtHolderValidationError,
         holder::Holder,
         issuer::Issuer,
         signature_verifier::SignatureVerifierError,
@@ -364,6 +364,10 @@ mod tests {
             leeway: Default::default(),
             key_location: "",
             holder_confirmation_key: (&holder_signing_key.verifying_key()).try_into().unwrap(),
+            revocation: RevocationParams {
+                status_list_bit_index: 0,
+                uri: "https://example.com/statuslists/1".parse().unwrap(),
+            },
         }
     }
 }

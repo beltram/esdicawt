@@ -60,7 +60,7 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        crate_paths: ["cose-key", "cose-key-confirmation", "cose-key-set", "cose-key-thumbprint", "esdicawt", "esdicawt-spec", "spice-oidc-cwt"]
+        crate_paths: ["cose-key", "cose-key-confirmation", "cose-key-set", "cose-key-thumbprint", "esdicawt", "esdicawt-spec", "spice-oidc-cwt", "status-list"]
     steps:
       - uses: actions/checkout@v4
       - uses: actions-rust-lang/setup-rust-toolchain@v1

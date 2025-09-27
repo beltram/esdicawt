@@ -2,7 +2,7 @@ use crate::fmk::ed25519::{Ed25519Holder, Ed25519Issuer, Ed25519Verifier};
 use ciborium::{Value, value::Error};
 use cose_key_set::CoseKeySet;
 use criterion::{BatchSize, BenchmarkId, Criterion, criterion_group, criterion_main};
-use esdicawt::{Holder, HolderParams, Issuer, IssuerParams, SdCwtVerified, ShallowVerifierParams, Verifier, VerifierParams};
+use esdicawt::{Holder, HolderParams, Issuer, IssuerParams, RevocationParams, SdCwtVerified, ShallowVerifierParams, Verifier, VerifierParams};
 use esdicawt_spec::{CwtAny, Select, SelectExt};
 use rand::prelude::ThreadRng;
 use std::{collections::HashMap, hint::black_box};
@@ -179,6 +179,10 @@ fn issuer<H: digest::Digest + Clone>(
         leeway: Default::default(),
         key_location: "",
         holder_confirmation_key: (&holder.verifying_key).try_into().unwrap(),
+        revocation: RevocationParams {
+            status_list_bit_index: 0,
+            uri: "https://example.com/statuslists/1".parse().unwrap(),
+        },
     };
     (rng, issuer, issuer_params, cks, holder)
 }

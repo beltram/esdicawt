@@ -1,4 +1,4 @@
-use crate::{BitIndex, StatusBits, StatusListResult};
+use crate::{BitIndex, Status, StatusListResult};
 use flate2::Compression;
 use std::io::{Read, Write};
 
@@ -25,9 +25,9 @@ pub fn from_compressed(bytes: &[u8]) -> StatusListResult<Vec<u8>> {
 }
 
 #[inline(always)]
-pub fn byte_offset(status_bits: StatusBits, index: BitIndex) -> usize {
+pub fn byte_offset<S: Status>(index: BitIndex) -> usize {
     // either 1, 2, 4 or 8
-    let size = status_bits as usize;
+    let size = S::BITS as usize;
 
     // offset of the byte we want to read in the byte array.
     // We have to consider the status bit here.
@@ -36,33 +36,62 @@ pub fn byte_offset(status_bits: StatusBits, index: BitIndex) -> usize {
 }
 
 #[inline(always)]
-pub fn bit_offset(status_bits: StatusBits, index: BitIndex) -> u8 {
-    (((index % 8) * status_bits.size() as u32) % 8) as u8
+pub fn bit_offset<S: Status>(index: BitIndex) -> u8 {
+    (((index % 8) * S::BITS.size() as BitIndex) % 8) as u8
 }
 
 /// Read a status from the list as bit.
 /// Might panic in case of overflow, prefer [crate::IntellijRustImportsMock::AnyLst::get_raw]
 #[inline(always)]
-pub fn get_raw_unchecked(status_bits: StatusBits, status_list: &[u8], index: BitIndex) -> u8 {
-    get_raw(status_bits, status_list, index).expect("Byte offset ouf of bounds")
+pub fn get_raw_unchecked<S: Status>(status_list: &[u8], index: BitIndex) -> S {
+    get_raw(status_list, index).expect("Byte offset ouf of bounds")
 }
 
 /// Read a status from the list as bit
 #[inline(always)]
-pub fn get_raw(status_bits: StatusBits, status_list: &[u8], index: BitIndex) -> Option<u8> {
+pub fn get_raw<S: Status>(status_list: &[u8], index: BitIndex) -> Option<S> {
     // offset of the byte we want to read in the byte array.
     // We have to consider the status bit here.
     // For example if it's 2 then there are only 4 status per byte hence the whole byte offset changes
-    let byte_offset = byte_offset(status_bits, index);
+    let byte_offset = byte_offset::<S>(index);
 
     // we read the byte at given offset
     let byte = status_list.get(byte_offset)?;
 
-    let bit_offset = bit_offset(status_bits, index) as u32;
+    let bit_offset = bit_offset::<S>(index) as u32;
 
-    let mask = status_bits.mask();
+    let mask = S::BITS.mask();
 
     // 'overflowing_shr' is safe since we '%8' at the end of bit_lower
     let status = byte.overflowing_shr(bit_offset).0 & mask;
-    Some(status)
+    Some(status.into())
+}
+
+/// Highest bit index possible with the current list
+#[inline(always)]
+pub fn max_index<S: Status>(bytes: &[u8]) -> BitIndex {
+    let ratio = (8 / S::BITS.size()) as BitIndex;
+    let byte_len = bytes.len() as BitIndex;
+    byte_len.wrapping_mul(ratio)
+}
+
+/// Finds an empty entry in the StatusList
+#[cfg(feature = "rand")]
+pub fn next_vacant_bit_index<S: Status + crate::StatusUndefined>(bytes: &[u8], rng: &mut dyn rand_core::CryptoRngCore) -> Option<BitIndex> {
+    use rand::Rng as _;
+    let max = max_index::<S>(bytes);
+
+    let mut i = 0;
+    const TRIES: usize = 10_000;
+
+    loop {
+        if i > TRIES {
+            return None;
+        }
+        let proposed_index = rng.gen_range(0..max);
+        match get_raw::<S>(bytes, proposed_index) {
+            Some(s) if s.is_undefined() => return Some(proposed_index),
+            _ => i += 1,
+        }
+    }
 }

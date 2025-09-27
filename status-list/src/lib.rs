@@ -1,6 +1,7 @@
 mod error;
 mod inner;
 mod lst;
+pub mod referenced;
 mod twiddling;
 
 #[cfg(feature = "issuer")]
@@ -13,13 +14,18 @@ use std::hash::Hash;
 pub use error::{StatusListError, StatusListResult};
 pub use lst::Lst;
 
-pub type BitIndex = u32;
+pub type BitIndex = u64;
 
 pub trait Status: From<u8> + Into<u8> + Clone + Eq + PartialEq + Hash {
     const BITS: StatusBits;
 }
 
-/// Just a u8 with the right bounds for representing a Status
+/// Marker for statuses with a state representing that they have not yet been assigned a value
+pub trait StatusUndefined {
+    fn is_undefined(&self) -> bool;
+}
+
+/// Just an u8 with the right bounds for representing a Status
 #[derive(Debug, Copy, Clone, Eq, PartialEq, Hash)]
 pub struct RawStatus<const B: usize>(pub u8);
 
@@ -194,8 +200,10 @@ impl<T> CborAny for T where T: serde::Serialize + for<'de> serde::Deserialize<'d
 mod tests {
     use super::*;
     use hex::ToHex;
+    wasm_bindgen_test::wasm_bindgen_test_configure!(run_in_browser);
 
     #[test]
+    #[wasm_bindgen_test::wasm_bindgen_test]
     fn cbor_example() {
         let status_list = StatusList::<RawStatus<1>>::new(Lst::from_slice(&[0xB9, 0xA3]), None);
         let expected = "a2646269747301636c73744a78dadbb918000217015d";
@@ -205,6 +213,7 @@ mod tests {
     }
 
     #[test]
+    #[wasm_bindgen_test::wasm_bindgen_test]
     fn ser_de() {
         let input = StatusList::<RawStatus<1>>::new(Lst::from_slice(&[0xB9, 0xA3]), Some("https://agg.com".parse().unwrap()));
         let ser = input.to_cbor_bytes().unwrap();
