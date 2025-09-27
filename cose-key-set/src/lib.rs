@@ -16,9 +16,17 @@ pub struct CoseKeySetBuilder {
 }
 
 impl CoseKeySetBuilder {
-    pub fn push(&mut self, key: impl TryInto<cose_key::CoseKey, Error: Into<error::CoseKeySetError>>) -> Result<(), error::CoseKeySetError> {
+    pub fn with<K>(mut self, key: &K) -> Result<Self, error::CoseKeySetError>
+    where
+        for<'a> &'a K: TryInto<cose_key::CoseKey, Error: Into<error::CoseKeySetError>>,
+    {
         self.keys.push(key.try_into().map_err(Into::into)?);
-        Ok(())
+        Ok(self)
+    }
+
+    pub fn with_cose_key(mut self, key: cose_key::CoseKey) -> Self {
+        self.keys.push(key);
+        self
     }
 
     pub fn build(self) -> CoseKeySet {
@@ -35,13 +43,10 @@ mod tests {
     #[test]
     #[wasm_bindgen_test::wasm_bindgen_test]
     fn should_support_ed25519_keys() {
-        let key_a = ed25519_dalek::SigningKey::generate(&mut rand::thread_rng()).verifying_key();
-        let key_b = ed25519_dalek::SigningKey::generate(&mut rand::thread_rng()).verifying_key();
+        let key_a = ed25519_dalek::SigningKey::generate(&mut rand::thread_rng());
+        let key_b = ed25519_dalek::SigningKey::generate(&mut rand::thread_rng());
 
-        let mut builder = CoseKeySet::builder();
-        builder.push(key_a).unwrap();
-        builder.push(key_b).unwrap();
-        let keyset = builder.build();
+        let keyset = CoseKeySet::builder().with(&key_a).unwrap().with(&key_b).unwrap().build();
 
         Value::serialized(&keyset).unwrap();
     }
@@ -49,13 +54,10 @@ mod tests {
     #[test]
     #[wasm_bindgen_test::wasm_bindgen_test]
     fn should_support_p256_keys() {
-        let key_a = *p256::ecdsa::SigningKey::random(&mut rand::thread_rng()).verifying_key();
-        let key_b = *p256::ecdsa::SigningKey::random(&mut rand::thread_rng()).verifying_key();
+        let key_a = p256::ecdsa::SigningKey::random(&mut rand::thread_rng());
+        let key_b = p256::ecdsa::SigningKey::random(&mut rand::thread_rng());
 
-        let mut builder = CoseKeySet::builder();
-        builder.push(key_a).unwrap();
-        builder.push(key_b).unwrap();
-        let keyset = builder.build();
+        let keyset = CoseKeySet::builder().with(&key_a).unwrap().with(&key_b).unwrap().build();
 
         Value::serialized(&keyset).unwrap();
     }
@@ -109,12 +111,13 @@ mod tests {
             (key, Value::Bytes(x), Value::Bytes(y), Value::Bytes(kid))
         };
 
-        let mut builder = CoseKeySet::builder();
-        builder.push(meriadoc).unwrap();
-        builder.push(peregrin).unwrap();
-        builder.push(bilbo).unwrap();
-        builder.push(eleven).unwrap();
-        let keyset = Value::serialized(&builder.build()).unwrap();
+        let keyset = CoseKeySet::builder()
+            .with_cose_key(meriadoc)
+            .with_cose_key(peregrin)
+            .with_cose_key(bilbo)
+            .with_cose_key(eleven)
+            .build();
+        let keyset = Value::serialized(&keyset).unwrap();
 
         let expected = cbor!([
             { 1 => 2, 2 => meriadoc_kid, -1 => 1 ,-2 => meriadoc_x ,-3 => meriadoc_y },

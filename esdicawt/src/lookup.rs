@@ -194,7 +194,6 @@ mod tests {
     use super::*;
     use ciborium::cbor;
     use esdicawt_spec::{Select, SelectExt, issuance::SdCwtIssuedTagged, sd};
-    use rand_core::SeedableRng as _;
 
     use crate::{
         Holder, HolderParams, Issuer, IssuerParams, Presentation,
@@ -274,10 +273,8 @@ mod tests {
     }
 
     fn generate<T: Select>(payload: T) -> (SdCwtIssuedTagged<T, sha2::Sha256>, ed25519_dalek::SigningKey, ed25519_dalek::VerifyingKey) {
-        let mut csprng = rand_chacha::ChaCha20Rng::from_entropy();
-
-        let issuer_signing_key = ed25519_dalek::SigningKey::generate(&mut csprng);
-        let holder_signing_key = ed25519_dalek::SigningKey::generate(&mut csprng);
+        let issuer_signing_key = ed25519_dalek::SigningKey::generate(&mut rand::thread_rng());
+        let holder_signing_key = ed25519_dalek::SigningKey::generate(&mut rand::thread_rng());
 
         let issuer = Ed25519Issuer::new(issuer_signing_key.clone());
 
@@ -285,8 +282,8 @@ mod tests {
             protected_claims: None,
             unprotected_claims: None,
             payload: Some(payload),
-            issuer: "mimi://example.com/i/proton.me",
-            subject: Some("mimi://example.com/u/alice.smith"),
+            issuer: "https://example.com/i/proton.me",
+            subject: Some("https://example.com/u/alice.smith"),
             audience: Default::default(),
             cti: Default::default(),
             cnonce: Default::default(),
@@ -298,7 +295,7 @@ mod tests {
             holder_confirmation_key: (&holder_signing_key.verifying_key()).try_into().unwrap(),
             artificial_time: None,
         };
-        let sd_cwt = issuer.issue_cwt(&mut csprng, issue_params).unwrap();
+        let sd_cwt = issuer.issue_cwt(&mut rand::thread_rng(), issue_params).unwrap();
         (sd_cwt, holder_signing_key, *issuer_signing_key.as_ref())
     }
 

@@ -156,7 +156,6 @@ mod tests {
         blinded_claims::{SaltedClaim, SaltedElement},
         sd,
     };
-    use rand_chacha::rand_core::SeedableRng as _;
     use sha2::Digest as _;
 
     wasm_bindgen_test::wasm_bindgen_test_configure!(run_in_browser);
@@ -339,10 +338,9 @@ mod tests {
 
     // TODO: if got time change return to '(Value, [Salted<Value>; N])'
     fn _redact<const N: usize>(mut payload: Value) -> (Value, [Value; N]) {
-        let mut rng = rand_chacha::ChaCha20Rng::from_entropy();
         let mut sd_claims = SaltedArray::default();
 
-        redact_value::<Error, sha2::Sha256>(&mut payload, &mut rng, &mut sd_claims, None).unwrap();
+        redact_value::<Error, sha2::Sha256>(&mut payload, &mut rand::thread_rng(), &mut sd_claims, None).unwrap();
 
         for d in &mut sd_claims.0 {
             let d = d.to_value_mut().unwrap();
