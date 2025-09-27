@@ -1,7 +1,6 @@
 #![allow(clippy::borrow_interior_mutable_const, clippy::declare_interior_mutable_const, dead_code)]
 
-use ciborium::Value;
-use ciborium::value::Integer;
+use ciborium::{Value, value::Integer};
 use esdicawt::{Holder, HolderParams, Issuer, IssuerParams, cwt_label};
 use esdicawt_spec::{
     CwtAny, EsdicawtSpecError, NoClaims, SdHashAlg, Select,
@@ -176,14 +175,21 @@ impl<T: Select> Issuer for P384Issuer<T> {
 
 pub struct P256Holder<T: Select> {
     signing_key: p256::ecdsa::SigningKey,
+    verifying_key: p256::ecdsa::VerifyingKey,
     _marker: core::marker::PhantomData<T>,
 }
 
 impl<T: Select> Holder for P256Holder<T> {
     type Error = EsdicawtSpecError;
-    type Signature = p256::ecdsa::Signature;
     type Hasher = sha2::Sha256;
     type Signer = p256::ecdsa::SigningKey;
+
+    type Signature = p256::ecdsa::Signature;
+    type Verifier = p256::ecdsa::VerifyingKey;
+
+    type IssuerSignature = p384::ecdsa::Signature;
+    type IssuerVerifier = p384::ecdsa::VerifyingKey;
+
     type IssuerPayloadClaims = T;
     type IssuerProtectedClaims = NoClaims;
     type IssuerUnprotectedClaims = NoClaims;
@@ -195,12 +201,9 @@ impl<T: Select> Holder for P256Holder<T> {
         Algorithm::ES256
     }
 
-    fn hash_algorithm(&self) -> SdHashAlg {
-        SdHashAlg::Sha256
-    }
-
     fn new(signing_key: Self::Signer) -> Self {
         Self {
+            verifying_key: *signing_key.as_ref(),
             signing_key,
             _marker: Default::default(),
         }
@@ -210,8 +213,20 @@ impl<T: Select> Holder for P256Holder<T> {
         &self.signing_key
     }
 
+    fn verifier(&self) -> &Self::Verifier {
+        &self.verifying_key
+    }
+
     fn serialize_signature(&self, signature: &Self::Signature) -> Result<Vec<u8>, Self::Error> {
         Ok(signature.to_bytes().to_vec())
+    }
+
+    fn deserialize_issuer_signature(&self, bytes: &[u8]) -> Result<Self::IssuerSignature, Self::Error> {
+        Ok(p384::ecdsa::Signature::try_from(bytes).unwrap())
+    }
+
+    fn supported_hash_alg(&self) -> &[SdHashAlg] {
+        &[SdHashAlg::Sha256]
     }
 }
 
@@ -374,8 +389,9 @@ fn test_vectors<P: Select>(payload: P, spec_sd_cwt_bytes: &[u8], spec_sd_kbt_byt
         extra_kbt_unprotected: None,
         extra_kbt_payload: None,
     };
+    let sd_cwt = sd_holder.verify_sd_cwt(&esdicawt_sd_cwt_bytes[..], Default::default(), &issuer_verifying_key()).unwrap();
 
-    let esdicawt_sd_kbt = sd_holder.new_presentation(&esdicawt_sd_cwt_bytes[..], params).unwrap();
+    let esdicawt_sd_kbt = sd_holder.new_presentation(sd_cwt, params).unwrap();
     let esdicawt_sd_kbt_bytes = esdicawt_sd_kbt.to_cbor_bytes().unwrap();
     let esdicawt_sd_kbt = Value::from_cbor_bytes(&esdicawt_sd_kbt_bytes[..]).unwrap();
     let mut esdicawt_sd_kbt = esdicawt_sd_kbt.into_tag().unwrap().1.into_array().unwrap();
@@ -408,6 +424,10 @@ fn issuer_signing_key() -> p384::ecdsa::SigningKey {
     p384::SecretKey::from_pkcs8_pem(include_str!("../../draft-ietf-spice-sd-cwt/issuer_privkey.pem").trim())
         .unwrap()
         .into()
+}
+
+fn issuer_verifying_key() -> p384::ecdsa::VerifyingKey {
+    *issuer_signing_key().as_ref()
 }
 
 struct TestVectorRng;

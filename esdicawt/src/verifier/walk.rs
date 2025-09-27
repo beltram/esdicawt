@@ -1,6 +1,7 @@
 use crate::{SdCwtVerifierError, SdCwtVerifierResult};
 use ciborium::Value;
 use esdicawt_spec::{
+    CwtAny,
     blinded_claims::{Salted, SaltedClaim, SaltedElement},
     redacted_claims::{RedactedClaimElement, RedactedClaimKeys},
 };
@@ -37,8 +38,7 @@ where
                                     walk_payload(value, disclosures)?;
                                 }
                                 // TODO: verify the key ('name') is not already present in the mapping
-                                let name = Value::serialized(&name)?;
-                                mapping.push((name, value.clone()))
+                                mapping.push((name.to_cbor_value()?, value.clone()))
                             }
                             Salted::Decoy(_) => {} // nothing to do, validity of hash already checked
                             Salted::Element(_) => return Err(SdCwtVerifierError::MalformedSdCwt("'redacted_claim_keys' must not contain redacted elements")),

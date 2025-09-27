@@ -1,6 +1,8 @@
-use crate::{HolderParams, SdCwtHolderError, now};
+use crate::{HolderParams, HolderValidationParams, SdCwtHolderError, SdCwtHolderValidationError, coset::CoseSign1, holder::validation::validate_disclosures, now};
+use ciborium::Value;
+use cose_key_confirmation::{KeyConfirmation, error::CoseKeyConfirmationError};
 use esdicawt_spec::{
-    CustomClaims, CwtAny, SdHashAlg, Select,
+    CustomClaims, CwtAny, NoClaims, SdHashAlg, Select,
     issuance::SdCwtIssuedTagged,
     key_binding::{KbtCwtTagged, KbtPayload, KbtProtected, KbtUnprotected},
     reexports::coset::{
@@ -12,11 +14,11 @@ use signature::Signer;
 pub mod error;
 pub mod params;
 pub mod traverse;
+pub mod validation;
 
 pub trait Holder {
     type Error: core::error::Error + Send + Sync;
 
-    type Signature;
     type Hasher: digest::Digest + Clone;
 
     #[cfg(not(any(feature = "pem", feature = "der")))]
@@ -24,6 +26,12 @@ pub trait Holder {
 
     #[cfg(any(feature = "pem", feature = "der"))]
     type Signer: Signer<Self::Signature> + pkcs8::DecodePrivateKey;
+
+    type Signature;
+    type Verifier: signature::Verifier<Self::Signature> + PartialEq + for<'a> TryFrom<&'a KeyConfirmation, Error = CoseKeyConfirmationError>;
+
+    type IssuerSignature;
+    type IssuerVerifier: signature::Verifier<Self::IssuerSignature>;
 
     type IssuerPayloadClaims: Select;
     type IssuerProtectedClaims: CustomClaims;
@@ -33,7 +41,6 @@ pub trait Holder {
     type KbtPayloadClaims: CustomClaims;
 
     fn cwt_algorithm(&self) -> coset::iana::Algorithm;
-    fn hash_algorithm(&self) -> SdHashAlg;
 
     /// Build a new instance of a Holder by providing a signing key
     fn new(signing_key: Self::Signer) -> Self
@@ -64,13 +71,19 @@ pub trait Holder {
 
     fn signer(&self) -> &Self::Signer;
 
+    fn verifier(&self) -> &Self::Verifier;
+
     fn serialize_signature(&self, signature: &Self::Signature) -> Result<Vec<u8>, Self::Error>;
+
+    fn deserialize_issuer_signature(&self, bytes: &[u8]) -> Result<Self::IssuerSignature, Self::Error>;
+
+    fn supported_hash_alg(&self) -> &[SdHashAlg];
 
     /// Simple API when a holder wants all the redacted claims to be disclosed to the Verifier
     #[allow(clippy::type_complexity)]
     fn new_presentation(
         &self,
-        sd_cwt_issued: &[u8],
+        mut sd_cwt_issued: SdCwtVerified<Self::IssuerPayloadClaims, Self::Hasher, Self::IssuerProtectedClaims, Self::IssuerUnprotectedClaims>,
         params: HolderParams<Self::KbtProtectedClaims, Self::KbtUnprotectedClaims, Self::KbtPayloadClaims>,
     ) -> Result<
         KbtCwtTagged<
@@ -84,8 +97,6 @@ pub trait Holder {
         >,
         SdCwtHolderError<Self::Error>,
     > {
-        let mut sd_cwt_issued = SdCwtIssuedTagged::from_cbor_bytes(sd_cwt_issued)?;
-
         // --- building the kbt ---
         // --- unprotected ---
         let unprotected = KbtUnprotected {
@@ -97,16 +108,16 @@ pub trait Holder {
         // select the claims to disclose
         let sd_claims = params
             .presentation
-            .try_select_disclosures::<Self::Hasher, Self::Error>(sd_cwt_issued.0.sd_unprotected.sd_claims)?;
+            .try_select_disclosures::<Self::Hasher, Self::Error>(sd_cwt_issued.0.0.sd_unprotected.sd_claims)?;
 
         // then replace them in the issued sd-cwt
-        sd_cwt_issued.0.sd_unprotected.sd_claims = sd_claims;
+        sd_cwt_issued.0.0.sd_unprotected.sd_claims = sd_claims;
 
         // --- protected ---
         let alg = coset::Algorithm::Assigned(self.cwt_algorithm());
         let protected = KbtProtected::<Self::IssuerPayloadClaims, Self::Hasher, Self::IssuerProtectedClaims, Self::IssuerUnprotectedClaims, Self::KbtProtectedClaims> {
             alg: alg.into(),
-            kcwt: sd_cwt_issued.into(),
+            kcwt: sd_cwt_issued.0.into(),
             extra: params.extra_kbt_protected,
         }
         .try_into()
@@ -143,18 +154,113 @@ pub trait Holder {
             .to_tagged_vec()?;
         Ok(KbtCwtTagged::from_cbor_bytes(&sign1)?)
     }
+
+    // TODO: there are no unblinded claims about the subject which violate its privacy policies
+    // TODO: all the Salted Disclosed Claims are correct in their unblinded context in the payload
+    #[allow(clippy::type_complexity)]
+    fn verify_sd_cwt(
+        &self,
+        sd_cwt: &[u8],
+        params: HolderValidationParams,
+        issuer_verifier: &Self::IssuerVerifier,
+    ) -> Result<SdCwtVerified<Self::IssuerPayloadClaims, Self::Hasher, Self::IssuerProtectedClaims, Self::IssuerUnprotectedClaims>, SdCwtHolderError<Self::Error>> {
+        // verify signature
+        let cose_sign1_sd_cwt = CoseSign1::from_tagged_slice(sd_cwt)?;
+        cose_sign1_sd_cwt.verify_signature(&[], |signature, raw_data| {
+            let signature = self.deserialize_issuer_signature(signature).map_err(SdCwtHolderValidationError::CustomError)?;
+            use signature::Verifier as _;
+            issuer_verifier.verify(raw_data, &signature).map_err(SdCwtHolderValidationError::from)
+        })?;
+
+        let mut sd_cwt = SdCwtIssuedTagged::from_cbor_bytes(sd_cwt)?;
+        let payload = sd_cwt.0.payload.to_value()?;
+
+        // verify time claims
+        #[cfg(not(feature = "test-vectors"))] // FIXME: draft samples are expired
+        {
+            let now = params.artificial_time.unwrap_or_else(|| time::OffsetDateTime::now_utc().unix_timestamp());
+            crate::time::verify_time_claims(now, params.leeway, payload.inner.issued_at, payload.inner.expiration, payload.inner.not_before)?;
+        }
+
+        // subject
+        if let Some((actual, expected)) = payload.inner.subject.as_ref().zip(params.expected_subject) {
+            if actual != expected {
+                return Err(SdCwtHolderError::ValidationError(SdCwtHolderValidationError::SubMismatch {
+                    actual: actual.to_owned(),
+                    expected: expected.to_owned(),
+                }));
+            }
+        }
+
+        // issuer
+        if let Some(expected) = params.expected_issuer {
+            let actual = &payload.inner.issuer;
+            if actual != expected {
+                return Err(SdCwtHolderError::ValidationError(SdCwtHolderValidationError::IssuerMismatch {
+                    actual: actual.to_owned(),
+                    expected: expected.to_owned(),
+                }));
+            }
+        }
+
+        // audience
+        if let Some((actual, expected)) = payload.inner.audience.as_ref().zip(params.expected_audience) {
+            if actual != expected {
+                return Err(SdCwtHolderError::ValidationError(SdCwtHolderValidationError::AudienceMismatch {
+                    actual: actual.to_owned(),
+                    expected: expected.to_owned(),
+                }));
+            }
+        }
+
+        // key confirmation
+        let expected = self.verifier();
+        let actual: Self::Verifier = (&payload.cnf).try_into()?;
+        if actual != *expected {
+            return Err(SdCwtHolderError::ValidationError(SdCwtHolderValidationError::VerifyingKeyMismatch));
+        }
+
+        // validate disclosure
+
+        let disclosures = sd_cwt.0.disclosures();
+        if let Some(raw_payload) = cose_sign1_sd_cwt.payload.as_deref().map(Value::from_cbor_bytes).transpose()? {
+            let actual_nb_disclosures = disclosures.digested::<Self::Hasher>()?;
+
+            let expected_nb_disclosures = validate_disclosures(&raw_payload, &actual_nb_disclosures)?;
+
+            if expected_nb_disclosures != actual_nb_disclosures.len() {
+                return Err(SdCwtHolderError::ValidationError(SdCwtHolderValidationError::OrphanDisclosure {
+                    expected: expected_nb_disclosures,
+                    actual: actual_nb_disclosures.len(),
+                }));
+            }
+        } else if !disclosures.is_empty() {
+            return Err(SdCwtHolderError::ValidationError(SdCwtHolderValidationError::OrphanDisclosure {
+                expected: 0,
+                actual: disclosures.len(),
+            }));
+        }
+
+        Ok(SdCwtVerified(sd_cwt))
+    }
 }
+
+#[derive(Debug, Clone)]
+pub struct SdCwtVerified<PayloadClaims: Select, Hasher: digest::Digest + Clone, ProtectedClaims: CustomClaims = NoClaims, UnprotectedClaims: CustomClaims = NoClaims>(
+    pub(crate) SdCwtIssuedTagged<PayloadClaims, Hasher, ProtectedClaims, UnprotectedClaims>,
+);
 
 #[cfg(test)]
 mod tests {
     use super::{claims::CustomTokenClaims, test_utils::Ed25519Holder, *};
-    use crate::{Issuer, IssuerParams, Presentation, holder::params::CborPath, issuer::test_utils::Ed25519IssuerClaims};
+    use crate::{Issuer, IssuerParams, Presentation, holder::params::CborPath, issuer::test_utils::Ed25519Issuer};
     use ciborium::cbor;
     use esdicawt_spec::{
         ClaimName, NoClaims,
         blinded_claims::{Salted, SaltedClaim},
     };
     use rand_core::SeedableRng as _;
+    use std::collections::HashMap;
 
     wasm_bindgen_test::wasm_bindgen_test_configure!(run_in_browser);
 
@@ -164,12 +270,15 @@ mod tests {
         let mut csprng = rand_chacha::ChaCha20Rng::from_entropy();
 
         let holder_signing_key = ed25519_dalek::SigningKey::generate(&mut csprng);
+        let holder_verifying_key = holder_signing_key.verifying_key();
         let issuer_signing_key = ed25519_dalek::SigningKey::generate(&mut csprng);
-        let issuer = Ed25519IssuerClaims::<CustomTokenClaims>::new(issuer_signing_key);
+        let issuer = Ed25519Issuer::<CustomTokenClaims>::new(issuer_signing_key.clone());
 
         let payload = CustomTokenClaims {
             name: Some("Alice Smith".into()),
             age: Some(42),
+            array: vec!["a".into()],
+            map: HashMap::from_iter([("a".into(), "b".into())]),
         };
         let issue_params = IssuerParams {
             protected_claims: None,
@@ -185,7 +294,7 @@ mod tests {
             with_not_before: false,
             with_issued_at: false,
             leeway: core::time::Duration::from_secs(1),
-            holder_confirmation_key: (&holder_signing_key.verifying_key()).try_into().unwrap(),
+            holder_confirmation_key: (&holder_verifying_key).try_into().unwrap(),
             now: None,
         };
         let sd_cwt = issuer.issue_cwt(&mut csprng, issue_params).unwrap().to_cbor_bytes().unwrap();
@@ -210,7 +319,9 @@ mod tests {
             now: None,
         };
 
-        let mut sd_cwt_kbt = holder.new_presentation(&sd_cwt, presentation_params).unwrap();
+        let sd_cwt = holder.verify_sd_cwt(&sd_cwt, Default::default(), &issuer_signing_key.verifying_key()).unwrap();
+
+        let mut sd_cwt_kbt = holder.new_presentation(sd_cwt, presentation_params).unwrap();
 
         let sd_cwt_kbt_2 = sd_cwt_kbt.to_cbor_bytes().unwrap();
         let sd_cwt_kbt_2 = KbtCwtTagged::<CustomTokenClaims, sha2::Sha256>::from_cbor_bytes(&sd_cwt_kbt_2).unwrap();
@@ -223,7 +334,7 @@ mod tests {
         assert!(disclosable_claims.into_iter().any(|c| { matches!(c.unwrap(), Salted::Claim(sc) if is_alice(sc)) }));
     }
 
-    #[allow(dead_code, unused_variables)]
+    #[allow(dead_code, unused_variables, clippy::type_complexity)]
     fn should_be_object_safe(
         holder: Box<
             dyn Holder<
@@ -236,6 +347,9 @@ mod tests {
                     Error = std::convert::Infallible,
                     Signer = ed25519_dalek::SigningKey,
                     Signature = ed25519_dalek::Signature,
+                    Verifier = ed25519_dalek::VerifyingKey,
+                    IssuerSignature = ed25519_dalek::Signature,
+                    IssuerVerifier = ed25519_dalek::VerifyingKey,
                     Hasher = sha2::Sha256,
                 >,
         >,
@@ -247,22 +361,59 @@ mod tests {
 pub mod claims {
     use ciborium::Value;
     use esdicawt_spec::{Select, sd};
+    use std::collections::HashMap;
 
-    #[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
+    #[derive(Default, Debug, Clone, PartialEq, serde::Serialize)]
     pub(super) struct CustomTokenClaims {
         pub name: Option<String>,
         pub age: Option<u32>,
+        pub array: Vec<String>,
+        pub map: HashMap<String, String>,
+    }
+
+    impl<'de> serde::Deserialize<'de> for CustomTokenClaims {
+        fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+            let value = <Value as serde::Deserialize>::deserialize(deserializer)?.into_map().unwrap();
+            let mut model = Self::default();
+
+            for entry in value {
+                match entry {
+                    (Value::Text(l), Value::Text(name)) if l == "name" => {
+                        model.name.replace(name);
+                    }
+                    (Value::Text(l), Value::Integer(age)) if l == "age" => {
+                        model.age.replace(age.try_into().unwrap());
+                    }
+                    (Value::Text(l), Value::Array(array)) if l == "array" => {
+                        model.array = array.into_iter().filter_map(|v| v.into_text().ok()).collect();
+                    }
+                    (Value::Text(l), Value::Map(map)) if l == "map" => {
+                        model.map = map.into_iter().filter_map(|(k, v)| k.into_text().ok().zip(v.into_text().ok())).collect();
+                    }
+                    _ => unreachable!(),
+                }
+            }
+
+            Ok(model)
+        }
     }
 
     impl Select for CustomTokenClaims {
         fn select(self) -> Result<Value, ciborium::value::Error> {
-            let mut map = Vec::with_capacity(2);
+            let mut map = Vec::with_capacity(4);
             if let Some(name) = self.name {
                 map.push((sd!("name"), Value::Text(name)));
             }
             if let Some(age) = self.age {
                 map.push((sd!("age"), Value::Integer(age.into())));
             }
+
+            let array = self.array.clone().into_iter().map(|e| sd!(e)).collect();
+            map.push((Value::Text("array".into()), Value::Array(array)));
+
+            let inner = self.map.clone().into_iter().map(|(k, v)| (sd!(Value::from(k)), v.into())).collect();
+            map.push((Value::Text("map".into()), Value::Map(inner)));
+
             Ok(Value::Map(map))
         }
     }
@@ -270,11 +421,12 @@ pub mod claims {
 
 #[cfg(feature = "test-utils")]
 pub mod test_utils {
-    use esdicawt_spec::{CustomClaims, NoClaims, Select, reexports::coset};
+    use esdicawt_spec::{CustomClaims, NoClaims, SdHashAlg, Select, reexports::coset};
 
     #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
     pub struct Ed25519Holder<DisclosedClaims: CustomClaims> {
         signing_key: ed25519_dalek::SigningKey,
+        verifying_key: ed25519_dalek::VerifyingKey,
         pub _marker: core::marker::PhantomData<DisclosedClaims>,
     }
 
@@ -284,18 +436,24 @@ pub mod test_utils {
     {
         type Error = std::convert::Infallible;
         type Signer = ed25519_dalek::SigningKey;
-        type Signature = ed25519_dalek::Signature;
         type Hasher = sha2::Sha256;
 
+        type Signature = ed25519_dalek::Signature;
+        type Verifier = ed25519_dalek::VerifyingKey;
+
+        type IssuerSignature = ed25519_dalek::Signature;
+        type IssuerVerifier = ed25519_dalek::VerifyingKey;
+
+        type IssuerPayloadClaims = T;
         type IssuerProtectedClaims = NoClaims;
         type IssuerUnprotectedClaims = NoClaims;
-        type IssuerPayloadClaims = T;
         type KbtProtectedClaims = NoClaims;
         type KbtUnprotectedClaims = NoClaims;
         type KbtPayloadClaims = NoClaims;
 
         fn new(signing_key: Self::Signer) -> Self {
             Self {
+                verifying_key: signing_key.verifying_key(),
                 signing_key,
                 _marker: Default::default(),
             }
@@ -313,8 +471,16 @@ pub mod test_utils {
             coset::iana::Algorithm::EdDSA
         }
 
-        fn hash_algorithm(&self) -> esdicawt_spec::SdHashAlg {
-            esdicawt_spec::SdHashAlg::Sha256
+        fn supported_hash_alg(&self) -> &[SdHashAlg] {
+            &[SdHashAlg::Sha256]
+        }
+
+        fn verifier(&self) -> &Self::Verifier {
+            &self.verifying_key
+        }
+
+        fn deserialize_issuer_signature(&self, bytes: &[u8]) -> Result<Self::IssuerSignature, Self::Error> {
+            Ok(ed25519_dalek::Signature::try_from(bytes).unwrap())
         }
     }
 }
