@@ -269,6 +269,14 @@ pub trait CwtAny: serde::Serialize + for<'de> serde::Deserialize<'de> + Clone {
     {
         Ok(ciborium::from_reader(bytes)?)
     }
+
+    fn to_cbor_value(&self) -> EsdicawtSpecResult<Value> {
+        Ok(Value::serialized(self)?)
+    }
+
+    fn from_cbor_value(value: &Value) -> EsdicawtSpecResult<Self> {
+        Ok(value.deserialized::<Self>()?)
+    }
 }
 
 impl<T> CwtAny for T where T: serde::Serialize + for<'de> serde::Deserialize<'de> + Clone {}
