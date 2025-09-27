@@ -445,24 +445,6 @@ fn test_vectors<P: Select>(payload: P, spec_sd_cwt_bytes: &[u8], spec_sd_kbt_byt
     assert!(spec_sd_claims.iter().all(|v| v.is_bytes()));
     assert!(esdicawt_sd_claims.iter().all(|v| v.is_bytes()));
 
-    println!(
-        "> {:?}",
-        spec_sd_claims
-            .iter()
-            .map(|d| d.as_bytes().unwrap())
-            .map(|d| Salted::<Value>::from_cbor_bytes(d).unwrap())
-            .collect::<Vec<_>>()
-    );
-    println!(
-        "> {:?}",
-        esdicawt_sd_claims
-            .iter()
-            .map(|d| d.as_bytes().unwrap())
-            .map(|d| Salted::<Value>::from_cbor_bytes(d).unwrap())
-            .collect::<Vec<_>>()
-    );
-    // println!("{:?}", esdicawt_sd_claims);
-
     assert_eq!(spec_sd_claims.len(), esdicawt_sd_claims.len());
 
     let claim = |map: &Vec<(Value, Value)>, i: i64| {
