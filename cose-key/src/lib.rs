@@ -517,3 +517,93 @@ pub mod ec_p384 {
         }
     }
 }
+
+#[cfg(feature = "pem")]
+pub mod pem {
+    use super::*;
+
+    #[allow(unreachable_code)]
+    impl pkcs8::DecodePublicKey for CoseKey {
+        fn from_public_key_der(#[allow(unused_variables)] bytes: &[u8]) -> pkcs8::spki::Result<Self> {
+            #[cfg(all(feature = "ed25519", feature = "p256", feature = "p384"))]
+            {
+                let ck = ed25519_dalek::VerifyingKey::from_public_key_der(bytes).map(Into::into);
+                let ck = ck.or_else(|_| p256::ecdsa::VerifyingKey::from_public_key_der(bytes).and_then(|vk| Self::try_from(vk).map_err(|_| pkcs8::spki::Error::KeyMalformed)));
+                let ck = ck.or_else(|_| p384::ecdsa::VerifyingKey::from_public_key_der(bytes).and_then(|vk| Self::try_from(vk).map_err(|_| pkcs8::spki::Error::KeyMalformed)));
+                return ck.map_err(|_| pkcs8::spki::Error::KeyMalformed);
+            }
+            #[cfg(all(feature = "ed25519", feature = "p256"))]
+            {
+                let ck = ed25519_dalek::VerifyingKey::from_public_key_der(bytes).map(Into::into);
+                let ck = ck.or_else(|_| p256::ecdsa::VerifyingKey::from_public_key_der(bytes).and_then(|vk| Self::try_from(vk).map_err(|_| pkcs8::spki::Error::KeyMalformed)));
+                return ck.map_err(|_| pkcs8::spki::Error::KeyMalformed);
+            }
+            #[cfg(all(feature = "ed25519", feature = "p384"))]
+            {
+                let ck = ed25519_dalek::VerifyingKey::from_public_key_der(bytes).map(Into::into);
+                let ck = ck.or_else(|_| p384::ecdsa::VerifyingKey::from_public_key_der(bytes).and_then(|vk| Self::try_from(vk).map_err(|_| pkcs8::spki::Error::KeyMalformed)));
+                return ck.map_err(|_| pkcs8::spki::Error::KeyMalformed);
+            }
+            #[cfg(all(feature = "p256", feature = "p384"))]
+            {
+                let ck = p256::ecdsa::VerifyingKey::from_public_key_der(bytes).and_then(|vk| Self::try_from(vk).map_err(|_| pkcs8::spki::Error::KeyMalformed));
+                let ck = ck.or_else(|_| p384::ecdsa::VerifyingKey::from_public_key_der(bytes).and_then(|vk| Self::try_from(vk).map_err(|_| pkcs8::spki::Error::KeyMalformed)));
+                return ck.map_err(|_| pkcs8::spki::Error::KeyMalformed);
+            }
+            #[cfg(feature = "ed25519")]
+            {
+                let ck = ed25519_dalek::VerifyingKey::from_public_key_der(bytes).map(Into::into);
+                return ck.map_err(|_| pkcs8::spki::Error::KeyMalformed);
+            }
+            #[cfg(feature = "p256")]
+            {
+                let ck = p256::ecdsa::VerifyingKey::from_public_key_der(bytes).and_then(|vk| Self::try_from(vk).map_err(|_| pkcs8::spki::Error::KeyMalformed));
+                return ck.map_err(|_| pkcs8::spki::Error::KeyMalformed);
+            }
+            #[cfg(feature = "p384")]
+            {
+                let ck = p384::ecdsa::VerifyingKey::from_public_key_der(bytes).and_then(|vk| Self::try_from(vk).map_err(|_| pkcs8::spki::Error::KeyMalformed));
+                ck.map_err(|_| pkcs8::spki::Error::KeyMalformed)
+            }
+            #[cfg(not(any(feature = "ed25519", feature = "p256", feature = "p384")))]
+            {
+                return Err(pkcs8::spki::Error::KeyMalformed);
+            }
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use pkcs8::{DecodePublicKey, EncodePublicKey, LineEnding::LF};
+
+    #[test]
+    fn from_pem_should_succeed() {
+        // Ed25519
+        let vk = ed25519_dalek::SigningKey::generate(&mut rand::thread_rng()).verifying_key();
+        let ck = CoseKey::from(&vk);
+
+        let pem = vk.to_public_key_pem(LF).unwrap();
+        let ck_pem = CoseKey::from_public_key_pem(&pem).unwrap();
+        assert_eq!(ck, ck_pem);
+
+        // P256
+        let sk = p256::ecdsa::SigningKey::random(&mut rand::thread_rng());
+        let vk = sk.as_ref();
+        let ck = CoseKey::try_from(vk).unwrap();
+
+        let pem = vk.to_public_key_pem(LF).unwrap();
+        let ck_pem = CoseKey::from_public_key_pem(&pem).unwrap();
+        assert_eq!(ck, ck_pem);
+
+        // P384
+        let sk = p384::ecdsa::SigningKey::random(&mut rand::thread_rng());
+        let vk = sk.as_ref();
+        let ck = CoseKey::try_from(vk).unwrap();
+
+        let pem = vk.to_public_key_pem(LF).unwrap();
+        let ck_pem = CoseKey::from_public_key_pem(&pem).unwrap();
+        assert_eq!(ck, ck_pem);
+    }
+}
