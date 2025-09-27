@@ -5,7 +5,7 @@ use serde::ser::SerializeMap;
 use super::SdProtected;
 use crate::{AnyMap, CWT_CLAIM_ALG, CWT_CLAIM_SD_ALG, CWT_MEDIATYPE, ClaimName, CustomClaims, MEDIATYPE_SD_CWT, MapKey, SdHashAlg, issuance::SdProtectedBuilder};
 
-impl<E: CustomClaims> serde::Serialize for SdProtected<E> {
+impl<Extra: CustomClaims> serde::Serialize for SdProtected<Extra> {
     fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
         use serde::ser::Error as _;
         let mut extra: Option<AnyMap> = self.extra.clone().map(|extra| extra.into());
@@ -28,11 +28,11 @@ impl<E: CustomClaims> serde::Serialize for SdProtected<E> {
     }
 }
 
-impl<'de, E: CustomClaims> serde::Deserialize<'de> for SdProtected<E> {
+impl<'de, Extra: CustomClaims> serde::Deserialize<'de> for SdProtected<Extra> {
     fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
         struct SdProtectedVisitor<E>(std::marker::PhantomData<E>);
-        impl<'de, E: CustomClaims> serde::de::Visitor<'de> for SdProtectedVisitor<E> {
-            type Value = SdProtected<E>;
+        impl<'de, Extra: CustomClaims> serde::de::Visitor<'de> for SdProtectedVisitor<Extra> {
+            type Value = SdProtected<Extra>;
 
             fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
                 write!(formatter, "a sd-protected header")
@@ -44,7 +44,7 @@ impl<'de, E: CustomClaims> serde::Deserialize<'de> for SdProtected<E> {
             {
                 use serde::de::Error as _;
                 let mut found_mediatype = false;
-                let mut builder = SdProtectedBuilder::<E>::default();
+                let mut builder = SdProtectedBuilder::<Extra>::default();
                 let mut extra = AnyMap::default();
                 while let Some((k, v)) = map.next_entry::<MapKey, Value>()? {
                     match k {
@@ -77,7 +77,7 @@ impl<'de, E: CustomClaims> serde::Deserialize<'de> for SdProtected<E> {
                 }
 
                 if !extra.is_empty() {
-                    let custom_keys: E = extra.try_into().map_err(|_err| A::Error::custom("Cannot deserialize custom keys".to_string()))?;
+                    let custom_keys: Extra = extra.try_into().map_err(|_err| A::Error::custom("Cannot deserialize custom keys".to_string()))?;
                     builder.extra(custom_keys);
                 }
 
@@ -85,14 +85,14 @@ impl<'de, E: CustomClaims> serde::Deserialize<'de> for SdProtected<E> {
             }
         }
 
-        deserializer.deserialize_map(SdProtectedVisitor::<E>(Default::default()))
+        deserializer.deserialize_map(SdProtectedVisitor::<Extra>(Default::default()))
     }
 }
 
-impl<E: CustomClaims> TryFrom<SdProtected<E>> for coset::Header {
+impl<Extra: CustomClaims> TryFrom<SdProtected<Extra>> for coset::Header {
     type Error = Box<dyn std::error::Error>;
 
-    fn try_from(sdp: SdProtected<E>) -> Result<Self, Self::Error> {
+    fn try_from(sdp: SdProtected<Extra>) -> Result<Self, Self::Error> {
         let mut builder = coset::HeaderBuilder::new();
 
         // map alg

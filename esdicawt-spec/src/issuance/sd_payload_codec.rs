@@ -9,11 +9,11 @@ use ciborium::Value;
 use cose_key_confirmation::KeyConfirmation;
 use serde::ser::SerializeMap;
 
-impl<E: CustomClaims> serde::Serialize for SdPayload<E> {
+impl<Extra: CustomClaims> serde::Serialize for SdPayload<Extra> {
     fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
         let mut map = serializer.serialize_map(None)?;
 
-        serialize_sd_cwt_payload::<E, S>(&self.inner, &mut map)?;
+        serialize_sd_cwt_payload::<Extra, S>(&self.inner, &mut map)?;
 
         map.serialize_entry(&CWT_CLAIM_KEY_CONFIRMATION_MAP, &self.cnf)?;
 
@@ -26,12 +26,12 @@ impl<E: CustomClaims> serde::Serialize for SdPayload<E> {
     }
 }
 
-impl<'de, E: CustomClaims> serde::Deserialize<'de> for SdPayload<E> {
+impl<'de, Extra: CustomClaims> serde::Deserialize<'de> for SdPayload<Extra> {
     fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
         struct SelectiveDisclosurePayloadVisitor<E>(std::marker::PhantomData<E>);
 
-        impl<'de, E: CustomClaims> serde::de::Visitor<'de> for SelectiveDisclosurePayloadVisitor<E> {
-            type Value = SdPayload<E>;
+        impl<'de, Extra: CustomClaims> serde::de::Visitor<'de> for SelectiveDisclosurePayloadVisitor<Extra> {
+            type Value = SdPayload<Extra>;
 
             fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
                 write!(formatter, "an issuer sd-payload")
@@ -42,7 +42,7 @@ impl<'de, E: CustomClaims> serde::Deserialize<'de> for SdPayload<E> {
                 use serde::de::Error as _;
 
                 let mut extra = vec![];
-                let mut builder = SdPayloadBuilder::<E>::default();
+                let mut builder = SdPayloadBuilder::<Extra>::default();
 
                 while let Some((k, v)) = map.next_entry::<Value, Value>()? {
                     let label = k.deserialized::<ClaimName>().map_err(A::Error::custom)?;
@@ -69,7 +69,7 @@ impl<'de, E: CustomClaims> serde::Deserialize<'de> for SdPayload<E> {
                 }
 
                 let extra = Value::Map(extra);
-                let inner = extra.deserialized::<SdInnerPayload<E>>().map_err(A::Error::custom)?;
+                let inner = extra.deserialized::<SdInnerPayload<Extra>>().map_err(A::Error::custom)?;
 
                 builder.inner(inner).build().map_err(A::Error::custom)
             }
@@ -79,15 +79,15 @@ impl<'de, E: CustomClaims> serde::Deserialize<'de> for SdPayload<E> {
     }
 }
 
-impl<E: CustomClaims> serde::Serialize for SdInnerPayload<E> {
+impl<Extra: CustomClaims> serde::Serialize for SdInnerPayload<Extra> {
     fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
         let mut map = serializer.serialize_map(None)?;
-        serialize_sd_cwt_payload::<E, S>(self, &mut map)?;
+        serialize_sd_cwt_payload::<Extra, S>(self, &mut map)?;
         map.end()
     }
 }
 
-fn serialize_sd_cwt_payload<E: CustomClaims, S: serde::Serializer>(p: &SdInnerPayload<E>, map: &mut S::SerializeMap) -> Result<(), S::Error> {
+fn serialize_sd_cwt_payload<Extra: CustomClaims, S: serde::Serializer>(p: &SdInnerPayload<Extra>, map: &mut S::SerializeMap) -> Result<(), S::Error> {
     map.serialize_entry(&CWT_CLAIM_ISSUER, &p.issuer)?;
     if let Some(sub) = &p.subject {
         map.serialize_entry(&CWT_CLAIM_SUBJECT, sub)?;
@@ -114,12 +114,12 @@ fn serialize_sd_cwt_payload<E: CustomClaims, S: serde::Serializer>(p: &SdInnerPa
     Ok(())
 }
 
-impl<'de, E: CustomClaims> serde::Deserialize<'de> for SdInnerPayload<E> {
+impl<'de, Extra: CustomClaims> serde::Deserialize<'de> for SdInnerPayload<Extra> {
     fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
         struct SdCwtPayloadVisitor<E>(std::marker::PhantomData<E>);
 
-        impl<'de, E: CustomClaims> serde::de::Visitor<'de> for SdCwtPayloadVisitor<E> {
-            type Value = SdInnerPayload<E>;
+        impl<'de, Extra: CustomClaims> serde::de::Visitor<'de> for SdCwtPayloadVisitor<Extra> {
+            type Value = SdInnerPayload<Extra>;
 
             fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
                 write!(formatter, "an issuer sd-payload")
@@ -130,7 +130,7 @@ impl<'de, E: CustomClaims> serde::Deserialize<'de> for SdInnerPayload<E> {
                 use serde::de::Error as _;
 
                 let mut extra = AnyMap::default();
-                let mut builder = SdInnerPayloadBuilder::<E>::default();
+                let mut builder = SdInnerPayloadBuilder::<Extra>::default();
 
                 while let Some((k, v)) = map.next_entry::<MapKey, Value>()? {
                     match k {
@@ -170,7 +170,7 @@ impl<'de, E: CustomClaims> serde::Deserialize<'de> for SdInnerPayload<E> {
                 }
 
                 if !extra.is_empty() {
-                    let custom_keys: E = extra.try_into().map_err(|_err| A::Error::custom("Cannot deserialize custom keys".to_string()))?;
+                    let custom_keys: Extra = extra.try_into().map_err(|_err| A::Error::custom("Cannot deserialize custom keys".to_string()))?;
                     builder.extra(custom_keys);
                 }
 
