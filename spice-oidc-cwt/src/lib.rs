@@ -278,8 +278,8 @@ pub trait SpiceOidcSdCwtRead {
     fn updated_at(&mut self) -> EsdicawtReadResult<Option<i64>>;
 }
 
-impl<IssuerProtectedClaims: CustomClaims, IssuerUnprotectedClaims: CustomClaims, PayloadClaims: CustomClaims, DisclosableClaims: CustomClaims> SpiceOidcSdCwtRead
-    for SdCwtIssuedTagged<IssuerProtectedClaims, IssuerUnprotectedClaims, PayloadClaims, DisclosableClaims>
+impl<DisclosableClaims: CustomClaims, IssuerProtectedClaims: CustomClaims, IssuerUnprotectedClaims: CustomClaims, PayloadClaims: CustomClaims> SpiceOidcSdCwtRead
+    for SdCwtIssuedTagged<DisclosableClaims, IssuerProtectedClaims, IssuerUnprotectedClaims, PayloadClaims>
 where
     for<'a> &'a PayloadClaims: Into<&'a SpiceOidcClaims>,
 {
@@ -396,15 +396,17 @@ where
 }
 
 impl<
+    DisclosedClaims: CustomClaims,
     IssuerProtectedClaims: CustomClaims,
     IssuerUnprotectedClaims: CustomClaims,
-    PayloadClaims: CustomClaims,
+    IssuerPayloadClaims: CustomClaims,
     KbtProtectedClaims: CustomClaims,
     KbtUnprotectedClaims: CustomClaims,
     KbtPayloadClaims: CustomClaims,
-> SpiceOidcSdCwtRead for KbtCwtTagged<IssuerProtectedClaims, IssuerUnprotectedClaims, PayloadClaims, KbtProtectedClaims, KbtUnprotectedClaims, KbtPayloadClaims, PayloadClaims>
+> SpiceOidcSdCwtRead
+    for KbtCwtTagged<DisclosedClaims, IssuerProtectedClaims, IssuerUnprotectedClaims, IssuerPayloadClaims, KbtProtectedClaims, KbtUnprotectedClaims, KbtPayloadClaims>
 where
-    for<'a> &'a PayloadClaims: Into<&'a SpiceOidcClaims>,
+    for<'a> &'a IssuerPayloadClaims: Into<&'a SpiceOidcClaims>,
 {
     fn name(&mut self) -> EsdicawtReadResult<Option<Cow<str>>> {
         self.maybe_std_str_claim(CWT_CLAIM_NAME.into(), |payload| payload.extra.as_ref().and_then(|c| c.into().name.as_deref()))
@@ -585,7 +587,7 @@ mod tests {
         claims: SpiceOidcClaims,
         holder_pk: &ed25519_dalek::VerifyingKey,
         subject: &str,
-    ) -> SdCwtIssuedTagged<NoClaims, NoClaims, SpiceOidcClaims, SpiceOidcClaims> {
+    ) -> SdCwtIssuedTagged<SpiceOidcClaims, NoClaims, NoClaims, SpiceOidcClaims> {
         issuer
             .issue_cwt(
                 &mut rand::thread_rng(),
