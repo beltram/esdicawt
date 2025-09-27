@@ -54,7 +54,6 @@ where
     Hasher: digest::Digest,
 {
     let query: Query = ciborium::from_reader(&mut &*query)?;
-
     query_inner::<Hasher>(array, payload, &query.elements)
 }
 
@@ -194,8 +193,8 @@ impl<
 mod tests {
     use super::*;
     use ciborium::cbor;
-    use esdicawt_spec::{EsdicawtSpecError, Select, issuance::SdCwtIssuedTagged};
-    use rand_core::SeedableRng;
+    use esdicawt_spec::{Select, SelectExt, issuance::SdCwtIssuedTagged, sd};
+    use rand_core::SeedableRng as _;
 
     use crate::{
         Holder, HolderParams, Issuer, IssuerParams, Presentation,
@@ -205,80 +204,76 @@ mod tests {
 
     #[test]
     fn can_query_top_level_claim() {
-        let payload = cbor!({
-            "a" => "b",
-            "c" => "d",
-        })
-        .unwrap();
-        let (mut sd_cwt, holder_signing_key) = generate(payload);
-        let mut kbt = present::<Value>(&sd_cwt.to_cbor_bytes().unwrap()[..], holder_signing_key);
-        assert_eq!(sd_cwt.0.query(vec!["a".into()].into()).unwrap(), Some("b".into()));
-        assert_eq!(kbt.0.query(vec!["a".into()].into()).unwrap(), Some("b".into()));
+        let test = |payload: Result<Value, ciborium::value::Error>, a_redacted: bool| {
+            let payload = payload.unwrap().select_none().unwrap();
+            let (mut sd_cwt, holder_signing_key) = generate(payload);
+            let mut kbt = present::<Value>(&sd_cwt.to_cbor_bytes().unwrap()[..], holder_signing_key);
+            assert_eq!(sd_cwt.query(vec!["a".into()].into()).unwrap(), Some("b".into()));
+            assert_eq!(sd_cwt.query(vec!["c".into()].into()).unwrap(), Some("d".into()));
+            assert_eq!(kbt.query(vec!["a".into()].into()).unwrap(), Some("b".into()));
+            assert_eq!(kbt.query(vec!["c".into()].into()).unwrap(), Some("d".into()));
 
-        let salted = &mut sd_cwt.0.sd_unprotected.sd_claims;
-        salted
-            .0
-            .retain_mut(|cl| cl.to_value().unwrap().value().unwrap().as_array().map(|a| a[2] != "a".into()).unwrap_or_default());
+            if a_redacted {
+                let salted = &mut sd_cwt.0.sd_unprotected.sd_claims;
+                salted
+                    .0
+                    .retain_mut(|cl| cl.to_value().unwrap().value().unwrap().as_array().map(|a| a[2] != "a".into()).unwrap_or_default());
 
-        let _ = salted;
+                let _ = salted;
 
-        assert_eq!(sd_cwt.0.query(vec!["a".into()].into()).unwrap(), None);
+                assert_eq!(sd_cwt.query(vec!["a".into()].into()).unwrap(), None);
+            }
+        };
+
+        test(cbor!({"a" => "b", "c" => "d"}), false); // unredacted
+        test(cbor!({sd!("a") => "b", "c" => "d"}), true); // a redacted
+        test(cbor!({"a" => "b", sd!("c") => "d"}), false); // c redacted
+        test(cbor!({sd!("a") => "b", sd!("c") => "d"}), true); // all redacted
     }
 
     #[test]
     fn can_query_lower_level_claim() {
-        let payload = cbor!({
-            "a" => {
-                "b" => "c",
-                "d" => "e"
-            },
-            "b" => 1234
-        })
-        .unwrap();
+        let test = |payload: Result<Value, ciborium::value::Error>| {
+            let payload = payload.unwrap().select_none().unwrap();
+            let (mut sd_cwt, holder_signing_key) = generate(payload);
+            let mut kbt = present::<Value>(&sd_cwt.to_cbor_bytes().unwrap()[..], holder_signing_key);
+            assert_eq!(sd_cwt.query(vec!["a".into(), "b".into()].into()).unwrap(), Some("c".into()));
+            assert_eq!(kbt.query(vec!["a".into(), "b".into()].into()).unwrap(), Some("c".into()));
+        };
 
-        let (mut sd_cwt, holder_signing_key) = generate(payload);
-        let mut kbt = present::<Value>(&sd_cwt.to_cbor_bytes().unwrap()[..], holder_signing_key);
-        assert_eq!(sd_cwt.0.query(vec!["a".into(), "b".into()].into()).unwrap(), Some("c".into()));
-        assert_eq!(kbt.0.query(vec!["a".into(), "b".into()].into()).unwrap(), Some("c".into()));
+        test(cbor!({"a" => {"b" => "c", "d" => "e"}, "b" => 1234})); // unredacted
+        test(cbor!({"a" => {sd!("b") => "c", "d" => "e"}, "b" => 1234})); // assert redacted
     }
 
     #[test]
     fn can_query_top_level_array_index() {
-        let payload = cbor!({
-            "a" => ["b", "c", "d", "e"],
-            "b" => 1234
-        })
-        .unwrap();
+        let test = |payload: Result<Value, ciborium::value::Error>| {
+            let payload = payload.unwrap().select_none().unwrap();
+            let (mut sd_cwt, holder_signing_key) = generate(payload);
+            let mut kbt = present::<Value>(&sd_cwt.to_cbor_bytes().unwrap()[..], holder_signing_key);
+            assert_eq!(sd_cwt.query(vec!["a".into(), 2usize.into()].into()).unwrap(), Some("d".into()));
+            assert_eq!(kbt.query(vec!["a".into(), 2usize.into()].into()).unwrap(), Some("d".into()));
+        };
 
-        let (mut sd_cwt, holder_signing_key) = generate(payload);
-        let mut kbt = present::<Value>(&sd_cwt.to_cbor_bytes().unwrap()[..], holder_signing_key);
-        assert_eq!(sd_cwt.0.query(vec!["a".into(), 2usize.into()].into()).unwrap(), Some("d".into()));
-        assert_eq!(kbt.0.query(vec!["a".into(), 2usize.into()].into()).unwrap(), Some("d".into()));
+        test(cbor!({"a" => ["b", "c", "d", "e"], "b" => 1234})); // unredacted
+        test(cbor!({"a" => ["b", "c", sd!("d"), "e"], "b" => 1234})); // assert redacted
     }
 
     #[test]
     fn can_query_inside_array_index() {
-        let payload = cbor!({
-            "a" => [
-                {
-                    "b" => "c"
-                },
-                {
-                    "b" => "d",
-                    "e" => "f"
-                }
-            ],
-            "b" => 1234
-        })
-        .unwrap();
+        let test = |payload: Result<Value, ciborium::value::Error>| {
+            let payload = payload.unwrap().select_none().unwrap();
+            let (mut sd_cwt, holder_signing_key) = generate(payload);
+            let mut kbt = present::<Value>(&sd_cwt.to_cbor_bytes().unwrap()[..], holder_signing_key);
+            assert_eq!(sd_cwt.query(vec!["a".into(), 1usize.into(), "b".into()].into()).unwrap(), Some("d".into()));
+            assert_eq!(kbt.query(vec!["a".into(), 1usize.into(), "b".into()].into()).unwrap(), Some("d".into()));
+        };
 
-        let (mut sd_cwt, holder_signing_key) = generate(payload);
-        let mut kbt = present::<Value>(&sd_cwt.to_cbor_bytes().unwrap()[..], holder_signing_key);
-        assert_eq!(sd_cwt.0.query(vec!["a".into(), 1usize.into(), "b".into()].into()).unwrap(), Some("d".into()));
-        assert_eq!(kbt.0.query(vec!["a".into(), 1usize.into(), "b".into()].into()).unwrap(), Some("d".into()));
+        test(cbor!({"a" => [{"b" => "c"}, {"b" => "d", "e" => "f"}], "b" => 1234})); // unredacted
+        test(cbor!({"a" => [{"b" => "c"}, {sd!("b") => "d", "e" => "f"}], "b" => 1234})); // assert redacted
     }
 
-    fn generate<T: Select<Error = EsdicawtSpecError>>(payload: T) -> (SdCwtIssuedTagged<T, sha2::Sha256>, ed25519_dalek::SigningKey) {
+    fn generate<T: Select>(payload: T) -> (SdCwtIssuedTagged<T, sha2::Sha256>, ed25519_dalek::SigningKey) {
         let mut csprng = rand_chacha::ChaCha20Rng::from_entropy();
 
         let issuer_signing_key = p256::ecdsa::SigningKey::random(&mut csprng);
@@ -307,7 +302,7 @@ mod tests {
         (sd_cwt, holder_signing_key)
     }
 
-    fn present<T: Select<Error = EsdicawtSpecError>>(sd_cwt: &[u8], holder_signing_key: ed25519_dalek::SigningKey) -> KbtCwtTagged<T, sha2::Sha256> {
+    fn present<T: Select>(sd_cwt: &[u8], holder_signing_key: ed25519_dalek::SigningKey) -> KbtCwtTagged<T, sha2::Sha256> {
         let holder = Ed25519Holder::new(holder_signing_key);
 
         let holder_params = HolderParams {

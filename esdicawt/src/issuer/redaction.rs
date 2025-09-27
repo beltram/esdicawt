@@ -150,11 +150,11 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::spec::sd;
     use ciborium::cbor;
     use esdicawt_spec::{
         REDACTED_CLAIM_ELEMENT_TAG,
         blinded_claims::{SaltedClaim, SaltedElement},
+        sd,
     };
     use rand_chacha::rand_core::SeedableRng as _;
     use sha2::Digest as _;
@@ -166,11 +166,11 @@ mod tests {
     #[wasm_bindgen_test::wasm_bindgen_test]
     fn should_redact_primitive_claim_in_mapping() {
         let payload = Value::Map(vec![
-            (sd(Value::Text("a".into())), Value::Integer(1.into())),
-            (sd(Value::Integer(2.into())), Value::Text("b".into())),
-            (sd(Value::Integer(3.into())), Value::Null),
-            (sd(Value::Integer(4.into())), Value::Bool(false)),
-            (sd(Value::Integer(5.into())), Value::Float(14.3)),
+            (sd!("a"), Value::Integer(1.into())),
+            (sd!(2), Value::Text("b".into())),
+            (sd!(3), Value::Null),
+            (sd!(4), Value::Bool(false)),
+            (sd!(5), Value::Float(14.3)),
         ]);
         let (payload, [d1, d2, d3, d4, d5]) = _redact(payload);
 
@@ -215,10 +215,7 @@ mod tests {
     #[test]
     #[wasm_bindgen_test::wasm_bindgen_test]
     fn should_redact_array() {
-        let payload = Value::Map(vec![(
-            sd(Value::Integer(1.into())),
-            Value::Array(vec![sd(Value::Text("a".into())), sd(Value::Text("b".into()))]),
-        )]);
+        let payload = Value::Map(vec![(sd!(1), Value::Array(vec![sd!("a"), sd!("b")]))]);
         let (payload, [d1, d2, d3]) = _redact(payload);
 
         // --- altered payload ---
@@ -248,10 +245,7 @@ mod tests {
     #[test]
     #[wasm_bindgen_test::wasm_bindgen_test]
     fn should_redact_array_nested() {
-        let payload = Value::Map(vec![(
-            sd(Value::Integer(1.into())),
-            Value::Array(vec![sd(Value::Array(vec![sd(Value::Text("a".into())), sd(Value::Text("b".into()))]))]),
-        )]);
+        let payload = Value::Map(vec![(sd!(1), Value::Array(vec![sd!(Value::Array(vec![sd!("a"), sd!("b")]))]))]);
         let (payload, [d1, d2, d3, d4]) = _redact(payload);
 
         // --- altered payload ---
@@ -285,10 +279,7 @@ mod tests {
     #[test]
     #[wasm_bindgen_test::wasm_bindgen_test]
     fn should_redact_nested_mapping() {
-        let payload = Value::Map(vec![(
-            sd(Value::Integer(0.into())),
-            Value::Map(vec![(sd(Value::Integer(1.into())), Value::Text("a".into()))]),
-        )]);
+        let payload = Value::Map(vec![(sd!(0), Value::Map(vec![(sd!(1), Value::Text("a".into()))]))]);
         let (payload, [d1, d0]) = _redact(payload);
 
         // --- depth 0 ---
@@ -316,10 +307,7 @@ mod tests {
     #[test]
     #[wasm_bindgen_test::wasm_bindgen_test]
     fn should_redact_mapping_nested_in_array() {
-        let payload = Value::Map(vec![(
-            sd(Value::Integer(0.into())),
-            Value::Array(vec![sd(Value::Map(vec![(sd(Value::Integer(1.into())), Value::Integer(2.into()))]))]),
-        )]);
+        let payload = Value::Map(vec![(sd!(0), Value::Array(vec![sd!(Value::Map(vec![(sd!(1), Value::Integer(2.into()))]))]))]);
         let (payload, [d2, d1, d0]) = _redact(payload);
 
         // --- depth 0 ---

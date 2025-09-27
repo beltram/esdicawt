@@ -234,7 +234,10 @@ impl<'de> serde::Deserialize<'de> for ClaimName {
             Value::Tag(tag, v) => match *v {
                 Value::Integer(i) => Self::TaggedInteger(tag, i.try_into().map_err(D::Error::custom)?),
                 Value::Text(s) => Self::TaggedText(tag, s),
-                _ => return Err(D::Error::custom("Only String, integers in tags at the root of a CWT payload")),
+                _ => {
+                    println!("!!! {tag:?} => {v:?}");
+                    return Err(D::Error::custom("Only String, integers in tags at the root of a CWT payload"));
+                }
             },
             _ => return Err(D::Error::custom("Only String, integers are allowed in the root of a CWT payload")),
         })

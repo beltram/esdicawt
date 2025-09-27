@@ -25,7 +25,7 @@ pub trait Issuer {
 
     type ProtectedClaims: CustomClaims;
     type UnprotectedClaims: CustomClaims;
-    type PayloadClaims: Select<Error = Self::Error>;
+    type PayloadClaims: Select;
 
     #[cfg(not(any(feature = "pem", feature = "der")))]
     type Signer: Signer<Self::Signature> + Keypair;
@@ -96,7 +96,7 @@ pub trait Issuer {
 
         let protected = protected_builder.build();
 
-        let mut payload_claims = params.payload.map(|c| c.select()).transpose().map_err(SdCwtIssuerError::CustomError)?;
+        let mut payload_claims = params.payload.map(|c| c.select()).transpose()?;
 
         let mut unprotected_builder = coset::HeaderBuilder::new();
 
@@ -185,9 +185,10 @@ mod tests {
             sd,
         },
     };
+    use ciborium::value::Error;
     use ciborium::{Value, cbor};
     use digest::Digest as _;
-    use esdicawt_spec::{ClaimName, CwtAny, EsdicawtSpecError, NoClaims, Select, issuance::SdCwtIssuedTagged, select_none};
+    use esdicawt_spec::{ClaimName, CwtAny, NoClaims, Select, SelectExt, issuance::SdCwtIssuedTagged};
     use rand_core::SeedableRng;
 
     wasm_bindgen_test::wasm_bindgen_test_configure!(run_in_browser);
@@ -227,7 +228,7 @@ mod tests {
     #[wasm_bindgen_test::wasm_bindgen_test]
     fn should_issue_complex_types() {
         let verify_issuance = |value: Value, expected: (Option<ClaimName>, Result<Value, ciborium::value::Error>)| {
-            let payload = cbor!({ "___claim" => value }).unwrap();
+            let payload = cbor!({ "___claim" => value }).unwrap().select_all().unwrap();
             let mut sd_cwt = issue(payload);
 
             let disclosable_claims = sd_cwt.0.disclosures_mut().iter().map(|d| d.unwrap()).collect::<Vec<_>>();
@@ -300,12 +301,10 @@ mod tests {
         }
 
         impl Select for Model {
-            type Error = EsdicawtSpecError;
-
-            fn select(self) -> Result<Value, <Self as Select>::Error> {
+            fn select(self) -> Result<Value, ciborium::value::Error> {
                 let mut map = Vec::with_capacity(2);
                 if let Some(name) = self.name {
-                    map.push((sd(Value::Text("name".into())), Value::Text(name)));
+                    map.push((sd!("name"), Value::Text(name)));
                 }
                 if let Some(age) = self.age {
                     map.push((Value::Text("age".into()), age.into()));
@@ -315,7 +314,7 @@ mod tests {
                     .iter()
                     .enumerate()
                     .map(|(i, &n)| match i {
-                        1 => sd(Value::Integer(n.into())),
+                        1 => sd!(n),
                         _ => Value::Integer(n.into()),
                     })
                     .collect();
@@ -365,10 +364,8 @@ mod tests {
         }
 
         impl Select for ModelPublic {
-            type Error = EsdicawtSpecError;
-
-            fn select(self) -> Result<Value, <Self as Select>::Error> {
-                Ok(select_none(&mut Value::serialized(&self)?))
+            fn select(self) -> Result<Value, Error> {
+                self.select_none()
             }
         }
 
@@ -390,7 +387,7 @@ mod tests {
         assert!(disclosures.next().is_none());
     }
 
-    fn issue<T: Select<Error = EsdicawtSpecError>>(payload: T) -> SdCwtIssuedTagged<T, sha2::Sha256> {
+    fn issue<T: Select>(payload: T) -> SdCwtIssuedTagged<T, sha2::Sha256> {
         let mut csprng = rand_chacha::ChaCha20Rng::from_entropy();
 
         let holder_signing_key = ed25519_dalek::SigningKey::generate(&mut csprng);
@@ -441,7 +438,7 @@ mod tests {
 #[cfg(any(test, feature = "test-utils"))]
 pub mod claims {
     use ciborium::Value;
-    use esdicawt_spec::{EsdicawtSpecError, Select, sd};
+    use esdicawt_spec::{Select, sd};
 
     #[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
     pub(super) struct CustomTokenClaims {
@@ -449,12 +446,10 @@ pub mod claims {
     }
 
     impl Select for CustomTokenClaims {
-        type Error = EsdicawtSpecError;
-
-        fn select(self) -> Result<Value, <Self as Select>::Error> {
+        fn select(self) -> Result<Value, ciborium::value::Error> {
             let mut map = Vec::with_capacity(1);
             if let Some(name) = self.name {
-                map.push((sd(Value::Text("name".into())), Value::Text(name)));
+                map.push((sd!("name"), Value::Text(name)));
             }
             Ok(Value::Map(map))
         }
@@ -466,12 +461,12 @@ pub mod test_utils {
     use super::*;
     use esdicawt_spec::{EsdicawtSpecError, NoClaims, Select};
 
-    pub struct Ed25519IssuerClaims<T: Select<Error = EsdicawtSpecError>> {
+    pub struct Ed25519IssuerClaims<T: Select> {
         signing_key: ed25519_dalek::SigningKey,
         _marker: core::marker::PhantomData<T>,
     }
 
-    impl<T: Select<Error = EsdicawtSpecError>> Issuer for Ed25519IssuerClaims<T> {
+    impl<T: Select> Issuer for Ed25519IssuerClaims<T> {
         type Error = EsdicawtSpecError;
         type Signer = ed25519_dalek::SigningKey;
         type Hasher = sha2::Sha256;
@@ -509,12 +504,12 @@ pub mod test_utils {
         }
     }
 
-    pub struct P256IssuerClaims<T: Select<Error = EsdicawtSpecError>> {
+    pub struct P256IssuerClaims<T: Select> {
         signing_key: p256::ecdsa::SigningKey,
         _marker: core::marker::PhantomData<T>,
     }
 
-    impl<T: Select<Error = EsdicawtSpecError>> Issuer for P256IssuerClaims<T> {
+    impl<T: Select> Issuer for P256IssuerClaims<T> {
         type Error = EsdicawtSpecError;
         type Signer = p256::ecdsa::SigningKey;
         type Hasher = sha2::Sha256;
