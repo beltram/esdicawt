@@ -1,0 +1,77 @@
+[workspace]
+members = ["cose-key-confirmation", "cose-key", "cose-key-set", "cose-key-thumbprint", "esdicawt", "esdicawt-spec", "spice-oidc-cwt"]
+resolver = "2"
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+description = "SD-CWT"
+authors = []
+
+[workspace.lints.rust]
+unsafe_code = "forbid"
+
+[workspace.dependencies]
+coset = "0.3"
+ciborium = "0.2"
+dcbor = "0.16"
+
+signature = "2.2"
+ed25519-dalek = "2.1"
+p256 = "0.13"
+p384 = "0.13"
+
+rand_chacha = "0.3"
+rand = "0.8"
+subtle = "2.6"
+
+digest = "0.10"
+sha2 = "0.10"
+
+serde = "1.0"
+serde_tuple = "1.0"
+serde_bytes = "0.11"
+thiserror = "2.0"
+url = "2.5"
+hex = "0.4"
+
+[workspace.lints.clippy]
+# Enforced Groups
+style = { level = "warn", priority = -1 }
+perf = { level = "warn", priority = -1 }
+suspicious = { level = "warn", priority = -1 }
+correctness = { level = "warn", priority = -1 }
+complexity = { level = "warn", priority = -1 }
+nursery = { level = "warn", priority = -1 }
+
+# Cherry Picks
+## Nursery
+missing_const_for_fn = "allow"
+derive_partial_eq_without_eq = "allow"
+significant_drop_tightening = "allow"  # Allowed due false positives
+trait_duplication_in_bounds = "allow"  # Allowed due false positives
+## restriction
+string_to_string = "warn"
+rc_mutex = "warn"
+## Pedantic
+needless_continue = "warn"
+needless_for_each = "warn"
+flat_map_option = "warn"
+filter_map_next = "warn"
+explicit_into_iter_loop = "warn"
+manual_ok_or = "warn"
+match_on_vec_items = "warn"
+unused_self = "warn"
+from_iter_instead_of_collect = "warn"
+implicit_clone = "warn"
+inefficient_to_string = "warn"
+large_types_passed_by_value = "warn"
+linkedlist = "warn"
+lossy_float_literal = "warn"
+match_same_arms = "warn"
+match_wild_err_arm = "warn"
+mut_mut = "warn"
+option_option = "warn"
+ref_option_ref = "warn"
+explicit_iter_loop = "warn"
+

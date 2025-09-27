@@ -1,0 +1,47 @@
+[package]
+name = "esdicawt"
+edition = "2021"
+version.workspace = true
+description.workspace = true
+authors.workspace = true
+
+[features]
+default = []
+pem = ["dep:pkcs8", "pkcs8?/pem"]
+der = ["dep:pkcs8"]
+ed25519 = ["cose-key-confirmation/ed25519"]
+p256 = ["cose-key-confirmation/p256"]
+p384 = ["cose-key-confirmation/p384"]
+test-utils = ["dep:ed25519-dalek", "dep:p256", "dep:sha2"]
+
+[dependencies]
+esdicawt-spec = { path = "../esdicawt-spec" }
+cose-key-confirmation = { path = "../cose-key-confirmation" }
+signature = { version = "2.2", features = ["std", "digest"] }
+digest = "0.10"
+rand_core = { version = "0.6", features = ["std"] }
+ciborium.workspace = true
+thiserror.workspace = true
+serde.workspace = true
+pkcs8 = { version = "0.10", optional = true }
+tailcall = "1.0"
+
+sha2 = { optional = true, workspace = true }
+time = { version = "0.3", features = ["wasm-bindgen"] }
+ed25519-dalek = { optional = true, workspace = true, features = ["rand_core", "pem", "serde"] }
+p256 = { optional = true, workspace = true }
+
+[target.'cfg(all(target_arch = "wasm32", target_os = "unknown"))'.dependencies]
+js-sys = "0.3"
+
+[dev-dependencies]
+esdicawt = { path = "./", features = ["pem", "der", "test-utils"] }
+serde = { workspace = true, features = ["derive"] }
+cose-key-confirmation = { path = "../cose-key-confirmation", features = ["ed25519", "p256", "p384"] }
+
+rand_chacha.workspace = true
+sha2 = "0.10"
+thiserror = "2.0"
+
+[lints]
+workspace = true

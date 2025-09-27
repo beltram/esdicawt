@@ -1,0 +1,20 @@
+[package]
+name = "esdicawt-spec"
+edition = "2021"
+version.workspace = true
+description.workspace = true
+authors.workspace = true
+
+[dependencies]
+serde = { workspace = true, features = ["derive"] }
+serde_repr = "0.1"
+derive_builder = "0.20"
+serde_tuple.workspace = true
+serde_bytes.workspace = true
+coset = { workspace = true, features = ["std"] }
+ciborium.workspace = true
+thiserror.workspace = true
+cose-key-confirmation = { path = "../cose-key-confirmation" }
+
+[lints]
+workspace = true

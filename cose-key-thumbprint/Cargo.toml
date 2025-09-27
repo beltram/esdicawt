@@ -1,0 +1,38 @@
+[package]
+name = "cose-key-thumbprint"
+edition = "2021"
+version.workspace = true
+description.workspace = true
+authors.workspace = true
+
+[dependencies]
+cose-key = { path = "../cose-key", features = ["deterministic-encoding"] }
+hex.workspace = true
+coset.workspace = true
+ciborium.workspace = true
+digest.workspace = true
+serde.workspace = true
+thiserror.workspace = true
+ed25519-dalek = { workspace = true, optional = true }
+p256 = { workspace = true, optional = true }
+p384 = { workspace = true, optional = true }
+subtle.workspace = true
+serde_bytes.workspace = true
+
+[dev-dependencies]
+ciborium.workspace = true
+sha2.workspace = true
+ed25519-dalek = { workspace = true, features = ["rand_core"] }
+p256.workspace = true
+p384.workspace = true
+rand.workspace = true
+cose-key = { path = "../cose-key", features = ["p256", "p384", "ed25519"] }
+
+[features]
+default = []
+ed25519 = ["dep:ed25519-dalek", "cose-key/ed25519"]
+p256 = ["dep:p256", "cose-key/p256"]
+p384 = ["dep:p384", "cose-key/p384"]
+
+[lints]
+workspace = true

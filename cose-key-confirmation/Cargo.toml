@@ -1,0 +1,35 @@
+[package]
+name = "cose-key-confirmation"
+edition = "2021"
+version.workspace = true
+description.workspace = true
+authors.workspace = true
+
+[features]
+default = []
+ed25519 = ["dep:ed25519-dalek", "cose-key/ed25519"]
+p256 = ["dep:p256", "cose-key/p256"]
+p384 = ["dep:p384", "cose-key/p384"]
+thumbprint = ["dep:cose-key-thumbprint", "dep:sha2"]
+
+[dependencies]
+cose-key = { path = "../cose-key" }
+serde.workspace = true
+serde_bytes.workspace = true
+thiserror.workspace = true
+coset.workspace = true
+ciborium.workspace = true
+ed25519-dalek = { workspace = true, optional = true }
+p256 = { workspace = true, optional = true }
+p384 = { workspace = true, optional = true }
+cose-key-thumbprint = { path = "../cose-key-thumbprint", optional = true }
+sha2 = { workspace = true, optional = true }
+
+[dev-dependencies]
+cose-key-confirmation = { path = ".", features = ["thumbprint", "p256"] }
+hex.workspace = true
+esdicawt-spec = { path = "../esdicawt-spec" }
+sha2.workspace = true
+
+[lints]
+workspace = true
