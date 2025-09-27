@@ -2,7 +2,7 @@ use ciborium::Value;
 use serde::ser::SerializeSeq;
 
 use super::SelectiveDisclosureIssued;
-use crate::{issuance::SelectiveDisclosureIssuedBuilder, CustomClaims};
+use crate::{CustomClaims, issuance::SelectiveDisclosureIssuedBuilder};
 
 impl<ProtectedClaims: CustomClaims, UnprotectedClaims: CustomClaims, PayloadClaims: CustomClaims, DisclosableClaims: CustomClaims> serde::Serialize
     for SelectiveDisclosureIssued<ProtectedClaims, UnprotectedClaims, PayloadClaims, DisclosableClaims>

@@ -1,8 +1,8 @@
 use crate::alg::Algorithm;
 use crate::{
+    CustomClaims, EsdicawtSpecError,
     issuance::{SdCwtPayload, SdUnprotected, SelectiveDisclosureIssued, SelectiveDisclosureProtected},
     key_binding::{KeyBindingTokenPayload, KeyBindingTokenProtected, KeyBindingTokenUnprotected},
-    CustomClaims, EsdicawtSpecError,
 };
 
 #[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
@@ -23,14 +23,14 @@ pub struct KeyBindingTokenVerified<
 }
 
 impl<
-        IssuerProtectedClaims: CustomClaims,
-        IssuerUnprotectedClaims: CustomClaims,
-        IssuerPayloadClaims: CustomClaims,
-        KbtProtectedClaims: CustomClaims,
-        KbtUnprotectedClaims: CustomClaims,
-        KbtPayloadClaims: CustomClaims,
-        DisclosedClaims: CustomClaims,
-    > KeyBindingTokenVerified<IssuerProtectedClaims, IssuerUnprotectedClaims, IssuerPayloadClaims, KbtProtectedClaims, KbtUnprotectedClaims, KbtPayloadClaims, DisclosedClaims>
+    IssuerProtectedClaims: CustomClaims,
+    IssuerUnprotectedClaims: CustomClaims,
+    IssuerPayloadClaims: CustomClaims,
+    KbtProtectedClaims: CustomClaims,
+    KbtUnprotectedClaims: CustomClaims,
+    KbtPayloadClaims: CustomClaims,
+    DisclosedClaims: CustomClaims,
+> KeyBindingTokenVerified<IssuerProtectedClaims, IssuerUnprotectedClaims, IssuerPayloadClaims, KbtProtectedClaims, KbtUnprotectedClaims, KbtPayloadClaims, DisclosedClaims>
 {
     pub fn sd_cwt(&self) -> &SelectiveDisclosureIssuedVerified<IssuerProtectedClaims, IssuerUnprotectedClaims, IssuerPayloadClaims> {
         &self.protected.issuer_sd_cwt

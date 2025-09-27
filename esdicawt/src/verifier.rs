@@ -4,10 +4,11 @@ mod time;
 use crate::verifier::error::{SdCwtVerifierError, SdCwtVerifierResult};
 use ::time::OffsetDateTime;
 use ciborium::Value;
-use cose_key_confirmation::error::CoseKeyConfirmationError;
 use cose_key_confirmation::KeyConfirmation;
+use cose_key_confirmation::error::CoseKeyConfirmationError;
 use esdicawt_spec::issuance::SdCwtPayload;
 use esdicawt_spec::{
+    CustomClaims, CwtAny, SelectiveDisclosureHashAlg,
     blinded_claims::{Salted, SaltedClaim, SaltedElement},
     key_binding::KeyBindingTokenTagged,
     redacted_claims::{RedactedClaimElement, RedactedClaimKeys},
@@ -16,7 +17,6 @@ use esdicawt_spec::{
         coset::{CoseSign1, TaggedCborSerializable},
     },
     verified::KeyBindingTokenVerified,
-    CustomClaims, CwtAny, SelectiveDisclosureHashAlg,
 };
 use std::collections::HashMap;
 
@@ -282,14 +282,14 @@ pub struct VerifyCwtParams {
 #[cfg(test)]
 mod tests {
     use crate::{
+        CwtPresentationParams, IssueCwtParams, Issuer, Presentation, Verifier, VerifyCwtParams,
         holder::Holder,
         issuer::claims::CustomTokenClaims,
         test_utils::{Ed25519Holder, P256IssuerClaims},
         verifier::test_utils::HybridVerifier,
-        CwtPresentationParams, IssueCwtParams, Issuer, Presentation, Verifier, VerifyCwtParams,
     };
-    use ciborium::{cbor, Value};
-    use esdicawt_spec::{key_binding::KeyBindingTokenTagged, verified::KeyBindingTokenVerified, AnyMap, CustomClaims, CwtAny, MapKey, NoClaims};
+    use ciborium::{Value, cbor};
+    use esdicawt_spec::{AnyMap, CustomClaims, CwtAny, MapKey, NoClaims, key_binding::KeyBindingTokenTagged, verified::KeyBindingTokenVerified};
     use rand_core::SeedableRng as _;
 
     #[test]
@@ -394,20 +394,20 @@ mod tests {
     fn should_be_object_safe(
         holder: Box<
             dyn Verifier<
-                IssuerProtectedClaims = NoClaims,
-                IssuerPayloadClaims = NoClaims,
-                IssuerUnprotectedClaims = NoClaims,
-                KbtProtectedClaims = NoClaims,
-                KbtUnprotectedClaims = NoClaims,
-                KbtPayloadClaims = NoClaims,
-                DisclosedClaims = NoClaims,
-                Error = std::convert::Infallible,
-                Hasher = sha2::Sha256,
-                HolderSignature = ed25519_dalek::Signature,
-                HolderVerifier = ed25519_dalek::VerifyingKey,
-                IssuerSignature = p256::ecdsa::Signature,
-                IssuerVerifier = p256::ecdsa::VerifyingKey,
-            >,
+                    IssuerProtectedClaims = NoClaims,
+                    IssuerPayloadClaims = NoClaims,
+                    IssuerUnprotectedClaims = NoClaims,
+                    KbtProtectedClaims = NoClaims,
+                    KbtUnprotectedClaims = NoClaims,
+                    KbtPayloadClaims = NoClaims,
+                    DisclosedClaims = NoClaims,
+                    Error = std::convert::Infallible,
+                    Hasher = sha2::Sha256,
+                    HolderSignature = ed25519_dalek::Signature,
+                    HolderVerifier = ed25519_dalek::VerifyingKey,
+                    IssuerSignature = p256::ecdsa::Signature,
+                    IssuerVerifier = p256::ecdsa::VerifyingKey,
+                >,
         >,
     ) {
     }

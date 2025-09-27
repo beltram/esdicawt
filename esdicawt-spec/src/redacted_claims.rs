@@ -1,6 +1,6 @@
 //! TODO: if teh RFC defines a finite subset of hash_alg, turn these into enums with stack allocated arrays of the exact size 💡
 
-use crate::{EsdicawtSpecResult, CWT_CLAIM_REDACTED_KEYS, REDACTED_CLAIM_ELEMENT_TAG};
+use crate::{CWT_CLAIM_REDACTED_KEYS, EsdicawtSpecResult, REDACTED_CLAIM_ELEMENT_TAG};
 use ciborium::Value;
 
 /// Digest of a claim in a CBOR Mapping represented by a [crate::blinded_claims::SaltedClaim] in the disclosures
@@ -99,6 +99,6 @@ impl std::ops::Deref for RedactedClaimElement {
     type Target = [u8];
 
     fn deref(&self) -> &Self::Target {
-        &self.0 .0
+        &self.0.0
     }
 }

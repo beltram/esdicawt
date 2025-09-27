@@ -1,5 +1,6 @@
-use crate::{now, CwtPresentationParams, Presentation, SdCwtHolderError};
+use crate::{CwtPresentationParams, Presentation, SdCwtHolderError, now};
 use esdicawt_spec::{
+    CustomClaims, CwtAny, SelectiveDisclosureHashAlg,
     blinded_claims::SaltedArray,
     issuance::SelectiveDisclosureIssuedTagged,
     key_binding::{KeyBindingTokenPayload, KeyBindingTokenProtected, KeyBindingTokenTagged, KeyBindingTokenUnprotected},
@@ -7,7 +8,6 @@ use esdicawt_spec::{
         coset::TaggedCborSerializable,
         coset::{self},
     },
-    CustomClaims, CwtAny, SelectiveDisclosureHashAlg,
 };
 use signature::Signer;
 
@@ -156,11 +156,11 @@ pub fn unix_timestamp(leeway: Option<core::time::Duration>) -> u64 {
 #[cfg(test)]
 mod tests {
     use super::{test_utils::Ed25519Holder, *};
-    use crate::{issuer::claims::CustomTokenClaims, issuer::test_utils::Ed25519IssuerClaims, IssueCwtParams, Issuer};
+    use crate::{IssueCwtParams, Issuer, issuer::claims::CustomTokenClaims, issuer::test_utils::Ed25519IssuerClaims};
     use ciborium::cbor;
     use esdicawt_spec::{
-        blinded_claims::{Salted, SaltedClaim},
         ClaimName, NoClaims,
+        blinded_claims::{Salted, SaltedClaim},
     };
     use rand_core::SeedableRng as _;
 
@@ -215,17 +215,17 @@ mod tests {
     fn should_be_object_safe(
         holder: Box<
             dyn Holder<
-                IssuerProtectedClaims = NoClaims,
-                IssuerUnprotectedClaims = NoClaims,
-                IssuerPayloadClaims = NoClaims,
-                KbtProtectedClaims = NoClaims,
-                KbtUnprotectedClaims = NoClaims,
-                KbtPayloadClaims = NoClaims,
-                DisclosedClaims = NoClaims,
-                Error = std::convert::Infallible,
-                Signer = ed25519_dalek::SigningKey,
-                Signature = ed25519_dalek::Signature,
-            >,
+                    IssuerProtectedClaims = NoClaims,
+                    IssuerUnprotectedClaims = NoClaims,
+                    IssuerPayloadClaims = NoClaims,
+                    KbtProtectedClaims = NoClaims,
+                    KbtUnprotectedClaims = NoClaims,
+                    KbtPayloadClaims = NoClaims,
+                    DisclosedClaims = NoClaims,
+                    Error = std::convert::Infallible,
+                    Signer = ed25519_dalek::SigningKey,
+                    Signature = ed25519_dalek::Signature,
+                >,
         >,
     ) {
     }

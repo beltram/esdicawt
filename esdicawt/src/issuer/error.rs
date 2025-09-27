@@ -1,4 +1,4 @@
-use esdicawt_spec::{reexports::coset, EsdicawtSpecError};
+use esdicawt_spec::{EsdicawtSpecError, reexports::coset};
 
 #[derive(Debug, thiserror::Error)]
 pub enum SdCwtIssuerError<CustomError: Send + Sync> {

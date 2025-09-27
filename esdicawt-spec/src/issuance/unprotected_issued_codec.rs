@@ -1,7 +1,7 @@
 use ciborium::Value;
 use serde::ser::SerializeMap;
 
-use crate::{AnyMap, CustomClaims, MapKey, COSE_SD_CLAIMS};
+use crate::{AnyMap, COSE_SD_CLAIMS, CustomClaims, MapKey};
 
 use super::SdUnprotected;
 

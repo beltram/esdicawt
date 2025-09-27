@@ -1,6 +1,6 @@
 use esdicawt::{
-    spec::{issuance::SelectiveDisclosureIssuedTagged, key_binding::KeyBindingTokenTagged, AnyMap, CustomClaims},
     EsdicawtReadError, EsdicawtReadResult, SdCwtRead,
+    spec::{AnyMap, CustomClaims, issuance::SelectiveDisclosureIssuedTagged, key_binding::KeyBindingTokenTagged},
 };
 use esdicawt_spec::{ClaimName, Value};
 use std::{borrow::Cow, collections::HashMap, sync::LazyLock};
@@ -400,13 +400,13 @@ where
 }
 
 impl<
-        IssuerProtectedClaims: CustomClaims,
-        IssuerUnprotectedClaims: CustomClaims,
-        PayloadClaims: CustomClaims,
-        KbtProtectedClaims: CustomClaims,
-        KbtUnprotectedClaims: CustomClaims,
-        KbtPayloadClaims: CustomClaims,
-    > SpiceOidcSdCwtRead
+    IssuerProtectedClaims: CustomClaims,
+    IssuerUnprotectedClaims: CustomClaims,
+    PayloadClaims: CustomClaims,
+    KbtProtectedClaims: CustomClaims,
+    KbtUnprotectedClaims: CustomClaims,
+    KbtPayloadClaims: CustomClaims,
+> SpiceOidcSdCwtRead
     for KeyBindingTokenTagged<IssuerProtectedClaims, IssuerUnprotectedClaims, PayloadClaims, KbtProtectedClaims, KbtUnprotectedClaims, KbtPayloadClaims, PayloadClaims>
 where
     for<'a> &'a PayloadClaims: Into<&'a SpiceOidcClaims>,
@@ -534,8 +534,8 @@ mod tests {
     use super::ed25519::*;
     use super::*;
     use esdicawt::{
-        spec::{issuance::SelectiveDisclosureIssuedTagged, CwtAny},
         Holder, Issuer, Presentation,
+        spec::{CwtAny, issuance::SelectiveDisclosureIssuedTagged},
     };
     use esdicawt_spec::NoClaims;
 
@@ -640,8 +640,8 @@ mod tests {
 mod ed25519 {
     use crate::SpiceOidcClaims;
     use esdicawt::{
-        spec::{reexports::coset, NoClaims, SelectiveDisclosureHashAlg},
         Holder, Issuer,
+        spec::{NoClaims, SelectiveDisclosureHashAlg, reexports::coset},
     };
 
     pub struct Ed25519Issuer {

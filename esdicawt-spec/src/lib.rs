@@ -71,7 +71,7 @@ pub enum EsdicawtSpecError {
 pub type EsdicawtSpecResult<T> = Result<T, EsdicawtSpecError>;
 
 use crate::issuance::SdCwtPayloadBuilderError;
-pub use ciborium::{cbor, Value};
+pub use ciborium::{Value, cbor};
 use issuance::{SelectiveDisclosurePayloadBuilderError, SelectiveDisclosureProtectedBuilderError};
 use key_binding::{KeyBindingTokenPayloadBuilderError, KeyBindingTokenProtectedBuilderError};
 

@@ -9,12 +9,12 @@ use ciborium::Value;
 use cose_key_confirmation::KeyConfirmation;
 use esdicawt_spec::issuance::SdCwtPayloadBuilder;
 use esdicawt_spec::{
+    AnyMap, COSE_SD_CLAIMS, CWT_CLAIM_SD_ALG, CWT_MEDIATYPE, ClaimName, CustomClaims, CwtAny, EsdicawtSpecError, MEDIATYPE_SD_CWT, SelectiveDisclosureHashAlg,
     issuance::{SelectiveDisclosureIssuedTagged, SelectiveDisclosurePayloadBuilder},
     reexports::{
         coset::TaggedCborSerializable,
         coset::{self},
     },
-    AnyMap, ClaimName, CustomClaims, CwtAny, EsdicawtSpecError, SelectiveDisclosureHashAlg, COSE_SD_CLAIMS, CWT_CLAIM_SD_ALG, CWT_MEDIATYPE, MEDIATYPE_SD_CWT,
 };
 use signature::{Keypair, Signer};
 
@@ -200,12 +200,12 @@ pub struct IssueCwtParams<'a, ProtectedClaims: CustomClaims, UnprotectedClaims: 
 pub mod tests {
     use super::{claims::CustomTokenClaims, test_utils::Ed25519IssuerClaims};
     use crate::{
-        spec::{blinded_claims::SaltedClaim, blinded_claims::SaltedElement},
         Issuer,
+        spec::{blinded_claims::SaltedClaim, blinded_claims::SaltedElement},
     };
-    use ciborium::{cbor, Value};
+    use ciborium::{Value, cbor};
     use digest::Digest as _;
-    use esdicawt_spec::{blinded_claims::Salted, issuance::SelectiveDisclosureIssuedTagged, AnyMap, ClaimName, CustomClaims, CwtAny, MapKey, NoClaims};
+    use esdicawt_spec::{AnyMap, ClaimName, CustomClaims, CwtAny, MapKey, NoClaims, blinded_claims::Salted, issuance::SelectiveDisclosureIssuedTagged};
     use rand_core::SeedableRng;
 
     #[test]
@@ -310,15 +310,15 @@ pub mod tests {
     fn should_be_object_safe(
         issuer: Box<
             dyn Issuer<
-                Signature = ed25519_dalek::Signature,
-                ProtectedClaims = NoClaims,
-                UnprotectedClaims = NoClaims,
-                PayloadClaims = NoClaims,
-                Signer = ed25519_dalek::SigningKey,
-                Hasher = sha2::Sha256,
-                DisclosableClaims = CustomTokenClaims,
-                Error = std::convert::Infallible,
-            >,
+                    Signature = ed25519_dalek::Signature,
+                    ProtectedClaims = NoClaims,
+                    UnprotectedClaims = NoClaims,
+                    PayloadClaims = NoClaims,
+                    Signer = ed25519_dalek::SigningKey,
+                    Hasher = sha2::Sha256,
+                    DisclosableClaims = CustomTokenClaims,
+                    Error = std::convert::Infallible,
+                >,
         >,
     ) {
     }

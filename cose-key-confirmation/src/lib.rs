@@ -225,7 +225,7 @@ mod ec_p384 {
 #[cfg(test)]
 mod tests {
     use crate::KeyConfirmation;
-    use ciborium::{cbor, Value};
+    use ciborium::{Value, cbor};
     use cose_key_thumbprint::CoseKeyThumbprint;
     use coset::iana;
     use esdicawt_spec::CwtAny as _;
