@@ -772,13 +772,14 @@ mod tests {
                 esdicawt::HolderParams {
                     presentation,
                     audience: "bob",
+                    cnonce: None,
                     expiry: Some(Duration::from_secs(86400)),
                     with_not_before: false,
                     leeway: Duration::from_secs(100),
                     extra_kbt_unprotected: None,
                     extra_kbt_protected: None,
                     extra_kbt_payload: None,
-                    now: None,
+                    artificial_time: None,
                 },
             )
             .unwrap();

@@ -105,7 +105,7 @@ impl<
                                 .deserialized()
                                 .map_err(|e| A::Error::custom(format!("Cannot deserialize element `signature`: {e}")))?;
 
-                            kbt_builder.signature(bytes.into());
+                            kbt_builder.signature(bytes);
                         }
                         _ => break,
                     }
