@@ -20,7 +20,7 @@ pub use issuer::{
 pub use lookup::*;
 pub use read::{EsdicawtReadError, EsdicawtReadResult, SdCwtRead};
 pub use signature::Keypair;
-pub use time::CwtTimeError;
+pub use time::{CwtTimeError, TimeVerification};
 pub use verifier::{
     Verifier,
     error::{SdCwtVerifierError, SdCwtVerifierResult},
