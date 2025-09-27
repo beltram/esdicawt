@@ -2,7 +2,7 @@ pub fn verify_time_claims(now: i64, leeway: core::time::Duration, iat: Option<i6
     let leeway = i64::try_from(leeway.as_secs()).map_err(|_| CwtTimeError::LeewayTooLarge)?;
     // see https://datatracker.ietf.org/doc/html/rfc7519#section-4.1.6
     if let Some(iat) = iat {
-        if iat >= now {
+        if iat > now.saturating_add(leeway) {
             return Err(CwtTimeError::ClockDrift);
         }
     }
