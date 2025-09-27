@@ -24,9 +24,9 @@ pub trait Holder {
     #[cfg(any(feature = "pem", feature = "der"))]
     type Signer: Signer<Self::Signature> + pkcs8::DecodePrivateKey;
 
+    type IssuerPayloadClaims: Select;
     type IssuerProtectedClaims: CustomClaims;
     type IssuerUnprotectedClaims: CustomClaims;
-    type IssuerPayloadClaims: Select;
     type KbtProtectedClaims: CustomClaims;
     type KbtUnprotectedClaims: CustomClaims;
     type KbtPayloadClaims: CustomClaims;
@@ -74,9 +74,9 @@ pub trait Holder {
         params: CwtPresentationParams<Self::KbtProtectedClaims, Self::KbtUnprotectedClaims, Self::KbtPayloadClaims>,
     ) -> Result<
         KbtCwtTagged<
+            Self::IssuerPayloadClaims,
             Self::IssuerProtectedClaims,
             Self::IssuerUnprotectedClaims,
-            Self::IssuerPayloadClaims,
             Self::KbtProtectedClaims,
             Self::KbtUnprotectedClaims,
             Self::KbtPayloadClaims,
@@ -103,7 +103,7 @@ pub trait Holder {
 
         // --- protected ---
         let alg = coset::Algorithm::Assigned(self.cwt_algorithm());
-        let protected = KbtProtected::<Self::IssuerProtectedClaims, Self::IssuerUnprotectedClaims, Self::IssuerPayloadClaims, Self::KbtProtectedClaims> {
+        let protected = KbtProtected::<Self::IssuerPayloadClaims, Self::IssuerProtectedClaims, Self::IssuerUnprotectedClaims, Self::KbtProtectedClaims> {
             alg: alg.into(),
             kcwt: sd_cwt_issued.into(),
             extra: params.extra_kbt_protected,

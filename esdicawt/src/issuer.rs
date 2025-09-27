@@ -72,8 +72,8 @@ pub trait Issuer {
     fn issue_cwt(
         &self,
         csprng: &mut dyn rand_core::CryptoRngCore,
-        params: IssueCwtParams<'_, Self::ProtectedClaims, Self::UnprotectedClaims, Self::PayloadClaims>,
-    ) -> Result<SdCwtIssuedTagged<Self::ProtectedClaims, Self::UnprotectedClaims, Self::PayloadClaims>, SdCwtIssuerError<Self::Error>> {
+        params: IssueCwtParams<'_, Self::PayloadClaims, Self::ProtectedClaims, Self::UnprotectedClaims>,
+    ) -> Result<SdCwtIssuedTagged<Self::PayloadClaims, Self::ProtectedClaims, Self::UnprotectedClaims>, SdCwtIssuerError<Self::Error>> {
         let alg = self.cwt_algorithm();
         let issuer = params.identifier;
         let key_location = params.key_location;
@@ -170,7 +170,7 @@ pub trait Issuer {
     }
 }
 
-pub struct IssueCwtParams<'a, ProtectedClaims: CustomClaims, UnprotectedClaims: CustomClaims, PayloadClaims: Select> {
+pub struct IssueCwtParams<'a, PayloadClaims: Select, ProtectedClaims: CustomClaims, UnprotectedClaims: CustomClaims> {
     /// Extra claims in the protected header of the sd-cwt
     pub protected_claims: Option<ProtectedClaims>,
     /// Extra claims in the unprotected header of the sd-cwt
@@ -360,7 +360,7 @@ mod tests {
         }
     }
 
-    fn issue<T: Select<Error = EsdicawtSpecError>>(disclosable_claims: T) -> SdCwtIssuedTagged<NoClaims, NoClaims, T> {
+    fn issue<T: Select<Error = EsdicawtSpecError>>(disclosable_claims: T) -> SdCwtIssuedTagged<T, NoClaims, NoClaims> {
         let mut csprng = rand_chacha::ChaCha20Rng::from_entropy();
 
         let holder_signing_key = ed25519_dalek::SigningKey::generate(&mut csprng);
