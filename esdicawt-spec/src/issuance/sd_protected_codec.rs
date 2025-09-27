@@ -90,7 +90,7 @@ impl<'de, Extra: CustomClaims> serde::Deserialize<'de> for SdProtected<Extra> {
 }
 
 impl<Extra: CustomClaims> TryFrom<SdProtected<Extra>> for coset::Header {
-    type Error = Box<dyn std::error::Error>;
+    type Error = Box<dyn core::error::Error>;
 
     fn try_from(sdp: SdProtected<Extra>) -> Result<Self, Self::Error> {
         let mut builder = coset::HeaderBuilder::new();
@@ -102,7 +102,7 @@ impl<Extra: CustomClaims> TryFrom<SdProtected<Extra>> for coset::Header {
             coset::Algorithm::Assigned(i) => coset::iana::Algorithm::from_i64(i.to_i64()),
             _ => return Err("Only IANA registered or private use algorithms are supported".into()),
         }
-        .ok_or_else::<Box<dyn std::error::Error>, _>(|| "Invalid IANA algorithm".into())?;
+        .ok_or_else::<Box<dyn core::error::Error>, _>(|| "Invalid IANA algorithm".into())?;
         builder = builder.algorithm(alg);
 
         // map extra claims

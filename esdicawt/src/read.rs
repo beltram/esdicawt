@@ -64,7 +64,7 @@ pub enum EsdicawtReadError {
     #[error(transparent)]
     CborIntError(#[from] std::num::TryFromIntError),
     #[error(transparent)]
-    CustomError(#[from] Box<dyn std::error::Error + Send + Sync>),
+    CustomError(#[from] Box<dyn core::error::Error + Send + Sync>),
 }
 
 impl<IssuerPayloadClaims: Select, IssuerProtectedClaims: CustomClaims, IssuerUnprotectedClaims: CustomClaims> SdCwtRead
