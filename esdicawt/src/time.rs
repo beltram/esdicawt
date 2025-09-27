@@ -1,11 +1,12 @@
 pub fn verify_time_claims(
-    now: i64,
+    now: u64,
     leeway: core::time::Duration,
     iat: Option<i64>,
     exp: Option<i64>,
     nbf: Option<i64>,
     verification: TimeVerification,
 ) -> Result<(), CwtTimeError> {
+    let now = now as i64;
     let leeway = i64::try_from(leeway.as_secs()).map_err(|_| CwtTimeError::LeewayTooLarge)?;
     // see https://datatracker.ietf.org/doc/html/rfc7519#section-4.1.6
     if let Some(iat) = iat.filter(|_| verification.verify_iat) {

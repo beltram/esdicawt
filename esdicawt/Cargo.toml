@@ -30,7 +30,6 @@ pkcs8 = { workspace = true, optional = true }
 tailcall.workspace = true
 serde_repr.workspace = true
 enum-variants-strings.workspace = true
-time = { workspace = true, default-features = false }
 status-list = { workspace = true, optional = true }
 url.workspace = true
 
@@ -42,7 +41,6 @@ p384 = { optional = true, workspace = true }
 [target.'cfg(all(target_arch = "wasm32", target_os = "unknown"))'.dependencies]
 js-sys = "0.3"
 getrandom = { workspace = true, features = ["js"] }
-time = { workspace = true, default-features = false, features = ["wasm-bindgen"] }
 
 [dev-dependencies]
 esdicawt = { workspace = true, features = ["pem", "test-utils", "test-vectors", "ed25519", "p256", "p384", "status"] }
