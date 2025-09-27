@@ -29,7 +29,7 @@ ed25519 = ["dep:ed25519-dalek"]
 p256 = ["dep:p256"]
 p384 = ["dep:p384"]
 deterministic-encoding = ["dcbor"]
-pem = ["dep:pkcs8", "ed25519-dalek?/pem", "p256?/pem", "p384?/pem"]
+pem = ["dep:pkcs8", "pkcs8/pem", "ed25519-dalek?/pem", "p256?/pem", "p384?/pem"]
 
 [lints]
 workspace = true

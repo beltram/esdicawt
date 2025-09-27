@@ -521,10 +521,18 @@ pub mod ec_p384 {
 #[cfg(feature = "pem")]
 pub mod pem {
     use super::*;
+    #[allow(unused_imports)]
+    use pkcs8::DecodePublicKey as _;
 
-    #[allow(unreachable_code)]
-    impl pkcs8::DecodePublicKey for CoseKey {
-        fn from_public_key_der(#[allow(unused_variables)] bytes: &[u8]) -> pkcs8::spki::Result<Self> {
+    impl CoseKey {
+        #[allow(dead_code)]
+        pub fn from_public_key_pem(s: &str) -> pkcs8::spki::Result<Self> {
+            let (_, doc) = pkcs8::Document::from_pem(s)?;
+            Self::from_public_key_der(doc.as_bytes())
+        }
+
+        #[allow(dead_code, unreachable_code)]
+        pub fn from_public_key_der(#[allow(unused_variables)] bytes: &[u8]) -> pkcs8::spki::Result<Self> {
             #[cfg(all(feature = "ed25519", feature = "p256", feature = "p384"))]
             {
                 let ck = ed25519_dalek::VerifyingKey::from_public_key_der(bytes).map(Into::into);
@@ -576,7 +584,7 @@ pub mod pem {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use pkcs8::{DecodePublicKey, EncodePublicKey, LineEnding::LF};
+    use pkcs8::{EncodePublicKey, LineEnding::LF};
 
     #[test]
     fn from_pem_should_succeed() {
