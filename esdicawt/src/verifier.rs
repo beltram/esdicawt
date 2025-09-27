@@ -265,7 +265,7 @@ pub trait Verifier {
 mod tests {
     use super::claims::CustomTokenClaims;
     use crate::{
-        HolderParams, Issuer, IssuerParams, Presentation, SdCwtVerifierError, Verifier, VerifierParams,
+        HolderParams, Issuer, IssuerParams, Presentation, SdCwtVerifierError, TimeArg, Verifier, VerifierParams,
         holder::Holder,
         signature_verifier::SignatureVerifierError,
         test_utils::{Ed25519Holder, Ed25519Issuer},
@@ -519,7 +519,7 @@ mod tests {
             presentation: Presentation::Full,
             audience: "https://example.com/r/alice-bob-group",
             cnonce: None,
-            expiry: Some(core::time::Duration::from_secs(90 * 24 * 3600)),
+            expiry: Some(TimeArg::Relative(core::time::Duration::from_secs(90 * 24 * 3600))),
             with_not_before: true,
             extra_kbt_unprotected: None,
             extra_kbt_protected: None,

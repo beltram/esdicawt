@@ -2,7 +2,7 @@
 
 use ciborium::{Value, value::Integer};
 use cose_key_set::CoseKeySet;
-use esdicawt::{Holder, HolderParams, Issuer, IssuerParams, cwt_label};
+use esdicawt::{Holder, HolderParams, Issuer, IssuerParams, TimeArg, cwt_label};
 use esdicawt_spec::{
     CwtAny, EsdicawtSpecError, NoClaims, SdHashAlg, Select,
     reexports::{coset, coset::iana::Algorithm},
@@ -264,7 +264,7 @@ fn test_vectors<P: Select>(payload: P, spec_sd_cwt_bytes: &[u8], spec_sd_kbt_byt
         audience: Default::default(),
         cti: Default::default(),
         cnonce: Default::default(),
-        expiry: Some(core::time::Duration::from_secs(EXPIRY)),
+        expiry: Some(TimeArg::Relative(core::time::Duration::from_secs(EXPIRY))),
         with_not_before: true,
         with_issued_at: true,
         leeway: core::time::Duration::from_secs(LEEWAY),

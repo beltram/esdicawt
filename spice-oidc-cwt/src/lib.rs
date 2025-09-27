@@ -723,7 +723,7 @@ mod tests {
 
     use super::{ed25519::*, *};
     use esdicawt::{
-        CborPath, Holder, Issuer, Presentation,
+        CborPath, Holder, Issuer, Presentation, TimeArg,
         cose_key_set::CoseKeySet,
         spec::{CwtAny, issuance::SdCwtIssuedTagged},
     };
@@ -775,7 +775,7 @@ mod tests {
                     presentation,
                     audience: "bob",
                     cnonce: None,
-                    expiry: Some(Duration::from_secs(86400)),
+                    expiry: Some(TimeArg::Relative(Duration::from_secs(86400))),
                     with_not_before: false,
                     extra_kbt_unprotected: None,
                     extra_kbt_protected: None,

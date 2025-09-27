@@ -1,7 +1,6 @@
 use crate::{
     HolderParams, HolderValidationParams, SdCwtHolderError, SdCwtHolderValidationError,
     holder::validation::validate_disclosures,
-    now,
     signature_verifier::validate_signature,
     spec::{
         CustomClaims, CwtAny, NoClaims, Select,
@@ -205,13 +204,13 @@ pub trait Holder {
 
         // --- payload ---
         #[cfg(feature = "test-vectors")]
-        let now = params.artificial_time.map(|d| d.as_secs()).unwrap_or_else(now);
+        let now = params.artificial_time.unwrap_or_else(crate::elapsed_since_epoch);
         #[cfg(not(feature = "test-vectors"))]
-        let now = now();
+        let now = crate::elapsed_since_epoch();
 
-        let expiration = params.expiry.map(|exp| (now + exp.as_secs()) as i64);
-        let not_before = params.with_not_before.then_some(now as i64);
-        let issued_at = now as i64;
+        let expiration = params.expiry.map(|exp| exp.to_absolute(now).as_secs() as i64);
+        let not_before = params.with_not_before.then_some(now.as_secs() as i64);
+        let issued_at = now.as_secs() as i64;
 
         let payload = KbtPayload {
             audience: params.audience.to_string(),
@@ -275,7 +274,7 @@ impl<PayloadClaims: Select, Hasher: digest::Digest + Clone, ProtectedClaims: Cus
 #[cfg(test)]
 mod tests {
     use super::{claims::CustomTokenClaims, test_utils::Ed25519Holder, *};
-    use crate::{CwtStdLabel, Issuer, IssuerParams, Presentation, holder::params::CborPath, issuer::test_utils::Ed25519Issuer};
+    use crate::{CwtStdLabel, Issuer, IssuerParams, Presentation, TimeArg, holder::params::CborPath, issuer::test_utils::Ed25519Issuer};
     use ciborium::cbor;
     use cose_key_set::CoseKeySet;
     use esdicawt_spec::{
@@ -331,7 +330,7 @@ mod tests {
             presentation,
             audience: "https://example.com/r/alice-bob-group",
             cnonce: None,
-            expiry: Some(core::time::Duration::from_secs(90 * 24 * 3600)),
+            expiry: Some(TimeArg::Relative(core::time::Duration::from_secs(90 * 24 * 3600))),
             with_not_before: false,
             extra_kbt_unprotected: None,
             extra_kbt_protected: None,
