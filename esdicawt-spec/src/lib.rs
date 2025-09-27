@@ -253,7 +253,7 @@ impl From<&str> for ClaimName {
     }
 }
 
-pub trait CwtAny: serde::Serialize + for<'de> serde::Deserialize<'de> {
+pub trait CwtAny: serde::Serialize + for<'de> serde::Deserialize<'de> + Clone {
     fn to_cbor_bytes(&self) -> EsdicawtSpecResult<Vec<u8>> {
         let mut buf = vec![];
         ciborium::into_writer(self, &mut buf)?;
@@ -268,7 +268,7 @@ pub trait CwtAny: serde::Serialize + for<'de> serde::Deserialize<'de> {
     }
 }
 
-impl<T> CwtAny for T where T: serde::Serialize + for<'de> serde::Deserialize<'de> {}
+impl<T> CwtAny for T where T: serde::Serialize + for<'de> serde::Deserialize<'de> + Clone {}
 
 pub trait CustomClaims: std::fmt::Debug + CwtAny + Clone {}
 
@@ -289,7 +289,7 @@ impl<'de> serde::Deserialize<'de> for NoClaims {
     }
 }
 
-#[derive(Debug, Clone, Eq, PartialEq, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Clone, Copy, Eq, PartialEq, serde::Serialize, serde::Deserialize)]
 #[repr(transparent)]
 #[serde(transparent)]
 pub struct Salt(#[serde(with = "serde_bytes")] pub [u8; Salt::SIZE]);

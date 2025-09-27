@@ -1,5 +1,6 @@
-use esdicawt_spec::CustomClaims;
-use esdicawt_spec::blinded_claims::SaltedArray;
+use crate::{SdCwtHolderResult, holder::traverse::traverse_disclosures};
+use ciborium::Value;
+use esdicawt_spec::{ClaimName, CustomClaims, blinded_claims::SaltedArray};
 
 #[derive(Debug)]
 pub struct HolderParams<'a, KbtProtectedClaims: CustomClaims, KbtUnprotectedClaims: CustomClaims, KbtPayloadClaims: CustomClaims> {
@@ -16,14 +17,10 @@ pub struct HolderParams<'a, KbtProtectedClaims: CustomClaims, KbtUnprotectedClai
 pub enum Presentation {
     #[default]
     Full,
-    Custom(Box<dyn FnOnce(SaltedArray) -> SaltedArray>),
+    Custom(Box<dyn Fn(SaltedArray) -> SaltedArray>),
+    #[allow(clippy::type_complexity)]
+    Path(Box<dyn Fn(&[CborPath]) -> bool>),
     None,
-}
-
-impl Presentation {
-    pub fn select_disclosures(&self, disclosures: SaltedArray) -> SaltedArray {
-        disclosures
-    }
 }
 
 impl std::fmt::Debug for Presentation {
@@ -31,7 +28,60 @@ impl std::fmt::Debug for Presentation {
         match self {
             Self::Full => write!(f, "Full"),
             Self::Custom(_) => write!(f, "Custom"),
+            Self::Path(_) => write!(f, "Path"),
             Self::None => write!(f, "None"),
         }
+    }
+}
+
+impl Presentation {
+    pub(crate) fn try_select_disclosures<Hasher: digest::Digest, E: core::error::Error + Send + Sync>(&self, disclosures: SaltedArray) -> SdCwtHolderResult<SaltedArray, E> {
+        Ok(match self {
+            Self::Full => disclosures,
+            Self::None => SaltedArray(vec![]),
+            Self::Custom(f) => f(disclosures),
+            Self::Path(f) => {
+                let mut kept_disclosures = SaltedArray::with_capacity(disclosures.len());
+                let paths = traverse_disclosures::<Hasher, E>(&disclosures)?;
+                for (path, salted) in paths {
+                    if f(&path) {
+                        kept_disclosures.0.push(salted.into())
+                    }
+                }
+                kept_disclosures
+            }
+        })
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum CborPath {
+    Str(String),
+    Int(i64),
+    Any(Value),
+    Index(u64),
+}
+
+impl From<&ClaimName> for CborPath {
+    fn from(name: &ClaimName) -> Self {
+        match name {
+            ClaimName::Integer(i) => Self::Int(*i),
+            ClaimName::Text(s) => Self::Str(s.to_string()),
+            ClaimName::TaggedInteger(tag, i) => Self::Any(Value::Tag(*tag, Box::new((*i).into()))),
+            ClaimName::TaggedText(tag, s) => Self::Any(Value::Tag(*tag, Box::new(s.as_str().into()))),
+            ClaimName::SimpleValue(i) => Self::Any(Value::Simple(*i)),
+        }
+    }
+}
+
+impl TryFrom<&Value> for CborPath {
+    type Error = core::num::TryFromIntError;
+
+    fn try_from(name: &Value) -> Result<Self, Self::Error> {
+        Ok(match name {
+            Value::Integer(i) => Self::Int((*i).try_into()?),
+            Value::Text(s) => Self::Str(s.to_string()),
+            value => Self::Any(value.clone()),
+        })
     }
 }

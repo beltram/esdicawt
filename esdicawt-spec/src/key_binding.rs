@@ -105,7 +105,7 @@ impl<
 > KbtCwt<IssuerPayloadClaims, IssuerProtectedClaims, IssuerUnprotectedClaims, PayloadClaims, ProtectedClaims, UnprotectedClaims>
 {
     /// Iterates through all the disclosed claims in this SD-KBT
-    pub fn walk_disclosed_claims(&mut self) -> EsdicawtSpecResult<impl Iterator<Item = EsdicawtSpecResult<Salted<ciborium::Value>>> + '_> {
+    pub fn walk_disclosed_claims(&mut self) -> EsdicawtSpecResult<impl Iterator<Item = EsdicawtSpecResult<&Salted<ciborium::Value>>> + '_> {
         let protected = self.protected.to_value_mut()?;
         let issuer_sd_cwt = protected.kcwt.to_value_mut()?;
         Ok(issuer_sd_cwt.0.sd_unprotected.sd_claims.iter())

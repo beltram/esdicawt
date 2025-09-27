@@ -18,6 +18,8 @@ pub enum SdCwtHolderError<CustomError: Send + Sync> {
     #[error(transparent)]
     SignatureError(#[from] signature::Error),
     #[error(transparent)]
+    IntError(#[from] core::num::TryFromIntError),
+    #[error(transparent)]
     SpecError(#[from] EsdicawtSpecError),
     #[error("The issuer is not using an algorithm IANA registered")]
     UnregisteredAlgorithm,

@@ -1,3 +1,5 @@
+pub type SdCwtVerifierResult<T, CustomError> = Result<T, SdCwtVerifierError<CustomError>>;
+
 #[derive(Debug, thiserror::Error)]
 pub enum SdCwtVerifierError<CustomError: Send + Sync> {
     #[error("Signature verification error: {0}")]
@@ -31,5 +33,3 @@ pub enum SdCwtVerifierError<CustomError: Send + Sync> {
     #[error(transparent)]
     CustomError(CustomError),
 }
-
-pub type SdCwtVerifierResult<T, CustomError> = Result<T, SdCwtVerifierError<CustomError>>;
