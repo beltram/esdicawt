@@ -8,9 +8,9 @@ use crate::{
 #[derive(Debug, Clone, PartialEq)]
 pub struct KbtCwtVerified<
     IssuerPayloadClaims: Select,
+    KbtPayloadClaims: CustomClaims = NoClaims,
     IssuerProtectedClaims: CustomClaims = NoClaims,
     IssuerUnprotectedClaims: CustomClaims = NoClaims,
-    KbtPayloadClaims: CustomClaims = NoClaims,
     KbtProtectedClaims: CustomClaims = NoClaims,
     KbtUnprotectedClaims: CustomClaims = NoClaims,
 > {
@@ -22,12 +22,12 @@ pub struct KbtCwtVerified<
 
 impl<
     IssuerPayloadClaims: Select,
+    KbtPayloadClaims: CustomClaims,
     IssuerProtectedClaims: CustomClaims,
     IssuerUnprotectedClaims: CustomClaims,
     KbtProtectedClaims: CustomClaims,
     KbtUnprotectedClaims: CustomClaims,
-    KbtPayloadClaims: CustomClaims,
-> KbtCwtVerified<IssuerPayloadClaims, IssuerProtectedClaims, IssuerUnprotectedClaims, KbtProtectedClaims, KbtUnprotectedClaims, KbtPayloadClaims>
+> KbtCwtVerified<IssuerPayloadClaims, KbtPayloadClaims, IssuerProtectedClaims, IssuerUnprotectedClaims, KbtProtectedClaims, KbtUnprotectedClaims>
 {
     pub fn sd_cwt(&self) -> &SdIssuedVerified<IssuerPayloadClaims, IssuerProtectedClaims, IssuerUnprotectedClaims> {
         &self.protected.issuer_sd_cwt

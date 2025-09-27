@@ -120,7 +120,7 @@ mod tests {
     use ciborium::{Value, cbor};
     use cose_key_set::CoseKeySet;
     use esdicawt_spec::{
-        ClaimName, CwtAny,
+        ClaimName, CwtAny, NoClaims,
         blinded_claims::{Salted, SaltedElement},
         issuance::SdCwtIssuedTagged,
         sd,
@@ -133,7 +133,7 @@ mod tests {
         let issuer = Ed25519Issuer::<Value>::new(issuer_signing_key);
 
         let holder_signing_key = ed25519_dalek::SigningKey::generate(&mut rand::thread_rng());
-        let holder = Ed25519Holder::<Value>::new(holder_signing_key.clone());
+        let holder = Ed25519Holder::<Value, NoClaims>::new(holder_signing_key.clone());
 
         let mut issuer_params = default_issuer_params(&holder_signing_key, None);
         issuer_params.issuer = "iss-a";
@@ -196,7 +196,7 @@ mod tests {
         holder.verify_sd_cwt(&sd_cwt, validation_params.clone(), &issuer_verifying_key).unwrap();
 
         // === verifying key mismatch
-        let holder_bis = Ed25519Holder::<Value>::new(ed25519_dalek::SigningKey::generate(&mut rand::thread_rng()));
+        let holder_bis = Ed25519Holder::<Value, NoClaims>::new(ed25519_dalek::SigningKey::generate(&mut rand::thread_rng()));
         assert!(matches!(
             holder_bis.verify_sd_cwt(&sd_cwt, validation_params.clone(), &issuer_verifying_key),
             Err(SdCwtHolderError::ValidationError(SdCwtHolderValidationError::VerifyingKeyMismatch))
@@ -210,7 +210,7 @@ mod tests {
         let issuer = Ed25519Issuer::<Value>::new(issuer_signing_key);
 
         let holder_signing_key = ed25519_dalek::SigningKey::generate(&mut rand::thread_rng());
-        let holder = Ed25519Holder::<Value>::new(holder_signing_key.clone());
+        let holder = Ed25519Holder::<Value, NoClaims>::new(holder_signing_key.clone());
 
         let payload = cbor!({
             sd!(42) => "a",
@@ -332,7 +332,7 @@ mod tests {
         let issuer = Ed25519Issuer::<Value>::new(issuer_signing_key);
 
         let holder_signing_key = ed25519_dalek::SigningKey::generate(&mut rand::thread_rng());
-        let holder = Ed25519Holder::<Value>::new(holder_signing_key.clone());
+        let holder = Ed25519Holder::<Value, NoClaims>::new(holder_signing_key.clone());
 
         let issuer_params = default_issuer_params(&holder_signing_key, None);
         let sd_cwt = issuer.issue_cwt(&mut rand::thread_rng(), issuer_params.clone()).unwrap().to_cbor_bytes().unwrap();
