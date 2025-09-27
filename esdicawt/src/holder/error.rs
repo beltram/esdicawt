@@ -33,7 +33,7 @@ pub enum SdCwtHolderError<CustomError: Send + Sync> {
     #[error("The issuer is not using an algorithm IANA registered")]
     UnregisteredAlgorithm,
     #[error("This hash algorithm is not supported")]
-    UnsupportedHashAlgorithm,
+    InvalidTyp,
     #[error("{0}")]
     ImplementationError(&'static str),
     #[error(transparent)]

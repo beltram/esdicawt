@@ -3,7 +3,7 @@ use coset::AsCborValue;
 use serde::ser::SerializeMap;
 
 use super::SdProtected;
-use crate::{CWT_CLAIM_ALG, CWT_CLAIM_SD_ALG, CWT_MEDIATYPE, CustomClaims, MEDIATYPE_SD_CWT, SdHashAlg, issuance::SdProtectedBuilder};
+use crate::{CWT_CLAIM_ALG, CWT_CLAIM_SD_ALG, CWT_MEDIATYPE, CustomClaims, LEGACY_MEDIATYPE_SD_CWT, MEDIATYPE_SD_CWT, SdHashAlg, issuance::SdProtectedBuilder};
 
 impl<Extra: CustomClaims> serde::Serialize for SdProtected<Extra> {
     fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
@@ -57,7 +57,7 @@ impl<'de, Extra: CustomClaims> serde::Deserialize<'de> for SdProtected<Extra> {
                         Value::Integer(label) => match label.try_into() {
                             // Ignore, but it must be there and have the correct value
                             Ok(CWT_MEDIATYPE) => {
-                                found_mediatype = v.into_text().map(|s| s == MEDIATYPE_SD_CWT).unwrap_or_default();
+                                found_mediatype = v.into_text().map(|s| s == MEDIATYPE_SD_CWT || s == LEGACY_MEDIATYPE_SD_CWT).unwrap_or_default();
                             }
                             Ok(CWT_CLAIM_ALG) => {
                                 builder.alg(coset::Algorithm::from_cbor_value(v).map_err(|e| A::Error::custom(format!("Cannot deserialize sd-protected.alg: {e}")))?);
