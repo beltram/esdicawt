@@ -221,7 +221,7 @@ mod tests {
         assert_eq!(rck.len(), 1);
         let rck_name = rck.first().unwrap();
 
-        let payload = sd_cwt.0.disclosures_mut().iter().map(|d| d.unwrap()).collect::<Vec<_>>();
+        let payload = sd_cwt.0.disclosures_mut().iter().collect::<Result<Vec<_>, _>>().unwrap();
         assert_eq!(payload.len(), 1);
         let d0 = payload.first().unwrap();
         let Salted::Claim(SaltedClaim { name, value, .. }) = d0 else { unreachable!() };
@@ -242,7 +242,7 @@ mod tests {
             let payload = cbor!({ "___claim" => value }).unwrap().select_all().unwrap();
             let mut sd_cwt = issue(Some(payload));
 
-            let disclosable_claims = sd_cwt.0.disclosures_mut().iter().map(|d| d.unwrap()).collect::<Vec<_>>();
+            let disclosable_claims = sd_cwt.0.disclosures_mut().iter().collect::<Result<Vec<_>, _>>().unwrap();
 
             let (expected_name, expected_value) = expected;
             let expected_value = expected_value.unwrap();
@@ -302,7 +302,7 @@ mod tests {
                         }
                         (Value::Text(label), Value::Array(numbers)) if &label == "numbers" => {
                             // filter out tags
-                            let numbers = numbers.iter().filter_map(|n| n.as_integer()).map(|i| u64::try_from(i).unwrap()).collect::<Vec<_>>();
+                            let numbers = numbers.iter().filter_map(Value::as_integer).map(u64::try_from).collect::<Result<Vec<_>, _>>().unwrap();
                             model.numbers.extend(numbers);
                         }
                         (Value::Text(label), Value::Map(inner)) if &label == "inner" => {
@@ -364,7 +364,7 @@ mod tests {
         assert_eq!(model.numbers, vec![0, 2]);
         assert!(model.inner.is_empty());
 
-        let disclosures = sd_cwt.0.disclosures_mut().iter().map(|d| d.unwrap()).collect::<Vec<_>>();
+        let disclosures = sd_cwt.0.disclosures_mut().iter().collect::<Result<Vec<_>, _>>().unwrap();
         assert_eq!(disclosures.len(), 3);
 
         let [d0, d1, d2] = disclosures.try_into().unwrap();
