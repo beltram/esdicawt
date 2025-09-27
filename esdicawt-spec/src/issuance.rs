@@ -11,7 +11,7 @@ pub struct SdCwtIssued<PayloadClaims: Select, Hasher: digest::Digest + Clone, Pr
     pub protected: InlinedCbor<SdProtected<ProtectedClaims>>,
     pub sd_unprotected: SdUnprotected<UnprotectedClaims>,
     pub payload: InlinedCbor<SdPayload<PayloadClaims>>,
-    pub signature: Vec<u8>,
+    pub signature: serde_bytes::ByteBuf,
     #[builder(default)]
     _marker: core::marker::PhantomData<Hasher>,
 }
@@ -65,9 +65,9 @@ pub struct SdInnerPayload<Extra: CwtAny> {
     #[builder(default)]
     pub issued_at: Option<i64>,
     #[builder(default)]
-    pub cti: Option<Vec<u8>>,
+    pub cti: Option<serde_bytes::ByteBuf>,
     #[builder(default)]
-    pub cnonce: Option<Vec<u8>>,
+    pub cnonce: Option<serde_bytes::ByteBuf>,
     #[builder(default)]
     pub extra: Option<Extra>,
 }

@@ -346,7 +346,7 @@ mod tests {
             with_issued_at: false,
             cti: None,
             cnonce: None,
-            now: None,
+            artificial_time: None,
             leeway: Default::default(),
             key_location: "",
             holder_confirmation_key: (&holder_signing_key.verifying_key()).try_into().unwrap(),

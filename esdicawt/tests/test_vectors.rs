@@ -290,7 +290,7 @@ fn test_vectors<P: Select>(payload: P, spec_sd_cwt_bytes: &[u8], spec_sd_kbt_byt
         with_not_before: true,
         with_issued_at: true,
         leeway: core::time::Duration::from_secs(LEEWAY),
-        now: Some(core::time::Duration::from_secs(NOW)),
+        artificial_time: Some(core::time::Duration::from_secs(NOW)),
         key_location: "https://issuer.example/cose-key3",
         holder_confirmation_key: holder_signing_key().verifying_key().try_into().unwrap(),
     };

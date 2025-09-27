@@ -302,7 +302,7 @@ mod tests {
             leeway: core::time::Duration::from_secs(1),
             key_location: "https://auth.acme.io/issuer.cwk",
             holder_confirmation_key: (&holder_signing_key.verifying_key()).try_into().unwrap(),
-            now: None,
+            artificial_time: None,
         };
         let sd_cwt = issuer.issue_cwt(&mut csprng, issue_params).unwrap().to_cbor_bytes().unwrap();
         let holder = Ed25519Holder::new(holder_signing_key.clone());

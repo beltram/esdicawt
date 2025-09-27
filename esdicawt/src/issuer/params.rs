@@ -22,11 +22,11 @@ pub struct IssuerParams<'a, PayloadClaims: Select, ProtectedClaims: CustomClaims
     /// Whether to include an issued_at, see https://www.rfc-editor.org/rfc/rfc8392.html#section-3.1.6
     pub with_issued_at: bool,
     /// CWT ID, see https://www.rfc-editor.org/rfc/rfc8392.html#section-3.1.7
-    pub cti: Option<&'a str>,
+    pub cti: Option<&'a [u8]>,
     /// Client Nonce, see https://www.rfc-editor.org/rfc/rfc9200.html#section-5.3.1
-    pub cnonce: Option<&'a str>,
+    pub cnonce: Option<&'a [u8]>,
     #[cfg(feature = "test-vectors")]
-    pub now: Option<core::time::Duration>,
+    pub artificial_time: Option<core::time::Duration>,
     /// Dealing with clocks skew
     pub leeway: core::time::Duration,
     pub key_location: &'a str,
