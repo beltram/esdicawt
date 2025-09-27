@@ -7,11 +7,11 @@ authors.workspace = true
 
 [features]
 default = []
-pem = ["dep:pkcs8", "pkcs8?/pem", "cose-key-set/pem", "status-list?/pem"]
+pem = ["dep:pkcs8", "pkcs8?/pem", "cose-key-set/pem"]
 ed25519 = ["dep:ed25519-dalek", "cose-key-confirmation/ed25519", "dep:sha2"]
 p256 = ["dep:p256", "cose-key-confirmation/p256", "dep:sha2"]
 p384 = ["dep:p384", "cose-key-confirmation/p384", "dep:sha2"]
-test-utils = ["ed25519", "p256", "p384", "dep:sha2", "cose-key-confirmation/ed25519", "cose-key-confirmation/p256", "cose-key-confirmation/p384"]
+test-utils = ["ed25519", "p256", "p384", "dep:sha2", "cose-key-confirmation/ed25519", "cose-key-confirmation/p256", "cose-key-confirmation/p384", "status"]
 test-vectors = ["test-utils"]
 status = ["dep:status-list", "esdicawt-spec/status"]
 
@@ -55,6 +55,7 @@ spice-oidc-cwt = { workspace = true }
 derive_builder.workspace = true
 serde_repr.workspace = true
 blake3 = { version = "1.8", features = ["traits-preview"] }
+tokio = { workspace = true, features = ["macros", "rt"] }
 
 [target.'cfg(not(target_arch = "wasm32"))'.dev-dependencies]
 criterion = "0.6"

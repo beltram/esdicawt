@@ -33,12 +33,12 @@ pub struct IssuerParams<'a, PayloadClaims: Select, ProtectedClaims: CustomClaims
     pub key_location: &'a str,
     pub holder_confirmation_key: KeyConfirmation,
     #[cfg(feature = "status")]
-    pub revocation: RevocationParams,
+    pub status: StatusParams,
 }
 
 #[cfg(feature = "status")]
 #[derive(Debug, Clone)]
-pub struct RevocationParams {
+pub struct StatusParams {
     pub status_list_bit_index: status_list::BitIndex,
     pub uri: url::Url,
 }

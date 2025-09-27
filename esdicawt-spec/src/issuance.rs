@@ -70,7 +70,7 @@ pub struct SdInnerPayload<Extra: CwtAny> {
     #[builder(default)]
     pub cnonce: Option<serde_bytes::ByteBuf>,
     #[cfg(feature = "status")]
-    pub status: status_list::referenced::StatusClaim,
+    pub status: status_list::StatusClaim,
     #[builder(default)]
     pub extra: Option<Extra>,
 }

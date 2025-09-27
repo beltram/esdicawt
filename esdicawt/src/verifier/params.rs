@@ -44,3 +44,15 @@ pub struct ShallowVerifierParams {
     /// when verifying a delayed message or testing
     pub artificial_time: Option<i64>,
 }
+
+#[cfg(feature = "status")]
+#[derive(Default, Debug, Copy, Clone)]
+#[allow(dead_code)]
+pub struct StatusListVerifierParams {
+    // to accommodate clock skews, applies to iat & exp
+    pub leeway: core::time::Duration,
+    /// verification of StatusListToken time claims
+    pub time_verification: TimeVerification,
+    /// when verifying a delayed message or testing
+    pub artificial_time: Option<i64>,
+}

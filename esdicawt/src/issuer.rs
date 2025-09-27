@@ -28,35 +28,35 @@ pub trait Issuer {
     type Signer: Signer<Self::Signature> + Keypair;
 
     #[cfg(feature = "pem")]
-    type Signer: Signer<Self::Signature> + Keypair + pkcs8::DecodePrivateKey;
+    type Signer: Signer<<Self as Issuer>::Signature> + Keypair + pkcs8::DecodePrivateKey;
 
-    fn new(signing_key: Self::Signer) -> Self
+    fn new(signing_key: <Self as Issuer>::Signer) -> Self
     where
         Self: Sized;
 
     #[cfg(feature = "pem")]
-    fn try_from_pem(pem: &str) -> Result<Self, Self::Error>
+    fn try_from_pem(pem: &str) -> Result<Self, <Self as Issuer>::Error>
     where
         Self: Sized,
-        Self::Error: From<pkcs8::Error>,
+        <Self as Issuer>::Error: From<pkcs8::Error>,
     {
         use pkcs8::DecodePrivateKey as _;
-        let signer = Self::Signer::from_pkcs8_pem(pem)?;
-        Ok(Self::new(signer))
+        let signer = <Self as Issuer>::Signer::from_pkcs8_pem(pem)?;
+        Ok(<Self as Issuer>::new(signer))
     }
 
     #[cfg(feature = "pem")]
-    fn try_from_der(der: &[u8]) -> Result<Self, Self::Error>
+    fn try_from_der(der: &[u8]) -> Result<Self, <Self as Issuer>::Error>
     where
         Self: Sized,
-        Self::Error: From<pkcs8::Error>,
+        <Self as Issuer>::Error: From<pkcs8::Error>,
     {
         use pkcs8::DecodePrivateKey as _;
-        let signer = Self::Signer::from_pkcs8_der(der)?;
-        Ok(Self::new(signer))
+        let signer = <Self as Issuer>::Signer::from_pkcs8_der(der)?;
+        Ok(<Self as Issuer>::new(signer))
     }
 
-    fn signer(&self) -> &Self::Signer;
+    fn signer(&self) -> &<Self as Issuer>::Signer;
 
     fn cwt_algorithm(&self) -> coset::iana::Algorithm;
 
@@ -67,8 +67,8 @@ pub trait Issuer {
         &self,
         csprng: &mut dyn rand_core::CryptoRngCore,
         params: IssuerParams<'_, Self::PayloadClaims, Self::ProtectedClaims, Self::UnprotectedClaims>,
-    ) -> Result<SdCwtIssuedTagged<Self::PayloadClaims, Self::Hasher, Self::ProtectedClaims, Self::UnprotectedClaims>, SdCwtIssuerError<Self::Error>> {
-        let alg = self.cwt_algorithm();
+    ) -> Result<SdCwtIssuedTagged<Self::PayloadClaims, <Self as Issuer>::Hasher, Self::ProtectedClaims, Self::UnprotectedClaims>, SdCwtIssuerError<<Self as Issuer>::Error>> {
+        let alg = Issuer::cwt_algorithm(self);
 
         let mut protected_builder = coset::HeaderBuilder::new()
             .algorithm(alg)
@@ -93,7 +93,11 @@ pub trait Issuer {
 
         let mut unprotected_builder = coset::HeaderBuilder::new();
 
-        if let Some(salted_array) = to_be_redacted_payload.as_mut().map(|tbr| redact::<Self::Error, Self::Hasher>(csprng, tbr)).transpose()? {
+        if let Some(salted_array) = to_be_redacted_payload
+            .as_mut()
+            .map(|tbr| redact::<<Self as Issuer>::Error, <Self as Issuer>::Hasher>(csprng, tbr))
+            .transpose()?
+        {
             unprotected_builder = unprotected_builder.value(COSE_SD_CLAIMS, salted_array.to_cbor_value()?);
         }
 
@@ -127,7 +131,7 @@ pub trait Issuer {
         #[cfg(feature = "status")]
         {
             use crate::coset::iana::EnumI64 as _;
-            let status = status_list::referenced::StatusClaim::new(params.revocation.status_list_bit_index, params.revocation.uri);
+            let status = status_list::StatusClaim::new(params.status.status_list_bit_index, params.status.uri);
             payload.push((Value::Integer(crate::coset::iana::CwtClaimName::Status.to_i64().into()), status.to_cbor_value()?));
         }
 
@@ -168,7 +172,7 @@ pub trait Issuer {
             .unprotected(unprotected)
             .payload(payload.to_cbor_bytes()?)
             .try_create_signature(&[], |tbs| {
-                let signature = self.signer().try_sign(tbs)?;
+                let signature = Issuer::signer(self).try_sign(tbs)?;
                 Result::<_, signature::Error>::Ok(signature.to_bytes().as_ref().to_vec())
             })?
             .build()
@@ -182,7 +186,7 @@ pub trait Issuer {
 mod tests {
     use super::{claims::CustomTokenClaims, test_utils::Ed25519Issuer};
     use crate::{
-        CwtStdLabel, Issuer, IssuerParams, RevocationParams, TimeArg, elapsed_since_epoch,
+        CwtStdLabel, Issuer, IssuerParams, StatusParams, TimeArg, elapsed_since_epoch,
         spec::{
             ClaimName, CwtAny, NoClaims, Select, SelectExt,
             blinded_claims::{Salted, SaltedClaim, SaltedElement},
@@ -256,7 +260,7 @@ mod tests {
             key_location: "https://auth.acme.io/issuer.cwk",
             holder_confirmation_key: (&holder_signing_key.verifying_key()).try_into().unwrap(),
             artificial_time: None,
-            revocation: RevocationParams {
+            status: StatusParams {
                 status_list_bit_index: 0,
                 uri: "https://example.com/statuslists/1".parse().unwrap(),
             },
@@ -513,7 +517,7 @@ mod tests {
                     key_location: "https://auth.acme.io/issuer.cwk",
                     holder_confirmation_key: (&holder_signing_key.verifying_key()).try_into().unwrap(),
                     artificial_time: None,
-                    revocation: RevocationParams {
+                    status: StatusParams {
                         status_list_bit_index: 0,
                         uri: "https://example.com/statuslists/1".parse().unwrap(),
                     },
@@ -565,10 +569,11 @@ pub mod claims {
 pub mod test_utils {
     use super::*;
     use esdicawt_spec::{EsdicawtSpecError, NoClaims, Select};
+    use status_list::issuer::StatusListIssuer;
 
     pub struct Ed25519Issuer<T: Select> {
-        signing_key: ed25519_dalek::SigningKey,
-        _marker: core::marker::PhantomData<T>,
+        pub signer: ed25519_dalek::SigningKey,
+        pub _marker: core::marker::PhantomData<T>,
     }
 
     impl<T: Select> Issuer for Ed25519Issuer<T> {
@@ -583,13 +588,13 @@ pub mod test_utils {
 
         fn new(signing_key: Self::Signer) -> Self {
             Self {
-                signing_key,
+                signer: signing_key,
                 _marker: Default::default(),
             }
         }
 
         fn signer(&self) -> &Self::Signer {
-            &self.signing_key
+            &self.signer
         }
 
         fn cwt_algorithm(&self) -> coset::iana::Algorithm {
@@ -598,6 +603,21 @@ pub mod test_utils {
 
         fn hash_algorithm(&self) -> SdHashAlg {
             SdHashAlg::Sha256
+        }
+    }
+
+    impl<T: Select> StatusListIssuer for Ed25519Issuer<T> {
+        type StatusListIssuerError = EsdicawtSpecError;
+        type StatusListIssuerSigner = ed25519_dalek::SigningKey;
+        type StatusListIssuerHasher = sha2::Sha256;
+        type StatusListIssuerSignature = ed25519_dalek::Signature;
+
+        fn status_list_token_signer(&self) -> &Self::StatusListIssuerSigner {
+            &self.signer
+        }
+
+        fn status_list_token_cwt_algorithm(&self) -> coset::iana::Algorithm {
+            coset::iana::Algorithm::EdDSA
         }
     }
 
