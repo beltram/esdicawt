@@ -161,33 +161,33 @@ pub trait Verifier {
         let kbt_payload = kbt.0.payload.try_into_value()?;
 
         // verify SD-KBT audience
-        if let Some((expected, actual)) = params.expected_kbt_audience.zip(Some(&kbt_payload.audience)) {
-            if actual != expected {
-                return Err(SdCwtVerifierError::KbtAudienceMismatch {
-                    actual: actual.to_owned(),
-                    expected: expected.to_owned(),
-                });
-            }
+        if let Some((expected, actual)) = params.expected_kbt_audience.zip(Some(&kbt_payload.audience))
+            && actual != expected
+        {
+            return Err(SdCwtVerifierError::KbtAudienceMismatch {
+                actual: actual.to_owned(),
+                expected: expected.to_owned(),
+            });
         }
 
         // verify SD-KBT cnonce
-        if let Some((expected, actual)) = params.expected_cnonce.zip(kbt_payload.cnonce.as_deref()) {
-            if actual != expected {
-                return Err(SdCwtVerifierError::CnonceMismatch {
-                    actual: actual.to_owned(),
-                    expected: expected.to_owned(),
-                });
-            }
+        if let Some((expected, actual)) = params.expected_cnonce.zip(kbt_payload.cnonce.as_deref())
+            && actual != expected
+        {
+            return Err(SdCwtVerifierError::CnonceMismatch {
+                actual: actual.to_owned(),
+                expected: expected.to_owned(),
+            });
         }
 
         // verify SD-CWT subject
-        if let Some((actual, expected)) = sd_cwt_payload.inner.subject.as_ref().zip(params.expected_subject) {
-            if actual != expected {
-                return Err(SdCwtVerifierError::SubMismatch {
-                    actual: actual.to_owned(),
-                    expected: expected.to_owned(),
-                });
-            }
+        if let Some((actual, expected)) = sd_cwt_payload.inner.subject.as_ref().zip(params.expected_subject)
+            && actual != expected
+        {
+            return Err(SdCwtVerifierError::SubMismatch {
+                actual: actual.to_owned(),
+                expected: expected.to_owned(),
+            });
         }
 
         // verify SD-CWT issuer
@@ -202,13 +202,13 @@ pub trait Verifier {
         }
 
         // verify SD-CWT audience
-        if let Some((actual, expected)) = sd_cwt_payload.inner.audience.as_ref().zip(params.expected_audience) {
-            if actual != expected {
-                return Err(SdCwtVerifierError::AudienceMismatch {
-                    actual: actual.to_owned(),
-                    expected: expected.to_owned(),
-                });
-            }
+        if let Some((actual, expected)) = sd_cwt_payload.inner.audience.as_ref().zip(params.expected_audience)
+            && actual != expected
+        {
+            return Err(SdCwtVerifierError::AudienceMismatch {
+                actual: actual.to_owned(),
+                expected: expected.to_owned(),
+            });
         }
 
         // TODO: verify revocation status w/ Status List
@@ -530,7 +530,7 @@ mod tests {
         }
     }
 
-    fn default_issuer_params<T: Select>(payload: Option<T>, holder_signing_key: &ed25519_dalek::SigningKey) -> IssuerParams<T> {
+    fn default_issuer_params<T: Select>(payload: Option<T>, holder_signing_key: &ed25519_dalek::SigningKey) -> IssuerParams<'_, T> {
         IssuerParams {
             protected_claims: None,
             unprotected_claims: None,
@@ -600,6 +600,7 @@ pub mod test_utils {
     use esdicawt_spec::NoClaims;
 
     // TODO: turn generic again
+    #[allow(dead_code)]
     #[derive(Debug, Clone, Default)]
     pub struct HybridVerifier<DisclosedClaims: CustomClaims, KbtClaims: CustomClaims> {
         pub _marker: core::marker::PhantomData<(DisclosedClaims, KbtClaims)>,

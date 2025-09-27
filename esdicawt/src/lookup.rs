@@ -84,19 +84,19 @@ where
 
                     let mut found = None;
                     for salted in array.iter().flatten() {
-                        if let Salted::Claim(sc) = salted {
-                            if sc.name == *name {
-                                // if we found an element with a matching claim name, check that it is present in the payload's
-                                // redacted claim keys list
-                                let mut cbor = vec![];
-                                ciborium::into_writer(&sc, &mut cbor)?;
-                                let hashed: Value = Hasher::digest(cbor.clone()).to_vec().into();
+                        if let Salted::Claim(sc) = salted
+                            && sc.name == *name
+                        {
+                            // if we found an element with a matching claim name, check that it is present in the payload's
+                            // redacted claim keys list
+                            let mut cbor = vec![];
+                            ciborium::into_writer(&sc, &mut cbor)?;
+                            let hashed: Value = Hasher::digest(cbor.clone()).to_vec().into();
 
-                                if rcks.contains(&hashed) {
-                                    // TODO: try removing this clone
-                                    found = Some(sc.value.clone());
-                                    break;
-                                }
+                            if rcks.contains(&hashed) {
+                                // TODO: try removing this clone
+                                found = Some(sc.value.clone());
+                                break;
                             }
                         }
                     }

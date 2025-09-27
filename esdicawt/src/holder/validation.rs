@@ -347,7 +347,7 @@ mod tests {
         ));
     }
 
-    fn default_issuer_params(holder_signing_key: &ed25519_dalek::SigningKey, payload: Option<Value>) -> IssuerParams<Value> {
+    fn default_issuer_params(holder_signing_key: &ed25519_dalek::SigningKey, payload: Option<Value>) -> IssuerParams<'_, Value> {
         IssuerParams::<Value> {
             protected_claims: None,
             unprotected_claims: None,

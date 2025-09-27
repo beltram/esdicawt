@@ -9,22 +9,22 @@ pub fn verify_time_claims(
     let now = now as i64;
     let leeway = i64::try_from(leeway.as_secs()).map_err(|_| CwtTimeError::LeewayTooLarge)?;
     // see https://datatracker.ietf.org/doc/html/rfc7519#section-4.1.6
-    if let Some(iat) = iat.filter(|_| verification.verify_iat) {
-        if iat > now.saturating_add(leeway) {
-            return Err(CwtTimeError::ClockDrift);
-        }
+    if let Some(iat) = iat.filter(|_| verification.verify_iat)
+        && iat > now.saturating_add(leeway)
+    {
+        return Err(CwtTimeError::ClockDrift);
     }
     // see https://datatracker.ietf.org/doc/html/rfc7519#section-4.1.4
-    if let Some(exp) = exp.filter(|_| verification.verify_exp) {
-        if now.saturating_sub(leeway) > exp {
-            return Err(CwtTimeError::Expired);
-        }
+    if let Some(exp) = exp.filter(|_| verification.verify_exp)
+        && now.saturating_sub(leeway) > exp
+    {
+        return Err(CwtTimeError::Expired);
     }
     // see https://datatracker.ietf.org/doc/html/rfc7519#section-4.1.5
-    if let Some(nbf) = nbf.filter(|_| verification.verify_nbf) {
-        if now.saturating_add(leeway) < nbf {
-            return Err(CwtTimeError::NotValidYet);
-        }
+    if let Some(nbf) = nbf.filter(|_| verification.verify_nbf)
+        && now.saturating_add(leeway) < nbf
+    {
+        return Err(CwtTimeError::NotValidYet);
     }
     Ok(())
 }
