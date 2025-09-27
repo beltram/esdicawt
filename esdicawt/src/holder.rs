@@ -94,7 +94,10 @@ pub trait Holder {
         #[cfg(not(feature = "test-vectors"))] // FIXME: draft samples are expired
         {
             let now = params.artificial_time.unwrap_or_else(|| time::OffsetDateTime::now_utc().unix_timestamp());
-            crate::time::verify_time_claims(now, params.leeway, payload.inner.issued_at, payload.inner.expiration, payload.inner.not_before)?;
+            let iat = payload.inner.issued_at;
+            let exp = payload.inner.expiration;
+            let nbf = payload.inner.not_before;
+            crate::time::verify_time_claims(now, params.leeway, iat, exp, nbf, params.time_verification)?;
         }
 
         // subject
@@ -174,14 +177,6 @@ pub trait Holder {
         mut sd_cwt: SdCwtVerified<Self::IssuerPayloadClaims, Self::Hasher, Self::IssuerProtectedClaims, Self::IssuerUnprotectedClaims>,
         params: HolderParams<Self::KbtPayloadClaims, Self::KbtProtectedClaims, Self::KbtUnprotectedClaims>,
     ) -> Result<Vec<u8>, SdCwtHolderError<Self::Error>> {
-        // verify time claims first
-        #[cfg(not(feature = "test-vectors"))] // FIXME: draft samples are expired
-        {
-            let payload = sd_cwt.0.0.payload.clone_value()?;
-            let now = time::OffsetDateTime::now_utc().unix_timestamp();
-            crate::time::verify_time_claims(now, params.leeway, payload.inner.issued_at, payload.inner.expiration, payload.inner.not_before)?;
-        }
-
         // --- building the kbt ---
         // --- unprotected ---
         let unprotected = KbtUnprotected {
@@ -338,7 +333,6 @@ mod tests {
             cnonce: None,
             expiry: Some(core::time::Duration::from_secs(90 * 24 * 3600)),
             with_not_before: false,
-            leeway: core::time::Duration::from_secs(3600),
             extra_kbt_unprotected: None,
             extra_kbt_protected: None,
             extra_kbt_payload: None,
@@ -394,7 +388,6 @@ mod tests {
             cnonce: Some(b"cnonce"),
             expiry: Some(core::time::Duration::from_secs(90 * 24 * 3600)),
             with_not_before: true,
-            leeway: core::time::Duration::from_secs(3600),
             extra_kbt_unprotected: None,
             extra_kbt_protected: None,
             extra_kbt_payload: None,

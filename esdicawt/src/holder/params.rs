@@ -13,8 +13,6 @@ pub struct HolderParams<'a, KbtPayloadClaims: CustomClaims = NoClaims, KbtProtec
     pub expiry: Option<core::time::Duration>,
     /// Whether to include a not_before, see https://www.rfc-editor.org/rfc/rfc8392.html#section-3.1.5
     pub with_not_before: bool,
-    /// Dealing with clocks skew
-    pub leeway: core::time::Duration,
     #[cfg(feature = "test-vectors")]
     pub artificial_time: Option<core::time::Duration>,
     pub extra_kbt_protected: Option<KbtProtectedClaims>,
