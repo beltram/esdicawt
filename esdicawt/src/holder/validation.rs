@@ -109,11 +109,11 @@ where
 
 #[cfg(test)]
 mod tests {
-    use crate::signature_verifier::SignatureVerifierError;
     use crate::{
         HolderValidationParams, IssuerParams, SdCwtHolderError, SdCwtHolderValidationError,
         holder::Holder,
         issuer::Issuer,
+        signature_verifier::SignatureVerifierError,
         spec::{Salt, blinded_claims::Decoy},
         test_utils::{Ed25519Holder, Ed25519Issuer},
     };
