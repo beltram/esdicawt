@@ -30,9 +30,9 @@ pkcs8 = { workspace = true, optional = true }
 tailcall.workspace = true
 serde_repr.workspace = true
 enum-variants-strings.workspace = true
-url.workspace = true
 time = { workspace = true, default-features = false }
 status-list = { workspace = true, optional = true }
+url.workspace = true
 
 sha2 = { optional = true, workspace = true }
 ed25519-dalek = { optional = true, workspace = true, features = ["rand_core", "pem", "serde"] }
