@@ -106,12 +106,12 @@ pub trait Holder {
 
         // --- redaction of claims ---
         // select the claims to disclose
-        let sd_claims = params
-            .presentation
-            .try_select_disclosures::<Self::Hasher, Self::Error>(sd_cwt_issued.0.0.sd_unprotected.sd_claims)?;
+        if let Some(sd_claims) = sd_cwt_issued.0.0.sd_unprotected.sd_claims {
+            let sd_claims = params.presentation.try_select_disclosures::<Self::Hasher, Self::Error>(sd_claims)?;
 
-        // then replace them in the issued sd-cwt
-        sd_cwt_issued.0.0.sd_unprotected.sd_claims = sd_claims;
+            // then replace them in the issued sd-cwt
+            sd_cwt_issued.0.0.sd_unprotected.sd_claims = Some(sd_claims);
+        }
 
         // --- protected ---
         let alg = coset::Algorithm::Assigned(self.cwt_algorithm());
@@ -231,9 +231,8 @@ pub trait Holder {
         }
 
         // validate disclosure
-
         let disclosures = sd_cwt.0.disclosures();
-        if let Some(raw_payload) = cose_sign1_sd_cwt.payload.as_deref().map(Value::from_cbor_bytes).transpose()? {
+        if let Some((raw_payload, disclosures)) = cose_sign1_sd_cwt.payload.as_deref().map(Value::from_cbor_bytes).transpose()?.zip(disclosures) {
             let actual_nb_disclosures = disclosures.digested::<Self::Hasher>()?;
 
             let expected_nb_disclosures = validate_disclosures(&raw_payload, &actual_nb_disclosures)?;
@@ -244,11 +243,10 @@ pub trait Holder {
                     actual: actual_nb_disclosures.len(),
                 }));
             }
-        } else if !disclosures.is_empty() {
-            return Err(SdCwtHolderError::ValidationError(SdCwtHolderValidationError::OrphanDisclosure {
-                expected: 0,
-                actual: disclosures.len(),
-            }));
+        } else if disclosures.map(|d| !d.is_empty()).unwrap_or_default() {
+            // SAFETY: we already checked 'disclosures' is Some
+            let actual = disclosures.unwrap().len();
+            return Err(SdCwtHolderError::ValidationError(SdCwtHolderValidationError::OrphanDisclosure { expected: 0, actual }));
         }
 
         Ok(SdCwtVerified(sd_cwt))

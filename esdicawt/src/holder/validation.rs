@@ -223,8 +223,8 @@ mod tests {
         let mut sd_cwt = sd_cwt_tagged.clone();
         sd_cwt
             .0
-            .sd_unprotected
-            .sd_claims
+            .disclosures_mut()
+            .unwrap()
             .0
             .retain(|d| !matches!(d.clone_value().unwrap(), c if c.name() == Some(&ClaimName::Integer(42))));
         assert!(matches!(
@@ -236,8 +236,8 @@ mod tests {
         let mut sd_cwt = sd_cwt_tagged.clone();
         sd_cwt
             .0
-            .sd_unprotected
-            .sd_claims
+            .disclosures_mut()
+            .unwrap()
             .0
             .retain(|d| !matches!(d.clone_value().unwrap(), c if c.name() == Some(&ClaimName::Integer(44))));
         assert!(matches!(
@@ -249,8 +249,8 @@ mod tests {
         let mut sd_cwt = sd_cwt_tagged.clone();
         sd_cwt
             .0
-            .sd_unprotected
-            .sd_claims
+            .disclosures_mut()
+            .unwrap()
             .0
             .retain(|d| !matches!(d.clone_value().unwrap(), c if c.value() == Some(&cbor!(46).unwrap())));
         assert!(matches!(
@@ -262,8 +262,8 @@ mod tests {
         let mut sd_cwt = sd_cwt_tagged.clone();
         sd_cwt
             .0
-            .sd_unprotected
-            .sd_claims
+            .disclosures_mut()
+            .unwrap()
             .0
             .retain(|d| !matches!(d.clone_value().unwrap(), c if c.value() == Some(&cbor!(48).unwrap())));
         assert!(matches!(
@@ -277,7 +277,7 @@ mod tests {
             value: cbor!("a").unwrap(),
             salt: Salt::empty(),
         });
-        sd_cwt.0.sd_unprotected.sd_claims.0.push(extra.into());
+        sd_cwt.0.disclosures_mut().unwrap().0.push(extra.into());
         assert!(matches!(
             holder.verify_sd_cwt(&sd_cwt.to_cbor_bytes().unwrap(), Default::default(), &issuer_verifying_key),
             Err(SdCwtHolderError::ValidationError(SdCwtHolderValidationError::OrphanDisclosure { expected, actual }))
@@ -287,7 +287,7 @@ mod tests {
         // adding extra decoy disclosure
         let mut sd_cwt = sd_cwt_tagged.clone();
         let extra = Salted::Decoy(Decoy { salt: (Salt::empty(),) });
-        sd_cwt.0.sd_unprotected.sd_claims.0.push(extra.into());
+        sd_cwt.0.disclosures_mut().unwrap().0.push(extra.into());
         assert!(matches!(
             holder.verify_sd_cwt(&sd_cwt.to_cbor_bytes().unwrap(), Default::default(), &issuer_verifying_key),
             Err(SdCwtHolderError::ValidationError(SdCwtHolderValidationError::OrphanDisclosure { expected, actual }))
@@ -296,7 +296,7 @@ mod tests {
 
         // alter disclosure of the map element
         let mut sd_cwt = sd_cwt_tagged.clone();
-        for d in &mut sd_cwt.0.sd_unprotected.sd_claims.0 {
+        for d in &mut sd_cwt.0.disclosures_mut().unwrap().0 {
             if let Salted::Claim(c) = d.to_value_mut().unwrap() {
                 c.salt = Salt::empty()
             }
@@ -309,7 +309,7 @@ mod tests {
         // alter disclosure of the array element
         #[allow(clippy::redundant_clone)]
         let mut sd_cwt = sd_cwt_tagged.clone();
-        for d in &mut sd_cwt.0.sd_unprotected.sd_claims.0 {
+        for d in &mut sd_cwt.0.disclosures_mut().unwrap().0 {
             if let Salted::Element(c) = d.to_value_mut().unwrap() {
                 c.salt = Salt::empty()
             }
