@@ -1,7 +1,7 @@
 pub mod error;
 
 /// A COSE KEy Set as defined in [RFC 8152](https://datatracker.ietf.org/doc/html/rfc8152#section-7)
-#[derive(serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct CoseKeySet(Vec<cose_key::CoseKey>);
 
 impl CoseKeySet {
