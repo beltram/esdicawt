@@ -104,7 +104,7 @@ pub trait Issuer {
         let payload = if let Some(sd) = payload_claims.as_mut() {
             let sd_claims = redact::<Self::Error, Self::Hasher>(csprng, &mut sd.0)?;
 
-            unprotected_builder = unprotected_builder.value(COSE_SD_CLAIMS, sd_claims.to_cbor_bytes()?.into());
+            unprotected_builder = unprotected_builder.value(COSE_SD_CLAIMS, Value::serialized(&sd_claims)?);
 
             if let Some(unprotected_claims) = params.unprotected_claims {
                 let unprotected_extra_claims = Value::serialized(&unprotected_claims)?.into_map()?;
@@ -208,7 +208,7 @@ mod tests {
     #[wasm_bindgen_test::wasm_bindgen_test]
     fn should_generate_sd_cwt() {
         let payload = CustomTokenClaims { name: Some("Alice Smith".into()) };
-        let mut sd_cwt = issue(payload);
+        let sd_cwt = issue(payload);
 
         let cwt_cbor = sd_cwt.to_cbor_bytes().unwrap();
         let sd_cwt_2 = SdCwtIssuedTagged::from_cbor_bytes(&cwt_cbor).unwrap();
@@ -221,7 +221,7 @@ mod tests {
         assert_eq!(rck.len(), 1);
         let rck_name = rck.first().unwrap();
 
-        let payload = sd_cwt.0.disclosures().unwrap().iter().map(|d| d.unwrap()).collect::<Vec<_>>();
+        let payload = sd_cwt.0.disclosures().iter().map(|d| d.unwrap()).collect::<Vec<_>>();
         assert_eq!(payload.len(), 1);
         let d0 = payload.first().unwrap();
         let Salted::Claim(SaltedClaim { name, value, .. }) = d0 else { unreachable!() };
@@ -240,9 +240,9 @@ mod tests {
     fn should_issue_complex_types() {
         let verify_issuance = |value: Value, expected: (Option<ClaimName>, Result<Value, ciborium::value::Error>)| {
             let payload = cbor!({ "___claim" => value }).unwrap();
-            let mut sd_cwt = issue(payload);
+            let sd_cwt = issue(payload);
 
-            let disclosable_claims = sd_cwt.0.disclosures().unwrap().iter().map(|d| d.unwrap()).collect::<Vec<_>>();
+            let disclosable_claims = sd_cwt.0.disclosures().iter().map(|d| d.unwrap()).collect::<Vec<_>>();
 
             let (expected_name, expected_value) = expected;
             let expected_value = expected_value.unwrap();
@@ -304,7 +304,7 @@ mod tests {
             name: Some("Alice Smith".to_string()),
             age: Some(42),
         };
-        let mut sd_cwt = issue(model);
+        let sd_cwt = issue(model);
 
         let mut payload = sd_cwt.0.payload.clone();
         let payload = payload.to_value().unwrap().clone();
@@ -314,7 +314,7 @@ mod tests {
         assert!(model.age.is_some());
         assert!(model.name.is_none());
 
-        let disclosable_claims = sd_cwt.0.disclosures().unwrap().iter().map(|d| d.unwrap()).collect::<Vec<_>>();
+        let disclosable_claims = sd_cwt.0.disclosures().iter().map(|d| d.unwrap()).collect::<Vec<_>>();
         assert_eq!(disclosable_claims.len(), 1);
         let d0 = disclosable_claims.first().unwrap();
         let Salted::Claim(SaltedClaim { name, value, .. }) = d0 else { unreachable!() };
@@ -345,7 +345,7 @@ mod tests {
             name: Some("Alice".to_string()),
             age: Some(42),
         };
-        let mut sd_cwt = issue(model);
+        let sd_cwt = issue(model);
 
         let mut payload = sd_cwt.0.payload.clone();
         let payload = payload.to_value().unwrap().clone();
@@ -355,7 +355,7 @@ mod tests {
         assert!(model.age.is_some());
         assert!(model.name.is_some());
 
-        let mut disclosures = sd_cwt.0.disclosures().unwrap().iter().map(|d| d.unwrap());
+        let mut disclosures = sd_cwt.0.disclosures().iter().map(|d| d.unwrap());
         assert!(disclosures.next().is_none());
     }
 

@@ -141,8 +141,7 @@ pub trait TokenQuery {
 impl<PayloadClaims: Select, ProtectedClaims: CustomClaims, UnprotectedClaims: CustomClaims> TokenQuery for SdCwtIssued<PayloadClaims, ProtectedClaims, UnprotectedClaims> {
     fn query<Hasher: digest::Digest>(&mut self, token_query: Query) -> EsdicawtSpecResult<Option<Value>> {
         let payload: Value = Value::from_cbor_bytes(self.payload.to_bytes()?)?;
-        let disclosures = self.disclosures()?;
-        query_inner::<Hasher>(disclosures, &payload, &token_query.elements)
+        query_inner::<Hasher>(self.disclosures(), &payload, &token_query.elements)
     }
 }
 
@@ -165,7 +164,7 @@ mod tests {
         let mut sd_cwt = generate(payload);
         assert_eq!(sd_cwt.0.query::<sha2::Sha256>(vec!["a".into()].into()).unwrap(), Some("b".into()));
 
-        let salted = sd_cwt.0.sd_unprotected.sd_claims.to_value_mut().unwrap();
+        let salted = &mut sd_cwt.0.sd_unprotected.sd_claims;
         salted.0.retain(|cl| cl.as_array().map(|a| a[2] != "a".into()).unwrap_or_default());
 
         let _ = salted;

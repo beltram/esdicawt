@@ -95,11 +95,11 @@ pub trait Holder {
         // --- redaction of claims ---
         // select the claims to disclose
         let sd_claims = match params.presentation {
-            Presentation::Full => select_claims(sd_cwt_issued.0.sd_unprotected.sd_claims.try_into_value()?),
+            Presentation::Full => select_claims(sd_cwt_issued.0.sd_unprotected.sd_claims),
         };
 
         // then replace them in the issued sd-cwt
-        sd_cwt_issued.0.sd_unprotected.sd_claims = sd_claims.into();
+        sd_cwt_issued.0.sd_unprotected.sd_claims = sd_claims;
 
         // --- protected ---
         let alg = coset::Algorithm::Assigned(self.cwt_algorithm());

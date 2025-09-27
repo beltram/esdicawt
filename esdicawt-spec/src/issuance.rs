@@ -1,12 +1,9 @@
-use crate::{
-    CustomClaims, CwtAny, EsdicawtSpecResult, NoClaims, SdHashAlg, Select, alg::Algorithm, blinded_claims::SaltedArray, inlined_cbor::InlinedCbor,
-    redacted_claims::RedactedClaimKeys,
-};
+use crate::{CustomClaims, CwtAny, NoClaims, SdHashAlg, Select, alg::Algorithm, blinded_claims::SaltedArray, inlined_cbor::InlinedCbor, redacted_claims::RedactedClaimKeys};
 
-mod sd_issued_payload_codec;
+mod sd_issued_codec;
 mod sd_payload_codec;
 mod sd_protected_codec;
-mod unprotected_issued_codec;
+mod sd_unprotected_codec;
 
 #[derive(Debug, Clone, PartialEq, derive_builder::Builder)]
 #[builder(pattern = "mutable")]
@@ -28,7 +25,7 @@ pub struct SdProtected<Extra: CustomClaims> {
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct SdUnprotected<Extra: CustomClaims> {
-    pub sd_claims: InlinedCbor<SaltedArray>,
+    pub sd_claims: SaltedArray,
     pub extra: Option<Extra>,
 }
 
@@ -69,7 +66,7 @@ pub type SdCwtIssuedTagged<PayloadClaims, ProtectedClaims = NoClaims, Unprotecte
     ciborium::tag::Required<SdCwtIssued<PayloadClaims, ProtectedClaims, UnprotectedClaims>, { <coset::CoseSign1 as coset::TaggedCborSerializable>::TAG }>;
 
 impl<PayloadClaims: Select, ProtectedClaims: CustomClaims, UnprotectedClaims: CustomClaims> SdCwtIssued<PayloadClaims, ProtectedClaims, UnprotectedClaims> {
-    pub fn disclosures(&mut self) -> EsdicawtSpecResult<&SaltedArray> {
-        self.sd_unprotected.sd_claims.to_value()
+    pub fn disclosures(&self) -> &SaltedArray {
+        &self.sd_unprotected.sd_claims
     }
 }
