@@ -9,10 +9,10 @@ authors.workspace = true
 default = []
 pem = ["dep:pkcs8", "pkcs8?/pem"]
 der = ["dep:pkcs8"]
-ed25519 = ["dep:ed25519-dalek", "cose-key-confirmation/ed25519"]
-p256 = ["dep:p256", "cose-key-confirmation/p256"]
-p384 = ["dep:p384", "cose-key-confirmation/p384"]
-test-utils = ["dep:ed25519-dalek", "dep:p256", "dep:p384", "dep:sha2", "cose-key-confirmation/ed25519", "cose-key-confirmation/p256", "cose-key-confirmation/p384"]
+ed25519 = ["dep:ed25519-dalek", "cose-key-confirmation/ed25519", "dep:sha2"]
+p256 = ["dep:p256", "cose-key-confirmation/p256", "dep:sha2"]
+p384 = ["dep:p384", "cose-key-confirmation/p384", "dep:sha2"]
+test-utils = ["ed25519", "p256", "p384", "dep:sha2", "cose-key-confirmation/ed25519", "cose-key-confirmation/p256", "cose-key-confirmation/p384"]
 test-vectors = ["test-utils"]
 
 [dependencies]
@@ -28,6 +28,8 @@ thiserror.workspace = true
 serde.workspace = true
 pkcs8 = { workspace = true, optional = true }
 tailcall.workspace = true
+serde_repr.workspace = true
+enum-variants-strings.workspace = true
 
 sha2 = { optional = true, workspace = true }
 time = { workspace = true, features = ["wasm-bindgen"] }

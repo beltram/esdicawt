@@ -23,12 +23,20 @@ impl CoseKeySet {
         CoseKeySetBuilder::default()
     }
 
-    pub fn all_ecdsa_keys<V: EcdsaCoseKeyExt>(&self) -> impl Iterator<Item = &cose_key::CoseKey> {
+    pub fn all_ecc_keys<V: EcdsaCoseKeyExt>(&self) -> impl Iterator<Item = &cose_key::CoseKey> {
         self.0.iter().filter(|&k| k.alg() == Some(V::alg()) && k.crv() == Some(V::crv()))
     }
 
-    pub fn find_ecdsa_keys(&self, alg: &iana::Algorithm) -> impl Iterator<Item = &cose_key::CoseKey> {
+    pub fn find_keys(&self, alg: &iana::Algorithm) -> impl Iterator<Item = &cose_key::CoseKey> {
         self.0.iter().filter(move |&k| k.alg() == Some(*alg))
+    }
+}
+
+impl std::ops::Deref for CoseKeySet {
+    type Target = [cose_key::CoseKey];
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
     }
 }
 
@@ -78,9 +86,9 @@ mod tests {
 
         Value::serialized(&keyset).unwrap();
 
-        assert_eq!(keyset.all_ecdsa_keys::<ed25519_dalek::VerifyingKey>().count(), 2);
-        assert_eq!(keyset.all_ecdsa_keys::<p256::ecdsa::VerifyingKey>().count(), 0);
-        assert_eq!(keyset.all_ecdsa_keys::<p384::ecdsa::VerifyingKey>().count(), 0);
+        assert_eq!(keyset.all_ecc_keys::<ed25519_dalek::VerifyingKey>().count(), 2);
+        assert_eq!(keyset.all_ecc_keys::<p256::ecdsa::VerifyingKey>().count(), 0);
+        assert_eq!(keyset.all_ecc_keys::<p384::ecdsa::VerifyingKey>().count(), 0);
     }
 
     #[test]
@@ -93,9 +101,9 @@ mod tests {
 
         Value::serialized(&keyset).unwrap();
 
-        assert_eq!(keyset.all_ecdsa_keys::<ed25519_dalek::VerifyingKey>().count(), 0);
-        assert_eq!(keyset.all_ecdsa_keys::<p256::ecdsa::VerifyingKey>().count(), 2);
-        assert_eq!(keyset.all_ecdsa_keys::<p384::ecdsa::VerifyingKey>().count(), 0);
+        assert_eq!(keyset.all_ecc_keys::<ed25519_dalek::VerifyingKey>().count(), 0);
+        assert_eq!(keyset.all_ecc_keys::<p256::ecdsa::VerifyingKey>().count(), 2);
+        assert_eq!(keyset.all_ecc_keys::<p384::ecdsa::VerifyingKey>().count(), 0);
     }
 
     #[test]
@@ -108,9 +116,9 @@ mod tests {
 
         Value::serialized(&keyset).unwrap();
 
-        assert_eq!(keyset.all_ecdsa_keys::<ed25519_dalek::VerifyingKey>().count(), 0);
-        assert_eq!(keyset.all_ecdsa_keys::<p256::ecdsa::VerifyingKey>().count(), 0);
-        assert_eq!(keyset.all_ecdsa_keys::<p384::ecdsa::VerifyingKey>().count(), 2);
+        assert_eq!(keyset.all_ecc_keys::<ed25519_dalek::VerifyingKey>().count(), 0);
+        assert_eq!(keyset.all_ecc_keys::<p256::ecdsa::VerifyingKey>().count(), 0);
+        assert_eq!(keyset.all_ecc_keys::<p384::ecdsa::VerifyingKey>().count(), 2);
     }
 
     #[test]
@@ -124,9 +132,9 @@ mod tests {
 
         Value::serialized(&keyset).unwrap();
 
-        assert_eq!(keyset.all_ecdsa_keys::<ed25519_dalek::VerifyingKey>().count(), 1);
-        assert_eq!(keyset.all_ecdsa_keys::<p256::ecdsa::VerifyingKey>().count(), 1);
-        assert_eq!(keyset.all_ecdsa_keys::<p384::ecdsa::VerifyingKey>().count(), 1);
+        assert_eq!(keyset.all_ecc_keys::<ed25519_dalek::VerifyingKey>().count(), 1);
+        assert_eq!(keyset.all_ecc_keys::<p256::ecdsa::VerifyingKey>().count(), 1);
+        assert_eq!(keyset.all_ecc_keys::<p384::ecdsa::VerifyingKey>().count(), 1);
     }
 
     #[test]

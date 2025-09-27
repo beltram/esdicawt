@@ -6,4 +6,4 @@ merge_derives = true
 edition = "2024"
 
 # nightly only
-imports_granularity = "Crate"
+#imports_granularity = "Crate"
