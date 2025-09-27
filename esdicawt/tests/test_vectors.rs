@@ -1,7 +1,7 @@
 #![allow(clippy::borrow_interior_mutable_const, clippy::declare_interior_mutable_const)]
 
 use ciborium::Value;
-use esdicawt::{IssueCwtParams, Issuer};
+use esdicawt::{Issuer, IssuerParams};
 use esdicawt_spec::{EsdicawtSpecError, NoClaims, SdHashAlg, Select, SelectiveDisclosure, reexports::coset, sd};
 use pkcs8::DecodePrivateKey;
 use rand_core::{CryptoRng, Error, RngCore};
@@ -121,7 +121,7 @@ fn issuer() {
         },
     };
 
-    let params = IssueCwtParams {
+    let params = IssuerParams {
         protected_claims: None::<NoClaims>,
         unprotected_claims: None::<NoClaims>,
         payload: Some(payload),
