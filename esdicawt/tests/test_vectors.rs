@@ -3,7 +3,6 @@
 use ciborium::{Value, value::Integer};
 use cose_key_set::CoseKeySet;
 use esdicawt::{Holder, HolderParams, Issuer, IssuerParams, TimeArg, cwt_label};
-use esdicawt_spec::blinded_claims::Salted;
 use esdicawt_spec::{
     CwtAny, EsdicawtSpecError, NoClaims, SdHashAlg, Select,
     reexports::{coset, coset::iana::Algorithm},

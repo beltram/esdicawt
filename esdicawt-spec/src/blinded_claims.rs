@@ -253,7 +253,7 @@ impl SaltedArray {
         Ok(self.0.last_mut().map(InlinedCbor::to_value).transpose()?.map(Value::serialized).transpose()?.unwrap())
     }
 
-    pub fn as_iter(&self) -> impl Iterator<Item = EsdicawtSpecResult<std::borrow::Cow<'_, Salted<Value>>>> + '_ {
+    pub fn as_iter(&self) -> impl Iterator<Item = EsdicawtSpecResult<Cow<'_, Salted<Value>>>> + '_ {
         self.0.iter().map(InlinedCbor::as_value)
     }
 
