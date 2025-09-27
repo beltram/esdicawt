@@ -60,7 +60,8 @@ pub trait Verifier {
     fn shallow_verify_sd_kbt(
         &self,
         raw_sd_kbt: &[u8],
-        leeway: core::time::Duration,
+        sd_cwt_leeway: core::time::Duration,
+        sd_kbt_leeway: core::time::Duration,
         // not mandatory in case the verifier does not have access to it
         holder_verifier: Option<&Self::HolderVerifier>,
         keyset: &cose_key_set::CoseKeySet,
@@ -118,7 +119,7 @@ pub trait Verifier {
         // verify time claims
         let now = OffsetDateTime::now_utc().unix_timestamp();
         let (iat, exp, nbf) = (Some(kbt_payload.issued_at), kbt_payload.expiration, kbt_payload.not_before);
-        verify_time_claims(now, leeway, iat, exp, nbf)?;
+        verify_time_claims(now, sd_kbt_leeway, iat, exp, nbf)?;
 
         // After validation, the SD-CWT MUST be extracted from the kcwt header, and validated as described in Section 7.2 of [RFC8392].
         // verify signature if a verifying key supplied
@@ -126,7 +127,7 @@ pub trait Verifier {
 
         // verify time claims
         let (iat, exp, nbf) = (sd_cwt_payload.inner.issued_at, sd_cwt_payload.inner.expiration, sd_cwt_payload.inner.not_before);
-        verify_time_claims(now, leeway, iat, exp, nbf)?;
+        verify_time_claims(now, sd_cwt_leeway, iat, exp, nbf)?;
 
         // TODO: verify SD-CWT revocation status w/ Status List
 
@@ -152,7 +153,7 @@ pub trait Verifier {
         >,
         SdCwtVerifierError<Self::Error>,
     > {
-        let mut kbt = self.shallow_verify_sd_kbt(raw_sd_kbt, params.leeway, holder_verifier, keyset)?;
+        let mut kbt = self.shallow_verify_sd_kbt(raw_sd_kbt, params.sd_cwt_leeway, params.sd_kbt_leeway, holder_verifier, keyset)?;
 
         let kbt_protected = kbt.0.protected.to_value_mut()?;
         let sd_cwt = kbt_protected.kcwt.to_value_mut()?;
