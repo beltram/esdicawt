@@ -1,5 +1,5 @@
 [workspace]
-members = ["cose-key-confirmation", "cose-key", "cose-key-set", "cose-key-thumbprint", "esdicawt", "esdicawt-spec", "spice-oidc-cwt"]
+members = ["cose-key-confirmation", "cose-key", "cose-key-set", "cose-key-thumbprint", "esdicawt", "esdicawt-spec", "spice-oidc-cwt", "status-list"]
 resolver = "2"
 
 [workspace.package]
@@ -43,24 +43,33 @@ serde = "1.0"
 serde_tuple = "1.0"
 serde_bytes = "0.11"
 thiserror = "2.0"
-hex = "0.4"
+hex = { version = "0.4", default-features = false, features = ["alloc"] }
 serde_json = "1.0"
 serde_repr = "0.1"
 
 # misc
-url = "2.5"
+url = { version = "2.5", default-features = false }
 time = { version = "0.3", default-features = false, features = ["std"] }
 tailcall = "1.0"
 derive_builder = "0.20"
 wasm-bindgen-test = "0.3"
 enum-variants-strings = "0.3"
 indexmap = "2.9"
+bitvec = { version = "1.0", default-features = false }
+bytes = "1.10"
+flate2 = { version = "1.1", default-features = false }
 
 [patch.crates-io.ciborium]
 git = "https://github.com/beltram/ciborium"
 #branch = "simple-value"
 rev = "ce44d46b"
 #path = "../ciborium/ciborium"
+
+
+[patch.crates-io.coset]
+git = "https://github.com/beltram/coset.git"
+branch = "status-list"
+#path = "../coset"
 
 [workspace.lints.clippy]
 # Enforced Groups
@@ -87,7 +96,7 @@ flat_map_option = "warn"
 filter_map_next = "warn"
 explicit_into_iter_loop = "warn"
 manual_ok_or = "warn"
-match_on_vec_items = "warn"
+indexing_slicing = "warn"
 unused_self = "warn"
 from_iter_instead_of_collect = "warn"
 implicit_clone = "warn"
@@ -101,4 +110,3 @@ mut_mut = "warn"
 option_option = "warn"
 ref_option_ref = "warn"
 explicit_iter_loop = "warn"
-

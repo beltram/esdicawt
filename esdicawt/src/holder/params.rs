@@ -1,5 +1,4 @@
-use crate::time::TimeArg;
-use crate::{SdCwtHolderResult, TimeVerification, holder::traverse::traverse_disclosures};
+use crate::{SdCwtHolderResult, TimeVerification, holder::traverse::traverse_disclosures, time::TimeArg};
 use ciborium::Value;
 use esdicawt_spec::{ClaimName, CustomClaims, NoClaims, blinded_claims::SaltedArray};
 
