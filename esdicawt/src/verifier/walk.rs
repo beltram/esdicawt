@@ -43,8 +43,6 @@ where
                             Salted::Decoy(_) => {} // nothing to do, validity of hash already checked
                             Salted::Element(_) => return Err(SdCwtVerifierError::MalformedSdCwt("'redacted_claim_keys' must not contain redacted elements")),
                         }
-                    } else {
-                        return Err(SdCwtVerifierError::MalformedSdCwt("Redacted claim not in disclosures"));
                     }
                 }
             }
@@ -67,8 +65,6 @@ where
                         Salted::Decoy(_) => {} // nothing to do, validity of hash already checked
                         Salted::Claim(_) => return Err(SdCwtVerifierError::MalformedSdCwt("a array must not contain a redacted claim key")),
                     }
-                } else {
-                    return Err(SdCwtVerifierError::MalformedSdCwt("Redacted element not in disclosures"));
                 }
             }
         }
