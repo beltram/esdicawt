@@ -1,8 +1,9 @@
 use esdicawt::{
-    EsdicawtReadError, EsdicawtReadResult, SdCwtRead,
-    spec::{AnyMap, CustomClaims, issuance::SdCwtIssuedTagged, key_binding::KbtCwtTagged},
+    spec::{issuance::SdCwtIssuedTagged, key_binding::KbtCwtTagged, CustomClaims}, EsdicawtReadError, EsdicawtReadResult,
+    SdCwtRead,
 };
 use esdicawt_spec::{ClaimName, Select, Value};
+use serde::ser::SerializeMap;
 use std::{borrow::Cow, collections::HashMap, sync::LazyLock};
 use url::Url;
 
@@ -26,6 +27,13 @@ pub const CWT_CLAIM_PHONE_NUMBER_VERIFIED: i64 = 186;
 pub const CWT_CLAIM_ADDRESS: i64 = 187;
 pub const CWT_CLAIM_UPDATED_AT: i64 = 188;
 
+pub const CWT_CLAIM_ADDRESS_FORMATTED: i64 = 1;
+pub const CWT_CLAIM_ADDRESS_STREET_ADDRESS: i64 = 2;
+pub const CWT_CLAIM_ADDRESS_LOCALITY: i64 = 3;
+pub const CWT_CLAIM_ADDRESS_REGION: i64 = 4;
+pub const CWT_CLAIM_ADDRESS_POSTAL_CODE: i64 = 5;
+pub const CWT_CLAIM_ADDRESS_COUNTRY: i64 = 6;
+
 pub const OIDC_NAME: &str = "name";
 pub const OIDC_GIVEN_NAME: &str = "given_name";
 pub const OIDC_FAMILY_NAME: &str = "family_name";
@@ -46,25 +54,7 @@ pub const OIDC_PHONE_NUMBER_VERIFIED: &str = "phone_number_verified";
 pub const OIDC_ADDRESS: &str = "address";
 pub const OIDC_UPDATED_AT: &str = "updated_at";
 
-#[derive(Debug, Clone, Default, PartialEq, Eq, PartialOrd, Ord, serde::Serialize, serde::Deserialize)]
-#[serde(default)]
-pub struct OidcAddressClaim {
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub formatted: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub street_address: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub locality: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub region: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub postal_code: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub country: Option<String>,
-}
-
-#[derive(Debug, Clone, Default, PartialEq, Eq, PartialOrd, Ord, serde::Serialize, serde::Deserialize)]
-#[serde(from = "AnyMap", into = "AnyMap")]
+#[derive(Debug, Clone, Default, PartialEq, Eq, PartialOrd, Ord)]
 pub struct SpiceOidcClaims {
     pub name: Option<String>,
     pub given_name: Option<String>,
@@ -87,140 +77,155 @@ pub struct SpiceOidcClaims {
     pub updated_at: Option<u64>,
 }
 
-impl From<SpiceOidcClaims> for AnyMap {
-    fn from(val: SpiceOidcClaims) -> Self {
-        let mut anymap = Self::default();
-        if let Some(name) = val.name {
-            anymap.insert(CWT_CLAIM_NAME.into(), name.into());
+impl serde::Serialize for SpiceOidcClaims {
+    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        let mut map = serializer.serialize_map(None)?;
+        if let Some(name) = &self.name {
+            map.serialize_entry(&CWT_CLAIM_NAME, name)?;
         }
-        if let Some(given_name) = val.given_name {
-            anymap.insert(CWT_CLAIM_GIVEN_NAME.into(), given_name.into());
+        if let Some(given_name) = &self.given_name {
+            map.serialize_entry(&CWT_CLAIM_GIVEN_NAME, given_name)?;
         }
-        if let Some(family_name) = val.family_name {
-            anymap.insert(CWT_CLAIM_FAMILY_NAME.into(), family_name.into());
+        if let Some(family_name) = &self.family_name {
+            map.serialize_entry(&CWT_CLAIM_FAMILY_NAME, family_name)?;
         }
-        if let Some(middle_name) = val.middle_name {
-            anymap.insert(CWT_CLAIM_MIDDLE_NAME.into(), middle_name.into());
+        if let Some(middle_name) = &self.middle_name {
+            map.serialize_entry(&CWT_CLAIM_MIDDLE_NAME, middle_name)?;
         }
-        if let Some(nickname) = val.nickname {
-            anymap.insert(CWT_CLAIM_NICKNAME.into(), nickname.into());
+        if let Some(nickname) = &self.nickname {
+            map.serialize_entry(&CWT_CLAIM_NICKNAME, nickname)?;
         }
-        if let Some(preferred_username) = val.preferred_username {
-            anymap.insert(CWT_CLAIM_PREFERRED_USERNAME.into(), preferred_username.into());
+        if let Some(preferred_username) = &self.preferred_username {
+            map.serialize_entry(&CWT_CLAIM_PREFERRED_USERNAME, preferred_username)?;
         }
-        if let Some(profile) = val.profile {
-            let s: String = profile.into();
-            anymap.insert(CWT_CLAIM_PROFILE.into(), s.into());
+        if let Some(profile) = &self.profile {
+            map.serialize_entry(&CWT_CLAIM_PROFILE, profile.as_str())?;
         }
-        if let Some(picture) = val.picture {
-            let s: String = picture.into();
-            anymap.insert(CWT_CLAIM_PICTURE.into(), s.into());
+        if let Some(picture) = &self.picture {
+            map.serialize_entry(&CWT_CLAIM_PICTURE, picture.as_str())?;
         }
-        if let Some(website) = val.website {
-            let s: String = website.into();
-            anymap.insert(CWT_CLAIM_WEBSITE.into(), s.into());
+        if let Some(website) = &self.website {
+            map.serialize_entry(&CWT_CLAIM_WEBSITE, website.as_str())?;
         }
-        if let Some(email) = val.email {
-            anymap.insert(CWT_CLAIM_EMAIL.into(), email.into());
+        if let Some(email) = &self.email {
+            map.serialize_entry(&CWT_CLAIM_EMAIL, email)?;
         }
-        if let Some(email_verified) = val.email_verified {
-            anymap.insert(CWT_CLAIM_EMAIL_VERIFIED.into(), email_verified.into());
+        if let Some(email_verified) = &self.email_verified {
+            map.serialize_entry(&CWT_CLAIM_EMAIL_VERIFIED, email_verified)?;
         }
-        if let Some(gender) = val.gender {
-            anymap.insert(CWT_CLAIM_GENDER.into(), gender.into());
+        if let Some(gender) = &self.gender {
+            map.serialize_entry(&CWT_CLAIM_GENDER, gender)?;
         }
-        if let Some(birthdate) = val.birthdate {
-            anymap.insert(CWT_CLAIM_BIRTHDATE.into(), birthdate.into());
+        if let Some(birthdate) = &self.birthdate {
+            map.serialize_entry(&CWT_CLAIM_BIRTHDATE, birthdate)?;
         }
-        if let Some(zoneinfo) = val.zoneinfo {
-            anymap.insert(CWT_CLAIM_ZONEINFO.into(), zoneinfo.into());
+        if let Some(zoneinfo) = &self.zoneinfo {
+            map.serialize_entry(&CWT_CLAIM_ZONEINFO, zoneinfo)?;
         }
-        if let Some(locale) = val.locale {
-            anymap.insert(CWT_CLAIM_LOCALE.into(), locale.into());
+        if let Some(locale) = &self.locale {
+            map.serialize_entry(&CWT_CLAIM_LOCALE, locale)?;
         }
-        if let Some(phone_number) = val.phone_number {
-            anymap.insert(CWT_CLAIM_PHONE_NUMBER.into(), phone_number.into());
+        if let Some(phone_number) = &self.phone_number {
+            map.serialize_entry(&CWT_CLAIM_PHONE_NUMBER, phone_number)?;
         }
-        if let Some(phone_number_verified) = val.phone_number_verified {
-            anymap.insert(CWT_CLAIM_PHONE_NUMBER_VERIFIED.into(), phone_number_verified.into());
+        if let Some(phone_number_verified) = &self.phone_number_verified {
+            map.serialize_entry(&CWT_CLAIM_PHONE_NUMBER_VERIFIED, phone_number_verified)?;
         }
-        if let Some(address) = val.address {
+        if let Some(address) = &self.address {
             if let Ok(address_json) = serde_json::to_string(&address) {
-                anymap.insert(CWT_CLAIM_ADDRESS.into(), address_json.into());
+                map.serialize_entry(&CWT_CLAIM_ADDRESS, &address_json)?;
             }
         }
-        if let Some(updated_at) = val.updated_at {
-            anymap.insert(CWT_CLAIM_UPDATED_AT.into(), updated_at.into());
+        if let Some(updated_at) = &self.updated_at {
+            map.serialize_entry(&CWT_CLAIM_UPDATED_AT, updated_at)?;
         }
-
-        anymap
+        map.end()
     }
 }
 
-impl From<AnyMap> for SpiceOidcClaims {
-    fn from(mut map: AnyMap) -> Self {
-        let mut value = Self::default();
-        if let Some(name) = map.remove(&CWT_CLAIM_NAME.into()) {
-            value.name = name.into_text().ok();
-        }
-        if let Some(given_name) = map.remove(&CWT_CLAIM_GIVEN_NAME.into()) {
-            value.given_name = given_name.into_text().ok();
-        }
-        if let Some(family_name) = map.remove(&CWT_CLAIM_FAMILY_NAME.into()) {
-            value.family_name = family_name.into_text().ok();
-        }
-        if let Some(middle_name) = map.remove(&CWT_CLAIM_MIDDLE_NAME.into()) {
-            value.middle_name = middle_name.into_text().ok();
-        }
-        if let Some(nickname) = map.remove(&CWT_CLAIM_NICKNAME.into()) {
-            value.nickname = nickname.into_text().ok();
-        }
-        if let Some(preferred_username) = map.remove(&CWT_CLAIM_PREFERRED_USERNAME.into()) {
-            value.preferred_username = preferred_username.into_text().ok();
-        }
-        if let Some(profile) = map.remove(&CWT_CLAIM_PROFILE.into()) {
-            value.profile = profile.deserialized().ok();
-        }
-        if let Some(picture) = map.remove(&CWT_CLAIM_PICTURE.into()) {
-            value.picture = picture.deserialized().ok();
-        }
-        if let Some(website) = map.remove(&CWT_CLAIM_WEBSITE.into()) {
-            value.website = website.deserialized().ok();
-        }
-        if let Some(email) = map.remove(&CWT_CLAIM_EMAIL.into()) {
-            value.email = email.into_text().ok();
-        }
-        if let Some(email_verified) = map.remove(&CWT_CLAIM_EMAIL_VERIFIED.into()) {
-            value.email_verified.replace(email_verified.into_bool().unwrap_or_default());
-        }
-        if let Some(gender) = map.remove(&CWT_CLAIM_GENDER.into()) {
-            value.gender = gender.deserialized().ok();
-        }
-        if let Some(birthdate) = map.remove(&CWT_CLAIM_BIRTHDATE.into()) {
-            value.birthdate = birthdate.deserialized().ok();
-        }
-        if let Some(zoneinfo) = map.remove(&CWT_CLAIM_ZONEINFO.into()) {
-            value.zoneinfo = zoneinfo.deserialized().ok();
-        }
-        if let Some(locale) = map.remove(&CWT_CLAIM_LOCALE.into()) {
-            value.locale = locale.deserialized().ok();
-        }
-        if let Some(phone_number) = map.remove(&CWT_CLAIM_PHONE_NUMBER.into()) {
-            value.phone_number = phone_number.deserialized().ok();
-        }
-        if let Some(phone_number_verified) = map.remove(&CWT_CLAIM_PHONE_NUMBER_VERIFIED.into()) {
-            value.phone_number_verified.replace(phone_number_verified.into_bool().unwrap_or_default());
-        }
-        if let Some(address) = map.remove(&CWT_CLAIM_ADDRESS.into()) {
-            if let Some(address_struct) = address.into_text().ok().and_then(|address_str| serde_json::from_str(&address_str).ok()) {
-                value.address.replace(address_struct);
+impl<'de> serde::Deserialize<'de> for SpiceOidcClaims {
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        struct SpiceOidcClaimsVisitor;
+
+        impl<'de> serde::de::Visitor<'de> for SpiceOidcClaimsVisitor {
+            type Value = SpiceOidcClaims;
+
+            fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
+                write!(formatter, "an OIDC payload")
+            }
+
+            fn visit_map<A: serde::de::MapAccess<'de>>(self, mut map: A) -> Result<Self::Value, A::Error> {
+                use serde::de::Error as _;
+
+                let mut address = SpiceOidcClaims::default();
+                while let Some((k, v)) = map.next_entry::<Value, Value>()? {
+                    match (k, v) {
+                        (Value::Integer(i), Value::Text(s)) if i == CWT_CLAIM_NAME.into() => {
+                            address.name.replace(s);
+                        }
+                        (Value::Integer(i), Value::Text(s)) if i == CWT_CLAIM_GIVEN_NAME.into() => {
+                            address.given_name.replace(s);
+                        }
+                        (Value::Integer(i), Value::Text(s)) if i == CWT_CLAIM_FAMILY_NAME.into() => {
+                            address.family_name.replace(s);
+                        }
+                        (Value::Integer(i), Value::Text(s)) if i == CWT_CLAIM_MIDDLE_NAME.into() => {
+                            address.middle_name.replace(s);
+                        }
+                        (Value::Integer(i), Value::Text(s)) if i == CWT_CLAIM_NICKNAME.into() => {
+                            address.nickname.replace(s);
+                        }
+                        (Value::Integer(i), Value::Text(s)) if i == CWT_CLAIM_PREFERRED_USERNAME.into() => {
+                            address.preferred_username.replace(s);
+                        }
+                        (Value::Integer(i), Value::Text(s)) if i == CWT_CLAIM_PROFILE.into() => {
+                            address.profile.replace(s.parse().map_err(A::Error::custom)?);
+                        }
+                        (Value::Integer(i), Value::Text(s)) if i == CWT_CLAIM_PICTURE.into() => {
+                            address.picture.replace(s.parse().map_err(A::Error::custom)?);
+                        }
+                        (Value::Integer(i), Value::Text(s)) if i == CWT_CLAIM_WEBSITE.into() => {
+                            address.website.replace(s.parse().map_err(A::Error::custom)?);
+                        }
+                        (Value::Integer(i), Value::Text(s)) if i == CWT_CLAIM_EMAIL.into() => {
+                            address.email.replace(s);
+                        }
+                        (Value::Integer(i), Value::Bool(b)) if i == CWT_CLAIM_EMAIL_VERIFIED.into() => {
+                            address.email_verified.replace(b);
+                        }
+                        (Value::Integer(i), Value::Text(s)) if i == CWT_CLAIM_GENDER.into() => {
+                            address.gender.replace(s);
+                        }
+                        (Value::Integer(i), Value::Text(s)) if i == CWT_CLAIM_BIRTHDATE.into() => {
+                            address.birthdate.replace(s);
+                        }
+                        (Value::Integer(i), Value::Text(s)) if i == CWT_CLAIM_ZONEINFO.into() => {
+                            address.zoneinfo.replace(s);
+                        }
+                        (Value::Integer(i), Value::Text(s)) if i == CWT_CLAIM_LOCALE.into() => {
+                            address.locale.replace(s);
+                        }
+                        (Value::Integer(i), Value::Text(s)) if i == CWT_CLAIM_PHONE_NUMBER.into() => {
+                            address.phone_number.replace(s);
+                        }
+                        (Value::Integer(i), Value::Bool(b)) if i == CWT_CLAIM_PHONE_NUMBER_VERIFIED.into() => {
+                            address.phone_number_verified.replace(b);
+                        }
+                        (Value::Integer(i), value @ Value::Map(_)) if i == CWT_CLAIM_ADDRESS.into() => {
+                            address.address.replace(Value::deserialized(&value).map_err(A::Error::custom)?);
+                        }
+                        (Value::Integer(i), Value::Integer(u)) if i == CWT_CLAIM_UPDATED_AT.into() => {
+                            address.updated_at.replace(u.try_into().map_err(A::Error::custom)?);
+                        }
+                        _ => return Err(A::Error::custom("invalid claim in an OIDC payload")),
+                    }
+                }
+
+                Ok(address)
             }
         }
-        if let Some(updated_at) = map.remove(&CWT_CLAIM_UPDATED_AT.into()) {
-            value.updated_at = updated_at.deserialized().ok();
-        }
 
-        value
+        deserializer.deserialize_map(SpiceOidcClaimsVisitor)
     }
 }
 
@@ -253,6 +258,88 @@ pub(crate) static CLAIM_MAP: LazyLock<HashMap<&'static str, ClaimName>> = LazyLo
 impl SpiceOidcClaims {
     pub fn claim_name(name: &str) -> Option<&ClaimName> {
         (*CLAIM_MAP).get(name)
+    }
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq, PartialOrd, Ord)]
+pub struct OidcAddressClaim {
+    pub formatted: Option<String>,
+    pub street_address: Option<String>,
+    pub locality: Option<String>,
+    pub region: Option<String>,
+    pub postal_code: Option<String>,
+    pub country: Option<String>,
+}
+
+impl serde::Serialize for OidcAddressClaim {
+    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        let mut map = serializer.serialize_map(None)?;
+        if let Some(formatted) = &self.formatted {
+            map.serialize_entry(&CWT_CLAIM_ADDRESS_FORMATTED, formatted)?;
+        }
+        if let Some(street_address) = &self.street_address {
+            map.serialize_entry(&CWT_CLAIM_ADDRESS_STREET_ADDRESS, street_address)?;
+        }
+        if let Some(locality) = &self.locality {
+            map.serialize_entry(&CWT_CLAIM_ADDRESS_LOCALITY, locality)?;
+        }
+        if let Some(region) = &self.region {
+            map.serialize_entry(&CWT_CLAIM_ADDRESS_REGION, region)?;
+        }
+        if let Some(postal_code) = &self.postal_code {
+            map.serialize_entry(&CWT_CLAIM_ADDRESS_POSTAL_CODE, postal_code)?;
+        }
+        if let Some(country) = &self.country {
+            map.serialize_entry(&CWT_CLAIM_ADDRESS_COUNTRY, country)?;
+        }
+        map.end()
+    }
+}
+
+impl<'de> serde::Deserialize<'de> for OidcAddressClaim {
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        struct OidcAddressClaimVisitor;
+
+        impl<'de> serde::de::Visitor<'de> for OidcAddressClaimVisitor {
+            type Value = OidcAddressClaim;
+
+            fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
+                write!(formatter, "an address")
+            }
+
+            fn visit_map<A: serde::de::MapAccess<'de>>(self, mut map: A) -> Result<Self::Value, A::Error> {
+                use serde::de::Error as _;
+
+                let mut address = OidcAddressClaim::default();
+                while let Some((k, v)) = map.next_entry::<Value, Value>()? {
+                    match (k, v) {
+                        (Value::Integer(i), Value::Text(s)) if i == CWT_CLAIM_ADDRESS_FORMATTED.into() => {
+                            address.formatted.replace(s);
+                        }
+                        (Value::Integer(i), Value::Text(s)) if i == CWT_CLAIM_ADDRESS_STREET_ADDRESS.into() => {
+                            address.street_address.replace(s);
+                        }
+                        (Value::Integer(i), Value::Text(s)) if i == CWT_CLAIM_ADDRESS_LOCALITY.into() => {
+                            address.locality.replace(s);
+                        }
+                        (Value::Integer(i), Value::Text(s)) if i == CWT_CLAIM_ADDRESS_REGION.into() => {
+                            address.region.replace(s);
+                        }
+                        (Value::Integer(i), Value::Text(s)) if i == CWT_CLAIM_ADDRESS_POSTAL_CODE.into() => {
+                            address.postal_code.replace(s);
+                        }
+                        (Value::Integer(i), Value::Text(s)) if i == CWT_CLAIM_ADDRESS_COUNTRY.into() => {
+                            address.country.replace(s);
+                        }
+                        _ => return Err(A::Error::custom("invalid claim in an address")),
+                    }
+                }
+
+                Ok(address)
+            }
+        }
+
+        deserializer.deserialize_map(OidcAddressClaimVisitor)
     }
 }
 
@@ -524,10 +611,10 @@ mod tests {
 
     use super::{ed25519::*, *};
     use esdicawt::{
-        Holder, Issuer, Presentation,
-        spec::{CwtAny, issuance::SdCwtIssuedTagged},
+        spec::{issuance::SdCwtIssuedTagged, CwtAny}, Holder, Issuer,
+        Presentation,
     };
-    use esdicawt_spec::{EsdicawtSpecError, NoClaims};
+    use esdicawt_spec::EsdicawtSpecError;
     wasm_bindgen_test::wasm_bindgen_test_configure!(run_in_browser);
 
     #[test]
@@ -580,19 +667,14 @@ mod tests {
         assert_eq!(preferred_username, "alice".to_string());
     }
 
-    fn issue_oidc_claim(
-        issuer: &Ed25519Issuer,
-        claims: SpiceOidcClaims,
-        holder_pk: &ed25519_dalek::VerifyingKey,
-        subject: &str,
-    ) -> SdCwtIssuedTagged<SpiceOidcClaims, NoClaims, NoClaims> {
+    fn issue_oidc_claim(issuer: &Ed25519Issuer, claims: SpiceOidcClaims, holder_pk: &ed25519_dalek::VerifyingKey, subject: &str) -> SdCwtIssuedTagged<SpiceOidcClaims> {
         issuer
             .issue_cwt(
                 &mut rand::thread_rng(),
                 esdicawt::IssueCwtParams {
                     protected_claims: None,
                     unprotected_claims: None,
-                    payload_claims: Some(claims),
+                    payload: Some(claims),
                     subject,
                     issuer: "",
                     expiry: Duration::from_secs(90),
@@ -635,8 +717,8 @@ mod tests {
 mod ed25519 {
     use crate::SpiceOidcClaims;
     use esdicawt::{
-        Holder, Issuer,
-        spec::{NoClaims, SdHashAlg, reexports::coset},
+        spec::{reexports::coset, NoClaims, SdHashAlg}, Holder,
+        Issuer,
     };
     use esdicawt_spec::EsdicawtSpecError;
 

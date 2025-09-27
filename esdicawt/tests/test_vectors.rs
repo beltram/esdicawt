@@ -2,7 +2,7 @@
 
 use ciborium::Value;
 use esdicawt::{IssueCwtParams, Issuer};
-use esdicawt_spec::{AnyMap, EsdicawtSpecError, NoClaims, SdHashAlg, Select, SelectiveDisclosure, reexports::coset, sd};
+use esdicawt_spec::{EsdicawtSpecError, NoClaims, SdHashAlg, Select, SelectiveDisclosure, reexports::coset, sd};
 use pkcs8::DecodePrivateKey;
 use rand_core::{CryptoRng, Error, RngCore};
 use spice_oidc_cwt::OidcAddressClaim;
@@ -50,19 +50,6 @@ impl Select for Payload {
         map.push((Value::Integer(503.into()), Value::Map(inspection_location)));
 
         Ok(Value::Map(map).into())
-    }
-}
-
-impl From<Payload> for AnyMap {
-    fn from(_: Payload) -> Self {
-        unimplemented!()
-    }
-}
-
-impl TryFrom<AnyMap> for Payload {
-    type Error = std::convert::Infallible;
-    fn try_from(_: AnyMap) -> Result<Self, Self::Error> {
-        unimplemented!()
     }
 }
 
@@ -137,7 +124,7 @@ fn issuer() {
     let params = IssueCwtParams {
         protected_claims: None::<NoClaims>,
         unprotected_claims: None::<NoClaims>,
-        payload_claims: Some(payload),
+        payload: Some(payload),
         subject: "https://device.example",
         issuer: "https://issuer.example",
         expiry: Default::default(),

@@ -1,4 +1,7 @@
+use ciborium::Value;
 use esdicawt_spec::{EsdicawtSpecError, reexports::coset};
+
+pub type SdCwtIssuerResult<T, CustomError> = Result<T, SdCwtIssuerError<CustomError>>;
 
 #[derive(Debug, thiserror::Error)]
 pub enum SdCwtIssuerError<CustomError: Send + Sync> {
@@ -18,8 +21,16 @@ pub enum SdCwtIssuerError<CustomError: Send + Sync> {
     RngError(#[from] rand_core::Error),
     #[error("{0}")]
     CwtError(&'static str),
+    #[error("Should have been a mapping")]
+    InputError,
+    #[error(transparent)]
+    CborIntegerError(#[from] std::num::TryFromIntError),
     #[error(transparent)]
     CustomError(CustomError),
 }
 
-pub type SdCwtIssuerResult<T, CustomError> = Result<T, SdCwtIssuerError<CustomError>>;
+impl<CustomError: Send + Sync> From<Value> for SdCwtIssuerError<CustomError> {
+    fn from(_: Value) -> Self {
+        Self::InputError
+    }
+}

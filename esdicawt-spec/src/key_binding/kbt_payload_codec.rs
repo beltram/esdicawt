@@ -1,12 +1,14 @@
 use super::KbtPayload;
 use crate::{
-    AnyMap, CWT_CLAIM_AUDIENCE, CWT_CLAIM_CLIENT_NONCE, CWT_CLAIM_EXPIRES_AT, CWT_CLAIM_ISSUED_AT, CWT_CLAIM_NOT_BEFORE, ClaimName, CustomClaims, KbtStandardClaim, MapKey,
-    key_binding::KbtPayloadBuilder,
+    CWT_CLAIM_AUDIENCE, CWT_CLAIM_CLIENT_NONCE, CWT_CLAIM_EXPIRES_AT, CWT_CLAIM_ISSUED_AT, CWT_CLAIM_NOT_BEFORE, CustomClaims, KbtStandardClaim, key_binding::KbtPayloadBuilder,
 };
+use ciborium::Value;
 use serde::ser::SerializeMap;
 
 impl<Extra: CustomClaims> serde::Serialize for KbtPayload<Extra> {
     fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        use serde::ser::Error as _;
+
         let mut map = serializer.serialize_map(None)?;
 
         map.serialize_entry(&CWT_CLAIM_AUDIENCE, &self.audience)?;
@@ -25,9 +27,11 @@ impl<Extra: CustomClaims> serde::Serialize for KbtPayload<Extra> {
         }
 
         if let Some(extra) = &self.extra {
-            let extra_map: AnyMap = extra.clone().into();
-
-            for (k, v) in extra_map {
+            for (k, v) in Value::serialized(extra)
+                .map_err(S::Error::custom)?
+                .into_map()
+                .map_err(|_| S::Error::custom("should have been a mapping"))?
+            {
                 map.serialize_entry(&k, &v)?;
             }
         }
@@ -54,13 +58,13 @@ impl<'de, Extra: CustomClaims> serde::Deserialize<'de> for KbtPayload<Extra> {
                 use ciborium::Value;
                 use serde::de::Error as _;
 
-                let mut extra = AnyMap::default();
+                let mut extra = vec![];
                 let mut sd_builder = KbtPayloadBuilder::<Extra>::default();
 
-                while let Some((k, v)) = map.next_entry::<MapKey, Value>()? {
+                while let Some((k, v)) = map.next_entry::<Value, Value>()? {
                     match k {
-                        ClaimName::Integer(claim_value) => {
-                            if let Ok(sd_claim_name) = KbtStandardClaim::try_from(claim_value) {
+                        Value::Integer(label) => {
+                            if let Ok(sd_claim_name) = KbtStandardClaim::try_from(label) {
                                 match sd_claim_name {
                                     KbtStandardClaim::AudienceClaim => {
                                         sd_builder.audience(v.into_text().map_err(|value| A::Error::custom(format!("aud is not a string: {value:?}")))?);
@@ -86,18 +90,18 @@ impl<'de, Extra: CustomClaims> serde::Deserialize<'de> for KbtPayload<Extra> {
                                     }
                                 }
                             } else {
-                                extra.insert(k, v);
+                                extra.push((k, v));
                             }
                         }
                         _ => {
-                            extra.insert(k, v);
+                            extra.push((k, v));
                         }
                     };
                 }
 
                 if !extra.is_empty() {
-                    let custom_keys: Extra = extra.try_into().map_err(|_err| A::Error::custom("Cannot deserialize custom keys".to_string()))?;
-                    sd_builder.extra(custom_keys);
+                    let extra = Value::deserialized::<Extra>(&Value::Map(extra)).map_err(A::Error::custom)?;
+                    sd_builder.extra(extra);
                 }
 
                 sd_builder.build().map_err(|err| A::Error::custom(format!("{err}")))

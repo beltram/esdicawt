@@ -90,7 +90,7 @@ pub trait Holder {
         let unprotected = KbtUnprotected {
             extra: params.extra_kbt_unprotected,
         }
-        .into();
+        .try_into()?;
 
         // --- redaction of claims ---
         // select the claims to disclose
@@ -174,11 +174,11 @@ mod tests {
         let issuer_signing_key = ed25519_dalek::SigningKey::generate(&mut csprng);
         let issuer = Ed25519IssuerClaims::<CustomTokenClaims>::new(issuer_signing_key);
 
-        let disclosable_claims = CustomTokenClaims { name: Some("Alice Smith".into()) };
+        let payload = CustomTokenClaims { name: Some("Alice Smith".into()) };
         let issue_params = IssueCwtParams {
             protected_claims: None,
             unprotected_claims: None,
-            payload_claims: Some(disclosable_claims),
+            payload: Some(payload),
             subject: "mimi://example.com/u/alice.smith",
             issuer: "mimi://example.com/i/acme.io",
             key_location: "https://auth.acme.io/issuer.cwk",

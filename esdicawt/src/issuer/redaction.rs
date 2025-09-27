@@ -8,13 +8,13 @@ use esdicawt_spec::{
 use std::ops::DerefMut;
 
 /// Redacts the claims in this Value by recursively traversing, depth-first the ClaimSet
-pub fn redact<E, Hasher>(csprng: &mut dyn rand_core::CryptoRngCore, disclosable_claims: &mut Value) -> Result<SaltedArray, SdCwtIssuerError<E>>
+pub fn redact<E, Hasher>(csprng: &mut dyn rand_core::CryptoRngCore, payload: &mut Value) -> Result<SaltedArray, SdCwtIssuerError<E>>
 where
     E: core::error::Error + Send + Sync,
     Hasher: digest::Digest,
 {
     let mut sd_claims = SaltedArray::default();
-    redact_value::<E, Hasher>(disclosable_claims, csprng, &mut sd_claims, None)?;
+    redact_value::<E, Hasher>(payload, csprng, &mut sd_claims, None)?;
     Ok(sd_claims)
 }
 

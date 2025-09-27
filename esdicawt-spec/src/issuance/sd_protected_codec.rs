@@ -3,12 +3,21 @@ use coset::AsCborValue;
 use serde::ser::SerializeMap;
 
 use super::SdProtected;
-use crate::{AnyMap, CWT_CLAIM_ALG, CWT_CLAIM_SD_ALG, CWT_MEDIATYPE, ClaimName, CustomClaims, MEDIATYPE_SD_CWT, MapKey, SdHashAlg, issuance::SdProtectedBuilder};
+use crate::{CWT_CLAIM_ALG, CWT_CLAIM_SD_ALG, CWT_MEDIATYPE, CustomClaims, MEDIATYPE_SD_CWT, SdHashAlg, issuance::SdProtectedBuilder};
 
 impl<Extra: CustomClaims> serde::Serialize for SdProtected<Extra> {
     fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
         use serde::ser::Error as _;
-        let mut extra: Option<AnyMap> = self.extra.clone().map(|extra| extra.into());
+
+        let mut extra = self
+            .extra
+            .as_ref()
+            .map(|extra| Value::serialized(extra).map_err(S::Error::custom))
+            .transpose()?
+            .map(|v| v.into_map().map_err(|_| S::Error::custom("should have been a mapping")))
+            .transpose()?;
+
+        // let mut extra: Option<AnyMap> = self.extra.clone().map(|extra| extra.into());
         let extra_len = extra.as_ref().map(|extra| extra.len()).unwrap_or_default();
         let mut map = serializer.serialize_map(Some(3 + extra_len))?;
         map.serialize_entry(&CWT_MEDIATYPE, MEDIATYPE_SD_CWT)?;
@@ -38,36 +47,33 @@ impl<'de, Extra: CustomClaims> serde::Deserialize<'de> for SdProtected<Extra> {
                 write!(formatter, "a sd-protected header")
             }
 
-            fn visit_map<A>(self, mut map: A) -> Result<Self::Value, A::Error>
-            where
-                A: serde::de::MapAccess<'de>,
-            {
+            fn visit_map<A: serde::de::MapAccess<'de>>(self, mut map: A) -> Result<Self::Value, A::Error> {
                 use serde::de::Error as _;
                 let mut found_mediatype = false;
                 let mut builder = SdProtectedBuilder::<Extra>::default();
-                let mut extra = AnyMap::default();
-                while let Some((k, v)) = map.next_entry::<MapKey, Value>()? {
+                let mut extra = vec![];
+                while let Some((k, v)) = map.next_entry::<Value, Value>()? {
                     match k {
-                        ClaimName::Integer(int_claim) => match int_claim {
+                        Value::Integer(label) => match label.try_into() {
                             // Ignore, but it must be there and have the correct value
-                            CWT_MEDIATYPE => {
+                            Ok(CWT_MEDIATYPE) => {
                                 found_mediatype = v.into_text().map(|s| s == MEDIATYPE_SD_CWT).unwrap_or_default();
                             }
-                            CWT_CLAIM_ALG => {
+                            Ok(CWT_CLAIM_ALG) => {
                                 builder.alg(coset::Algorithm::from_cbor_value(v).map_err(|e| A::Error::custom(format!("Cannot deserialize sd-protected.alg: {e}")))?);
                             }
-                            CWT_CLAIM_SD_ALG => {
+                            Ok(CWT_CLAIM_SD_ALG) => {
                                 builder.sd_alg(
                                     v.deserialized::<SdHashAlg>()
                                         .map_err(|value| A::Error::custom(format!("sd_alg is not a correct enum value: {value:?}")))?,
                                 );
                             }
                             _ => {
-                                extra.insert(k, v);
+                                extra.push((k, v));
                             }
                         },
                         _ => {
-                            extra.insert(k, v);
+                            extra.push((k, v));
                         }
                     }
                 }
@@ -77,8 +83,8 @@ impl<'de, Extra: CustomClaims> serde::Deserialize<'de> for SdProtected<Extra> {
                 }
 
                 if !extra.is_empty() {
-                    let custom_keys: Extra = extra.try_into().map_err(|_err| A::Error::custom("Cannot deserialize custom keys".to_string()))?;
-                    builder.extra(custom_keys);
+                    let extra = Value::deserialized::<Extra>(&Value::Map(extra)).map_err(A::Error::custom)?;
+                    builder.extra(extra);
                 }
 
                 builder.build().map_err(|e| A::Error::custom(format!("Cannot build sd-protected: {e}")))
@@ -106,11 +112,17 @@ impl<Extra: CustomClaims> TryFrom<SdProtected<Extra>> for coset::Header {
         builder = builder.algorithm(alg);
 
         // map extra claims
-        if let Some(claims) = sdp.extra.map(Into::into) {
+        if let Some(claims) = sdp
+            .extra
+            .map(|e| Value::serialized(&e))
+            .transpose()?
+            .map(|v| v.into_map().map_err(|_| "should have been a maping"))
+            .transpose()?
+        {
             for (k, v) in claims {
                 builder = match k {
-                    MapKey::Integer(i) => builder.value(i, v),
-                    MapKey::Text(t) => builder.text_value(t, v),
+                    Value::Integer(i) => builder.value(i.try_into()?, v),
+                    Value::Text(t) => builder.text_value(t, v),
                     _ => builder,
                 }
             }

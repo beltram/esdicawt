@@ -1,6 +1,6 @@
 use crate::{
-    AnyMap, CWT_CLAIM_AUDIENCE, CWT_CLAIM_EXPIRES_AT, CWT_CLAIM_ISSUED_AT, CWT_CLAIM_ISSUER, CWT_CLAIM_KEY_CONFIRMATION_MAP, CWT_CLAIM_NOT_BEFORE, CWT_CLAIM_SUBJECT, ClaimName,
-    CustomClaims, MapKey, SelectiveDisclosureStandardClaim,
+    CWT_CLAIM_AUDIENCE, CWT_CLAIM_EXPIRES_AT, CWT_CLAIM_ISSUED_AT, CWT_CLAIM_ISSUER, CWT_CLAIM_KEY_CONFIRMATION_MAP, CWT_CLAIM_NOT_BEFORE, CWT_CLAIM_SUBJECT, ClaimName,
+    CustomClaims, SelectiveDisclosureStandardClaim,
     issuance::{SdInnerPayload, SdInnerPayloadBuilder, SdPayload, SdPayloadBuilder},
     redacted_claims::RedactedClaimKeys,
 };
@@ -49,7 +49,9 @@ impl<'de, Extra: CustomClaims> serde::Deserialize<'de> for SdPayload<Extra> {
                     match label {
                         ClaimName::Integer(key) => match SelectiveDisclosureStandardClaim::try_from(key) {
                             Ok(SelectiveDisclosureStandardClaim::KeyConfirmationClaim) => {
-                                let kc: KeyConfirmation = v.deserialized().map_err(|value| A::Error::custom(format!("cnf is not a map: {value:?}")))?;
+                                let kc = v
+                                    .deserialized::<KeyConfirmation>()
+                                    .map_err(|value| A::Error::custom(format!("cnf is not a map: {value:?}")))?;
                                 builder.cnf(kc);
                             }
                             _ => {
@@ -68,8 +70,7 @@ impl<'de, Extra: CustomClaims> serde::Deserialize<'de> for SdPayload<Extra> {
                     };
                 }
 
-                let extra = Value::Map(extra);
-                let inner = extra.deserialized::<SdInnerPayload<Extra>>().map_err(A::Error::custom)?;
+                let inner = Value::Map(extra).deserialized::<SdInnerPayload<Extra>>().map_err(A::Error::custom)?;
 
                 builder.inner(inner).build().map_err(A::Error::custom)
             }
@@ -88,6 +89,8 @@ impl<Extra: CustomClaims> serde::Serialize for SdInnerPayload<Extra> {
 }
 
 fn serialize_sd_cwt_payload<Extra: CustomClaims, S: serde::Serializer>(p: &SdInnerPayload<Extra>, map: &mut S::SerializeMap) -> Result<(), S::Error> {
+    use serde::ser::Error as _;
+
     map.serialize_entry(&CWT_CLAIM_ISSUER, &p.issuer)?;
     if let Some(sub) = &p.subject {
         map.serialize_entry(&CWT_CLAIM_SUBJECT, sub)?;
@@ -106,8 +109,11 @@ fn serialize_sd_cwt_payload<Extra: CustomClaims, S: serde::Serializer>(p: &SdInn
     }
 
     if let Some(extra) = &p.extra {
-        let extra_map: AnyMap = extra.clone().into();
-        for (k, v) in extra_map {
+        for (k, v) in Value::serialized(extra)
+            .map_err(S::Error::custom)?
+            .into_map()
+            .map_err(|_| S::Error::custom("should have been a mapping"))?
+        {
             map.serialize_entry(&k, &v)?;
         }
     }
@@ -129,12 +135,15 @@ impl<'de, Extra: CustomClaims> serde::Deserialize<'de> for SdInnerPayload<Extra>
                 use ciborium::Value;
                 use serde::de::Error as _;
 
-                let mut extra = AnyMap::default();
+                let mut extra = vec![];
                 let mut builder = SdInnerPayloadBuilder::<Extra>::default();
 
-                while let Some((k, v)) = map.next_entry::<MapKey, Value>()? {
+                while let Some((k, v)) = map.next_entry::<Value, Value>()? {
+                    if v.is_null() {
+                        continue;
+                    }
                     match k {
-                        ClaimName::Integer(key) => match SelectiveDisclosureStandardClaim::try_from(key) {
+                        ref label @ Value::Integer(_) => match SelectiveDisclosureStandardClaim::try_from(label) {
                             Ok(SelectiveDisclosureStandardClaim::IssuerClaim) => {
                                 builder.issuer(v.into_text().map_err(|value| A::Error::custom(format!("iss is not a string: {value:?}")))?);
                             }
@@ -160,18 +169,25 @@ impl<'de, Extra: CustomClaims> serde::Deserialize<'de> for SdInnerPayload<Extra>
                                 builder.issued_at(int);
                             }
                             _ => {
-                                extra.insert(k, v);
+                                extra.push((k, v));
                             }
                         },
+                        Value::Text(_) | Value::Simple(_) => {
+                            extra.push((k, v));
+                        }
+                        // see https://ietf-wg-spice.github.io/draft-ietf-spice-sd-cwt/draft-ietf-spice-sd-cwt.html#name-update-to-the-cbor-web-toke
+                        Value::Tag(_, ref value) if value.is_integer() || value.is_text() => {
+                            extra.push((k, v));
+                        }
                         _ => {
-                            extra.insert(k, v);
+                            return Err(A::Error::custom("Deserializing invalid claim label"));
                         }
                     };
                 }
 
                 if !extra.is_empty() {
-                    let custom_keys: Extra = extra.try_into().map_err(|_err| A::Error::custom("Cannot deserialize custom keys".to_string()))?;
-                    builder.extra(custom_keys);
+                    let extra = Value::deserialized::<Extra>(&Value::Map(extra)).map_err(A::Error::custom)?;
+                    builder.extra(extra);
                 }
 
                 builder.build().map_err(A::Error::custom)

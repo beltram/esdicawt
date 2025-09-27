@@ -1,5 +1,3 @@
-use std::collections::HashMap;
-
 pub mod alg;
 pub mod blinded_claims;
 pub mod inlined_cbor;
@@ -49,6 +47,8 @@ pub const CWT_MEDIATYPE: i64 = 16;
 pub const MEDIATYPE_SD_CWT: &str = "application/sd+cwt";
 pub const MEDIATYPE_KB_CWT: &str = "application/kb+cwt";
 
+pub type EsdicawtSpecResult<T> = Result<T, EsdicawtSpecError>;
+
 #[derive(Debug, thiserror::Error)]
 pub enum EsdicawtSpecError {
     #[error("The following claim is unknown: {0}")]
@@ -71,11 +71,17 @@ pub enum EsdicawtSpecError {
     CborSerializationError(#[from] ciborium::ser::Error<std::io::Error>),
     #[error(transparent)]
     CborValueError(#[from] ciborium::value::Error),
+    #[error("Should have been a mapping")]
+    InputError,
     #[error("{0}")]
     ImplementationError(&'static str),
 }
 
-pub type EsdicawtSpecResult<T> = Result<T, EsdicawtSpecError>;
+impl From<Value> for EsdicawtSpecError {
+    fn from(_: Value) -> Self {
+        Self::InputError
+    }
+}
 
 pub use ciborium::{Value, cbor};
 
@@ -121,6 +127,23 @@ impl TryFrom<i64> for SelectiveDisclosureStandardClaim {
     }
 }
 
+impl TryFrom<&Value> for SelectiveDisclosureStandardClaim {
+    type Error = EsdicawtSpecError;
+    fn try_from(label: &Value) -> Result<Self, Self::Error> {
+        Ok(match label {
+            Value::Integer(i) if i == &CWT_CLAIM_ISSUER.into() => Self::IssuerClaim,
+            Value::Integer(i) if i == &CWT_CLAIM_SUBJECT.into() => Self::SubjectClaim,
+            Value::Integer(i) if i == &CWT_CLAIM_AUDIENCE.into() => Self::AudienceClaim,
+            Value::Integer(i) if i == &CWT_CLAIM_EXPIRES_AT.into() => Self::ExpiresAtClaim,
+            Value::Integer(i) if i == &CWT_CLAIM_NOT_BEFORE.into() => Self::NotBeforeClaim,
+            Value::Integer(i) if i == &CWT_CLAIM_ISSUED_AT.into() => Self::IssuedAtClaim,
+            Value::Integer(i) if i == &CWT_CLAIM_KEY_CONFIRMATION_MAP.into() => Self::KeyConfirmationClaim,
+            Value::Integer(i) => return Err(EsdicawtSpecError::UnknownStandardClaim(i64::try_from(*i)?)),
+            _ => return Err(EsdicawtSpecError::InputError),
+        })
+    }
+}
+
 #[derive(Debug, Clone, Copy, serde_repr::Serialize_repr, serde_repr::Deserialize_repr)]
 #[repr(i64)]
 #[non_exhaustive]
@@ -132,16 +155,17 @@ pub enum KbtStandardClaim {
     ClientNonceClaim = CWT_CLAIM_CLIENT_NONCE,
 }
 
-impl TryFrom<i64> for KbtStandardClaim {
+impl TryFrom<ciborium::value::Integer> for KbtStandardClaim {
     type Error = EsdicawtSpecError;
-    fn try_from(value: i64) -> Result<Self, Self::Error> {
-        Ok(match value {
-            CWT_CLAIM_AUDIENCE => Self::AudienceClaim,
-            CWT_CLAIM_EXPIRES_AT => Self::ExpiresAtClaim,
-            CWT_CLAIM_NOT_BEFORE => Self::NotBeforeClaim,
-            CWT_CLAIM_ISSUED_AT => Self::IssuedAtClaim,
-            CWT_CLAIM_CLIENT_NONCE => Self::ClientNonceClaim,
-            value => return Err(EsdicawtSpecError::UnknownStandardClaim(value)),
+    fn try_from(label: ciborium::value::Integer) -> Result<Self, Self::Error> {
+        Ok(match i64::try_from(label) {
+            Ok(CWT_CLAIM_AUDIENCE) => Self::AudienceClaim,
+            Ok(CWT_CLAIM_EXPIRES_AT) => Self::ExpiresAtClaim,
+            Ok(CWT_CLAIM_NOT_BEFORE) => Self::NotBeforeClaim,
+            Ok(CWT_CLAIM_ISSUED_AT) => Self::IssuedAtClaim,
+            Ok(CWT_CLAIM_CLIENT_NONCE) => Self::ClientNonceClaim,
+            Err(_) => return Err(Self::Error::ImplementationError("Invalid CWT label")),
+            Ok(label) => return Err(Self::Error::UnknownStandardClaim(label)),
         })
     }
 }
@@ -222,8 +246,6 @@ impl From<&str> for ClaimName {
     }
 }
 
-pub type MapKey = ClaimName;
-
 pub trait CwtAny: serde::Serialize + for<'de> serde::Deserialize<'de> {
     fn to_cbor_bytes(&self) -> EsdicawtSpecResult<Vec<u8>> {
         let mut buf = vec![];
@@ -241,25 +263,21 @@ pub trait CwtAny: serde::Serialize + for<'de> serde::Deserialize<'de> {
 
 impl<T> CwtAny for T where T: serde::Serialize + for<'de> serde::Deserialize<'de> {}
 
-pub type AnyMap = HashMap<MapKey, Value>;
+pub trait CustomClaims: std::fmt::Debug + CwtAny + Clone {}
 
-pub trait CustomClaims: std::fmt::Debug + CwtAny + Clone + Into<AnyMap> + TryFrom<AnyMap> {}
+impl<T> CustomClaims for T where T: std::fmt::Debug + CwtAny + Clone {}
 
-impl<T> CustomClaims for T where T: std::fmt::Debug + CwtAny + Clone + Into<AnyMap> + TryFrom<AnyMap> {}
-
-#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct NoClaims;
 
-impl From<NoClaims> for AnyMap {
-    fn from(_: NoClaims) -> Self {
-        Self::default()
+impl serde::Serialize for NoClaims {
+    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        serializer.serialize_none()
     }
 }
 
-impl TryFrom<AnyMap> for NoClaims {
-    type Error = std::convert::Infallible;
-
-    fn try_from(_: AnyMap) -> Result<Self, Self::Error> {
+impl<'de> serde::Deserialize<'de> for NoClaims {
+    fn deserialize<D: serde::Deserializer<'de>>(_: D) -> Result<Self, D::Error> {
         Ok(Self)
     }
 }
