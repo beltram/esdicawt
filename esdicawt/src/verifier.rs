@@ -4,18 +4,14 @@ mod time;
 use crate::verifier::error::{SdCwtVerifierError, SdCwtVerifierResult};
 use ::time::OffsetDateTime;
 use ciborium::Value;
-use cose_key_confirmation::KeyConfirmation;
-use cose_key_confirmation::error::CoseKeyConfirmationError;
-use esdicawt_spec::issuance::SdCwtPayload;
+use cose_key_confirmation::{KeyConfirmation, error::CoseKeyConfirmationError};
 use esdicawt_spec::{
     CustomClaims, CwtAny, SelectiveDisclosureHashAlg,
     blinded_claims::{Salted, SaltedClaim, SaltedElement},
+    issuance::SdCwtPayload,
     key_binding::KeyBindingTokenTagged,
     redacted_claims::{RedactedClaimElement, RedactedClaimKeys},
-    reexports::{
-        coset::AsCborValue,
-        coset::{CoseSign1, TaggedCborSerializable},
-    },
+    reexports::coset::{AsCborValue, CoseSign1, TaggedCborSerializable},
     verified::KeyBindingTokenVerified,
 };
 use std::collections::HashMap;
@@ -291,8 +287,10 @@ mod tests {
     use ciborium::{Value, cbor};
     use esdicawt_spec::{AnyMap, CustomClaims, CwtAny, MapKey, NoClaims, key_binding::KeyBindingTokenTagged, verified::KeyBindingTokenVerified};
     use rand_core::SeedableRng as _;
+    wasm_bindgen_test::wasm_bindgen_test_configure!(run_in_browser);
 
     #[test]
+    #[wasm_bindgen_test::wasm_bindgen_test]
     fn should_verify_valid_sd_cwt() {
         let disclosable_claims = CustomTokenClaims { name: "Alice Smith".into() };
         let verified = verify(disclosable_claims);
@@ -302,6 +300,7 @@ mod tests {
     }
 
     #[test]
+    #[wasm_bindgen_test::wasm_bindgen_test]
     fn should_verify_complex() {
         let verifying = |value: Result<Value, ciborium::value::Error>| {
             let value = value.unwrap();

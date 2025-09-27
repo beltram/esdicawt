@@ -37,6 +37,7 @@ digest = "0.10"
 sha2 = "0.10"
 pkcs8 = "0.10"
 rand_core = "0.6"
+getrandom = "0.2"
 
 # codec
 serde = "1.0"
@@ -52,6 +53,7 @@ url = "2.5"
 time = "0.3"
 tailcall = "1.0"
 derive_builder = "0.20"
+wasm-bindgen-test = "0.3"
 
 [workspace.lints.clippy]
 # Enforced Groups

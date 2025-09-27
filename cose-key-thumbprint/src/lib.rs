@@ -155,9 +155,11 @@ mod tests {
     use super::*;
     use cose_key::CoseKey;
     use coset::iana;
+    wasm_bindgen_test::wasm_bindgen_test_configure!(run_in_browser);
 
     // see https://datatracker.ietf.org/doc/html/rfc9679#section-6
     #[test]
+    #[wasm_bindgen_test::wasm_bindgen_test]
     fn should_pass_rfc_example() {
         // First let's verify we got the right input CoseKey
         let cose_key = {

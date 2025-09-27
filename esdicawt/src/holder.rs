@@ -4,9 +4,8 @@ use esdicawt_spec::{
     blinded_claims::SaltedArray,
     issuance::SelectiveDisclosureIssuedTagged,
     key_binding::{KeyBindingTokenPayload, KeyBindingTokenProtected, KeyBindingTokenTagged, KeyBindingTokenUnprotected},
-    reexports::{
-        coset::TaggedCborSerializable,
-        coset::{self},
+    reexports::coset::{
+        TaggedCborSerializable, {self},
     },
 };
 use signature::Signer;
@@ -156,15 +155,20 @@ pub fn unix_timestamp(leeway: Option<core::time::Duration>) -> u64 {
 #[cfg(test)]
 mod tests {
     use super::{test_utils::Ed25519Holder, *};
-    use crate::{IssueCwtParams, Issuer, issuer::claims::CustomTokenClaims, issuer::test_utils::Ed25519IssuerClaims};
+    use crate::{
+        IssueCwtParams, Issuer,
+        issuer::{claims::CustomTokenClaims, test_utils::Ed25519IssuerClaims},
+    };
     use ciborium::cbor;
     use esdicawt_spec::{
         ClaimName, NoClaims,
         blinded_claims::{Salted, SaltedClaim},
     };
     use rand_core::SeedableRng as _;
+    wasm_bindgen_test::wasm_bindgen_test_configure!(run_in_browser);
 
     #[test]
+    #[wasm_bindgen_test::wasm_bindgen_test]
     fn should_succeed() {
         let mut csprng = rand_chacha::ChaCha20Rng::from_entropy();
 
@@ -233,8 +237,7 @@ mod tests {
 
 #[cfg(feature = "test-utils")]
 pub mod test_utils {
-    use esdicawt_spec::reexports::coset;
-    use esdicawt_spec::{CustomClaims, NoClaims};
+    use esdicawt_spec::{CustomClaims, NoClaims, reexports::coset};
 
     #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
     pub struct Ed25519Holder<DisclosedClaims: CustomClaims> {

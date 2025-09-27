@@ -12,6 +12,7 @@ thiserror.workspace = true
 ed25519-dalek = { workspace = true, optional = true }
 p256 = { workspace = true, optional = true }
 p384 = { workspace = true, optional = true }
+getrandom = { workspace = true, features = ["js"] }
 
 [dev-dependencies]
 cose-key-set = { workspace = true, features = ["ed25519", "p256"] }
@@ -21,6 +22,7 @@ rand.workspace = true
 coset.workspace = true
 ciborium.workspace = true
 hex.workspace = true
+wasm-bindgen-test.workspace = true
 
 [features]
 default = []

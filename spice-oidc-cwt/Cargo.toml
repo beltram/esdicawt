@@ -17,6 +17,7 @@ esdicawt = { workspace = true, features = ["test-utils", "ed25519", "p256", "p38
 rand.workspace = true
 ed25519-dalek = { workspace = true, features = ["rand_core"] }
 sha2.workspace = true
+wasm-bindgen-test.workspace = true
 
 [lints]
 workspace = true

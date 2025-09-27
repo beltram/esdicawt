@@ -30,8 +30,10 @@ impl CoseKeySetBuilder {
 mod tests {
     use super::*;
     use ciborium::{Value, cbor};
+    wasm_bindgen_test::wasm_bindgen_test_configure!(run_in_browser);
 
     #[test]
+    #[wasm_bindgen_test::wasm_bindgen_test]
     fn should_support_ed25519_keys() {
         let key_a = ed25519_dalek::SigningKey::generate(&mut rand::thread_rng()).verifying_key();
         let key_b = ed25519_dalek::SigningKey::generate(&mut rand::thread_rng()).verifying_key();
@@ -45,6 +47,7 @@ mod tests {
     }
 
     #[test]
+    #[wasm_bindgen_test::wasm_bindgen_test]
     fn should_support_p256_keys() {
         let key_a = *p256::ecdsa::SigningKey::random(&mut rand::thread_rng()).verifying_key();
         let key_b = *p256::ecdsa::SigningKey::random(&mut rand::thread_rng()).verifying_key();
@@ -58,6 +61,7 @@ mod tests {
     }
 
     #[test]
+    #[wasm_bindgen_test::wasm_bindgen_test]
     fn should_work_on_rfc_appendix_1() {
         use coset::iana;
 

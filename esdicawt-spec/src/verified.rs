@@ -1,6 +1,6 @@
-use crate::alg::Algorithm;
 use crate::{
     CustomClaims, EsdicawtSpecError,
+    alg::Algorithm,
     issuance::{SdCwtPayload, SdUnprotected, SelectiveDisclosureIssued, SelectiveDisclosureProtected},
     key_binding::{KeyBindingTokenPayload, KeyBindingTokenProtected, KeyBindingTokenUnprotected},
 };
