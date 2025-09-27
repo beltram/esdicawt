@@ -34,10 +34,7 @@ impl<'de, ProtectedClaims: CustomClaims, UnprotectedClaims: CustomClaims, Payloa
                 write!(formatter, "a sd-issued payload")
             }
 
-            fn visit_seq<A>(self, mut seq: A) -> Result<Self::Value, A::Error>
-            where
-                A: serde::de::SeqAccess<'de>,
-            {
+            fn visit_seq<A: serde::de::SeqAccess<'de>>(self, mut seq: A) -> Result<Self::Value, A::Error> {
                 use serde::de::Error as _;
 
                 let mut issued_builder = SdCwtIssuedBuilder::default();
@@ -45,27 +42,25 @@ impl<'de, ProtectedClaims: CustomClaims, UnprotectedClaims: CustomClaims, Payloa
                 while let Some(element) = seq.next_element::<Value>()? {
                     match index {
                         0 => {
-                            issued_builder.protected(
-                                element
-                                    .deserialized()
-                                    .map_err(|e| A::Error::custom(format!("Cannot deserialize element `protected`: {e}")))?,
-                            );
+                            let protected = element
+                                .deserialized()
+                                .map_err(|e| A::Error::custom(format!("Cannot deserialize element `protected`: {e}")))?;
+                            issued_builder.protected(protected);
                         }
                         1 => {
-                            issued_builder.sd_unprotected(
-                                element
-                                    .deserialized()
-                                    .map_err(|e| A::Error::custom(format!("Cannot deserialize element `sd_unprotected`: {e}")))?,
-                            );
+                            let unprotected = element
+                                .deserialized()
+                                .map_err(|e| A::Error::custom(format!("Cannot deserialize element `sd_unprotected`: {e}")))?;
+                            issued_builder.sd_unprotected(unprotected);
                         }
                         2 => {
-                            issued_builder.payload(element.deserialized().map_err(|e| A::Error::custom(format!("Cannot deserialize element `payload`: {e}")))?);
+                            let payload = element.deserialized().map_err(|e| A::Error::custom(format!("Cannot deserialize element `payload`: {e}")))?;
+                            issued_builder.payload(payload);
                         }
                         3 => {
                             let bytes: serde_bytes::ByteBuf = element
                                 .deserialized()
                                 .map_err(|e| A::Error::custom(format!("Cannot deserialize element `signature`: {e}")))?;
-
                             issued_builder.signature(bytes.into_vec());
                         }
                         _ => break,

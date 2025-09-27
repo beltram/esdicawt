@@ -1,6 +1,6 @@
 //! TODO: if teh RFC defines a finite subset of hash_alg, turn these into enums with stack allocated arrays of the exact size 💡
 
-use crate::{CWT_CLAIM_REDACTED_KEYS, EsdicawtSpecResult, REDACTED_CLAIM_ELEMENT_TAG};
+use crate::{EsdicawtSpecResult, REDACTED_CLAIM_ELEMENT_TAG};
 use ciborium::Value;
 
 /// Digest of a claim in a CBOR Mapping represented by a [crate::blinded_claims::SaltedClaim] in the disclosures
@@ -47,7 +47,7 @@ impl std::ops::Deref for RedactedClaimKeyRef<'_> {
 pub struct RedactedClaimKeys(Vec<RedactedClaimKey>);
 
 impl RedactedClaimKeys {
-    pub const CWT_KEY: i64 = CWT_CLAIM_REDACTED_KEYS;
+    pub const CWT_LABEL: u8 = crate::CWT_LABEL_REDACTED_KEYS;
 
     pub fn with_capacity(capacity: usize) -> Self {
         Self(Vec::with_capacity(capacity))
@@ -58,7 +58,7 @@ impl RedactedClaimKeys {
     }
 
     pub fn into_map_entry(self) -> EsdicawtSpecResult<(Value, Value)> {
-        let k = Value::Integer(Self::CWT_KEY.into());
+        let k = Value::Simple(Self::CWT_LABEL);
         let v = Value::serialized(&self)?;
         Ok((k, v))
     }

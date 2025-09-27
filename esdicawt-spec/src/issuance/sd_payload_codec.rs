@@ -1,9 +1,11 @@
 use crate::{
     AnyMap, CWT_CLAIM_AUDIENCE, CWT_CLAIM_EXPIRES_AT, CWT_CLAIM_ISSUED_AT, CWT_CLAIM_ISSUER, CWT_CLAIM_KEY_CONFIRMATION_MAP, CWT_CLAIM_NOT_BEFORE, CWT_CLAIM_SUBJECT, ClaimName,
-    CustomClaims, MapKey, SelectiveDisclosureStandardClaim, issuance::SdPayloadBuilder, redacted_claims::RedactedClaimKeys,
+    CustomClaims, MapKey, SelectiveDisclosureStandardClaim,
+    issuance::{SdInnerPayload, SdInnerPayloadBuilder, SdPayload, SdPayloadBuilder},
+    redacted_claims::RedactedClaimKeys,
 };
+use ciborium::Value;
 
-use crate::issuance::{SdInnerPayload, SdInnerPayloadBuilder, SdPayload};
 use cose_key_confirmation::KeyConfirmation;
 use serde::ser::SerializeMap;
 
@@ -15,8 +17,9 @@ impl<E: CustomClaims> serde::Serialize for SdPayload<E> {
 
         map.serialize_entry(&CWT_CLAIM_KEY_CONFIRMATION_MAP, &self.cnf)?;
 
-        if let Some(redacted_values) = &self.redacted_claim_keys {
-            map.serialize_entry(&RedactedClaimKeys::CWT_KEY, redacted_values)?;
+        if let Some(redacted_claim_keys) = &self.redacted_claim_keys {
+            let label = Value::Simple(RedactedClaimKeys::CWT_LABEL);
+            map.serialize_entry(&label, redacted_claim_keys)?;
         }
 
         map.end()
@@ -34,10 +37,7 @@ impl<'de, E: CustomClaims> serde::Deserialize<'de> for SdPayload<E> {
                 write!(formatter, "an issuer sd-payload")
             }
 
-            fn visit_map<A>(self, mut map: A) -> Result<Self::Value, A::Error>
-            where
-                A: serde::de::MapAccess<'de>,
-            {
+            fn visit_map<A: serde::de::MapAccess<'de>>(self, mut map: A) -> Result<Self::Value, A::Error> {
                 use ciborium::Value;
                 use serde::de::Error as _;
 
@@ -45,22 +45,23 @@ impl<'de, E: CustomClaims> serde::Deserialize<'de> for SdPayload<E> {
                 let mut builder = SdPayloadBuilder::<E>::default();
 
                 while let Some((k, v)) = map.next_entry::<Value, Value>()? {
-                    match k.deserialized::<ClaimName>().map_err(A::Error::custom)? {
+                    let label = k.deserialized::<ClaimName>().map_err(A::Error::custom)?;
+                    match label {
                         ClaimName::Integer(key) => match SelectiveDisclosureStandardClaim::try_from(key) {
                             Ok(SelectiveDisclosureStandardClaim::KeyConfirmationClaim) => {
                                 let kc: KeyConfirmation = v.deserialized().map_err(|value| A::Error::custom(format!("cnf is not a map: {value:?}")))?;
                                 builder.cnf(kc);
                             }
-                            Ok(SelectiveDisclosureStandardClaim::RedactedValuesClaim) => {
-                                let redacted_claim_keys: RedactedClaimKeys = v
-                                    .deserialized()
-                                    .map_err(|value| A::Error::custom(format!("redacted_claim_keys is not an array: {value:?}")))?;
-                                builder.redacted_claim_keys(redacted_claim_keys);
-                            }
                             _ => {
                                 extra.push((k, v));
                             }
                         },
+                        ClaimName::SimpleValue(label) if label == RedactedClaimKeys::CWT_LABEL => {
+                            let redacted_claim_keys = v
+                                .deserialized::<RedactedClaimKeys>()
+                                .map_err(|value| A::Error::custom(format!("redacted_claim_keys is not an array: {value:?}")))?;
+                            builder.redacted_claim_keys(redacted_claim_keys);
+                        }
                         _ => {
                             extra.push((k, v));
                         }
@@ -124,10 +125,7 @@ impl<'de, E: CustomClaims> serde::Deserialize<'de> for SdInnerPayload<E> {
                 write!(formatter, "an issuer sd-payload")
             }
 
-            fn visit_map<A>(self, mut map: A) -> Result<Self::Value, A::Error>
-            where
-                A: serde::de::MapAccess<'de>,
-            {
+            fn visit_map<A: serde::de::MapAccess<'de>>(self, mut map: A) -> Result<Self::Value, A::Error> {
                 use ciborium::Value;
                 use serde::de::Error as _;
 
