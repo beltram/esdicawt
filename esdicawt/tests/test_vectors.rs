@@ -3,7 +3,7 @@
 use ciborium::Value;
 use esdicawt::{Holder, HolderParams, Issuer, IssuerParams};
 use esdicawt_spec::{
-    CwtAny, EsdicawtSpecError, NoClaims, SdHashAlg, Select, SelectiveDisclosure,
+    CwtAny, EsdicawtSpecError, NoClaims, SdHashAlg, Select,
     reexports::{coset, coset::iana::Algorithm},
     sd,
 };
@@ -71,7 +71,7 @@ impl<'de> serde::Deserialize<'de> for Payload {
 impl Select for Payload {
     type Error = EsdicawtSpecError;
 
-    fn select(self) -> Result<SelectiveDisclosure, <Self as Select>::Error> {
+    fn select(self) -> Result<Value, <Self as Select>::Error> {
         let mut map = Vec::with_capacity(4);
 
         map.push((Value::Integer(500.into()), Value::Bool(self.most_recent_inspection_passed)));
@@ -100,7 +100,7 @@ impl Select for Payload {
         }
         map.push((Value::Integer(503.into()), Value::Map(inspection_location)));
 
-        Ok(Value::Map(map).into())
+        Ok(Value::Map(map))
     }
 }
 
@@ -110,9 +110,9 @@ struct NestedPayload(Payload);
 impl Select for NestedPayload {
     type Error = EsdicawtSpecError;
 
-    fn select(self) -> Result<SelectiveDisclosure, <Self as Select>::Error> {
+    fn select(self) -> Result<Value, <Self as Select>::Error> {
         let mut map = self.0.select()?;
-        for (k, _) in map.0.as_map_mut().unwrap() {
+        for (k, _) in map.as_map_mut().unwrap() {
             match k {
                 Value::Integer(i) if i == &mut 502.into() => {
                     *k = sd(k.clone());

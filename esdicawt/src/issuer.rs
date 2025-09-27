@@ -9,7 +9,7 @@ use crate::{
 use ciborium::Value;
 use esdicawt_spec::{
     COSE_SD_CLAIMS, CWT_CLAIM_AUDIENCE, CWT_CLAIM_CNONCE, CWT_CLAIM_CTI, CWT_CLAIM_EXPIRES_AT, CWT_CLAIM_ISSUED_AT, CWT_CLAIM_ISSUER, CWT_CLAIM_KEY_CONFIRMATION,
-    CWT_CLAIM_NOT_BEFORE, CWT_CLAIM_SD_ALG, CWT_CLAIM_SUBJECT, CWT_MEDIATYPE, CustomClaims, CwtAny, EsdicawtSpecError, MEDIATYPE_SD_CWT, SdHashAlg, Select,
+    CWT_CLAIM_NOT_BEFORE, CWT_CLAIM_SD_ALG, CWT_CLAIM_SUBJECT, CWT_MEDIATYPE, CustomClaims, CwtAny, MEDIATYPE_SD_CWT, SdHashAlg, Select,
     issuance::SdCwtIssuedTagged,
     reexports::coset::{
         TaggedCborSerializable, {self},
@@ -101,7 +101,7 @@ pub trait Issuer {
         let mut unprotected_builder = coset::HeaderBuilder::new();
 
         let payload = if let Some(sd) = payload_claims.as_mut() {
-            let sd_claims = redact::<Self::Error, Self::Hasher>(csprng, &mut sd.0)?;
+            let sd_claims = redact::<Self::Error, Self::Hasher>(csprng, sd)?;
 
             unprotected_builder = unprotected_builder.value(COSE_SD_CLAIMS, Value::serialized(&sd_claims)?);
 
@@ -116,7 +116,7 @@ pub trait Issuer {
                 }
             }
 
-            let payload = sd.0.as_map_mut().ok_or(SdCwtIssuerError::InputError)?;
+            let payload = sd.as_map_mut().ok_or(SdCwtIssuerError::InputError)?;
 
             payload.push((Value::Integer(CWT_CLAIM_ISSUER.into()), params.issuer.into()));
             if let Some(sub) = params.subject {
@@ -187,7 +187,7 @@ mod tests {
     };
     use ciborium::{Value, cbor};
     use digest::Digest as _;
-    use esdicawt_spec::{ClaimName, CwtAny, EsdicawtSpecError, NoClaims, Select, SelectiveDisclosure, issuance::SdCwtIssuedTagged, select_none};
+    use esdicawt_spec::{ClaimName, CwtAny, EsdicawtSpecError, NoClaims, Select, issuance::SdCwtIssuedTagged, select_none};
     use rand_core::SeedableRng;
 
     wasm_bindgen_test::wasm_bindgen_test_configure!(run_in_browser);
@@ -302,7 +302,7 @@ mod tests {
         impl Select for Model {
             type Error = EsdicawtSpecError;
 
-            fn select(self) -> Result<SelectiveDisclosure, <Self as Select>::Error> {
+            fn select(self) -> Result<Value, <Self as Select>::Error> {
                 let mut map = Vec::with_capacity(2);
                 if let Some(name) = self.name {
                     map.push((sd(Value::Text("name".into())), Value::Text(name)));
@@ -320,7 +320,7 @@ mod tests {
                     })
                     .collect();
                 map.push((Value::Text("numbers".into()), Value::Array(numbers)));
-                Ok(Value::Map(map).into())
+                Ok(Value::Map(map))
             }
         }
 
@@ -367,7 +367,7 @@ mod tests {
         impl Select for ModelPublic {
             type Error = EsdicawtSpecError;
 
-            fn select(self) -> Result<SelectiveDisclosure, <Self as Select>::Error> {
+            fn select(self) -> Result<Value, <Self as Select>::Error> {
                 Ok(select_none(&mut Value::serialized(&self)?))
             }
         }
@@ -441,7 +441,7 @@ mod tests {
 #[cfg(any(test, feature = "test-utils"))]
 pub mod claims {
     use ciborium::Value;
-    use esdicawt_spec::{EsdicawtSpecError, Select, SelectiveDisclosure, sd};
+    use esdicawt_spec::{EsdicawtSpecError, Select, sd};
 
     #[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
     pub(super) struct CustomTokenClaims {
@@ -451,12 +451,12 @@ pub mod claims {
     impl Select for CustomTokenClaims {
         type Error = EsdicawtSpecError;
 
-        fn select(self) -> Result<SelectiveDisclosure, <Self as Select>::Error> {
+        fn select(self) -> Result<Value, <Self as Select>::Error> {
             let mut map = Vec::with_capacity(1);
             if let Some(name) = self.name {
                 map.push((sd(Value::Text("name".into())), Value::Text(name)));
             }
-            Ok(Value::Map(map).into())
+            Ok(Value::Map(map))
         }
     }
 }
@@ -464,7 +464,7 @@ pub mod claims {
 #[cfg(feature = "test-utils")]
 pub mod test_utils {
     use super::*;
-    use esdicawt_spec::{NoClaims, Select};
+    use esdicawt_spec::{EsdicawtSpecError, NoClaims, Select};
 
     pub struct Ed25519IssuerClaims<T: Select<Error = EsdicawtSpecError>> {
         signing_key: ed25519_dalek::SigningKey,
