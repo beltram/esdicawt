@@ -75,6 +75,8 @@ pub enum EsdicawtSpecError {
     CborSerializationError(#[from] ciborium::ser::Error<std::io::Error>),
     #[error(transparent)]
     CborValueError(#[from] ciborium::value::Error),
+    #[error(transparent)]
+    CoseKeyConfirmationError(#[from] cose_key_confirmation::error::CoseKeyConfirmationError),
     #[error("Should have been a mapping")]
     InputError,
     #[error("{0}")]

@@ -10,6 +10,7 @@ mod kbt_codec;
 mod kbt_payload_codec;
 mod kbt_protected_codec;
 mod kbt_unprotected_codec;
+mod accessors;
 
 #[derive(Debug, Clone, derive_builder::Builder)]
 #[builder(pattern = "mutable")]
