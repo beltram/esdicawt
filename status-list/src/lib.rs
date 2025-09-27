@@ -43,6 +43,16 @@ pub struct StatusList<S: Status = u8> {
 
 impl<S: Status> StatusList<S> {
     /// Create a new StatusList.
+    /// Arguments:
+    /// * nb_statuses: number of statuses this list should hold
+    pub fn new(nb_statuses: usize, aggregation_uri: Option<url::Url>) -> Self {
+        Self {
+            lst: Lst::new(nb_statuses),
+            aggregation_uri,
+        }
+    }
+
+    /// Create a new StatusList.
     /// It is RECOMMENDED that the size of a Status List in bits is divisible in bytes (8 bits) without a remainder.
     /// Arguments:
     /// * capacity: in bits

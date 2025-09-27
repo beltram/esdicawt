@@ -6,9 +6,17 @@ pub struct LstMut<S: Status = u8>(bytes::BytesMut, core::marker::PhantomData<S>)
 
 impl<S: Status> LstMut<S> {
     /// Create a new StatusList.
+    /// Arguments:
+    /// * nb_statuses: number of statuses this list should hold
+    pub fn new(nb_statuses: usize) -> Self {
+        let byte_capacity = (nb_statuses / 8usize) * S::BITS.size() as usize;
+        Self(bytes::BytesMut::zeroed(byte_capacity), Default::default())
+    }
+
+    /// Create a new StatusList.
     /// It is RECOMMENDED that the size of a Status List in bits is divisible in bytes (8 bits) without a remainder.
     /// Arguments:
-    /// * capacity: in bits
+    /// * bit_capacity: in bits
     pub fn with_capacity(bit_capacity: usize) -> Self {
         Self(bytes::BytesMut::zeroed(bit_capacity / 8), Default::default())
     }
