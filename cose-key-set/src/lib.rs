@@ -46,21 +46,38 @@ pub struct CoseKeySetBuilder {
 }
 
 impl CoseKeySetBuilder {
+    // fluent builder
     pub fn with<K>(mut self, key: &K) -> Result<Self, error::CoseKeySetError>
+    where
+        for<'a> &'a K: TryInto<cose_key::CoseKey, Error: Into<error::CoseKeySetError>>,
+    {
+        self.and(key)?;
+        Ok(self)
+    }
+
+    /// use this in iterators
+    pub fn and<K>(&mut self, key: &K) -> Result<(), error::CoseKeySetError>
     where
         for<'a> &'a K: TryInto<cose_key::CoseKey, Error: Into<error::CoseKeySetError>>,
     {
         if !self.keys.insert(key.try_into().map_err(Into::into)?) {
             return Err(error::CoseKeySetError::DuplicateKey);
         }
+        Ok(())
+    }
+
+    // fluent builder
+    pub fn with_cose_key(mut self, key: cose_key::CoseKey) -> Result<Self, error::CoseKeySetError> {
+        self.and_cose_key(key)?;
         Ok(self)
     }
 
-    pub fn with_cose_key(mut self, key: cose_key::CoseKey) -> Result<Self, error::CoseKeySetError> {
+    /// use this in iterators
+    pub fn and_cose_key(&mut self, key: cose_key::CoseKey) -> Result<(), error::CoseKeySetError> {
         if !self.keys.insert(key) {
             return Err(error::CoseKeySetError::DuplicateKey);
         }
-        Ok(self)
+        Ok(())
     }
 
     pub fn build(self) -> CoseKeySet {
