@@ -266,9 +266,7 @@ mod tests {
             let x = hex::decode("65eda5a12577c2bae829437fe338701a10aaa375e1bb5b5de108de439c08551d").unwrap();
             let y = hex::decode("1e52ed75701163f7f9e40ddf9f341b3dc9ba860af7e0ca7ca7e9eecd0084d19c").unwrap();
             let kid = hex::decode("496bd8afadf307e5b08c64b0421bf9dc01528a344a43bda88fadd1669da253ec").unwrap();
-            let key = coset::CoseKeyBuilder::new_ec2_pub_key(iana::EllipticCurve::P_256, x.clone(), y.clone())
-                .key_id(kid.clone())
-                .build();
+            let key = coset::CoseKeyBuilder::new_ec2_pub_key(iana::EllipticCurve::P_256, x, y).key_id(kid.clone()).build();
             (cose_key::CoseKey::from(key), Value::Bytes(kid))
         };
         let thumbprint = CoseKeyThumbprint::<32>::compute::<sha2::Sha256>(cose_key.clone()).unwrap();
