@@ -1,6 +1,6 @@
 use super::{CwtAny, EsdicawtSpecResult};
 
-#[derive(Clone, PartialEq)]
+#[derive(Clone, Eq, PartialEq)]
 pub enum InlinedCbor<T: CwtAny> {
     Bytes(Vec<u8>, Option<T>),
     Value(T, Option<Vec<u8>>),

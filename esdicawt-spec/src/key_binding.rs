@@ -15,13 +15,14 @@ mod kbt_unprotected_codec;
 #[builder(pattern = "mutable")]
 pub struct KbtCwt<
     IssuerPayloadClaims: Select,
+    Hasher: digest::Digest + Clone,
     IssuerProtectedClaims: CustomClaims = NoClaims,
     IssuerUnprotectedClaims: CustomClaims = NoClaims,
     ProtectedClaims: CustomClaims = NoClaims,
     UnprotectedClaims: CustomClaims = NoClaims,
     PayloadClaims: CustomClaims = NoClaims,
 > {
-    pub protected: InlinedCbor<KbtProtected<IssuerPayloadClaims, IssuerProtectedClaims, IssuerUnprotectedClaims, ProtectedClaims>>,
+    pub protected: InlinedCbor<KbtProtected<IssuerPayloadClaims, Hasher, IssuerProtectedClaims, IssuerUnprotectedClaims, ProtectedClaims>>,
     pub unprotected: KbtUnprotected<UnprotectedClaims>,
     pub payload: InlinedCbor<KbtPayload<PayloadClaims>>,
     pub signature: Vec<u8>,
@@ -29,10 +30,16 @@ pub struct KbtCwt<
 
 #[derive(Debug, Clone, PartialEq, derive_builder::Builder)]
 #[builder(pattern = "mutable", setter(into, strip_option))]
-pub struct KbtProtected<IssuerPayloadClaims: Select, IssuerProtectedClaims: CustomClaims, IssuerUnprotectedClaims: CustomClaims, Extra: CustomClaims> {
+pub struct KbtProtected<
+    IssuerPayloadClaims: Select,
+    Hasher: digest::Digest + Clone,
+    IssuerProtectedClaims: CustomClaims,
+    IssuerUnprotectedClaims: CustomClaims,
+    Extra: CustomClaims,
+> {
     pub alg: Algorithm,
     /// See https://datatracker.ietf.org/doc/html/rfc9528#section-3.5.3.1
-    pub kcwt: InlinedCbor<SdCwtIssuedTagged<IssuerPayloadClaims, IssuerProtectedClaims, IssuerUnprotectedClaims>>,
+    pub kcwt: InlinedCbor<SdCwtIssuedTagged<IssuerPayloadClaims, Hasher, IssuerProtectedClaims, IssuerUnprotectedClaims>>,
     #[builder(default)]
     pub extra: Option<Extra>,
 }
@@ -62,12 +69,13 @@ pub struct KbtPayload<Extra: CustomClaims> {
 
 impl<
     IssuerPayloadClaims: Select,
+    Hasher: digest::Digest + Clone,
     IssuerProtectedClaims: CustomClaims,
     IssuerUnprotectedClaims: CustomClaims,
     ProtectedClaims: CustomClaims,
     UnprotectedClaims: CustomClaims,
     PayloadClaims: CustomClaims,
-> KbtCwt<IssuerPayloadClaims, IssuerProtectedClaims, IssuerUnprotectedClaims, PayloadClaims, ProtectedClaims, UnprotectedClaims>
+> KbtCwt<IssuerPayloadClaims, Hasher, IssuerProtectedClaims, IssuerUnprotectedClaims, PayloadClaims, ProtectedClaims, UnprotectedClaims>
 {
     pub fn sd_cwt_payload(&mut self) -> EsdicawtSpecResult<&SdPayload<IssuerPayloadClaims>> {
         let protected = self.protected.to_value_mut()?;
@@ -85,24 +93,26 @@ impl<
 
 pub type KbtCwtTagged<
     IssuerPayloadClaims,
+    Hasher,
     IssuerProtectedClaims = NoClaims,
     IssuerUnprotectedClaims = NoClaims,
     PayloadClaims = NoClaims,
     ProtectedClaims = NoClaims,
     UnprotectedClaims = NoClaims,
 > = ciborium::tag::Required<
-    KbtCwt<IssuerPayloadClaims, IssuerProtectedClaims, IssuerUnprotectedClaims, PayloadClaims, ProtectedClaims, UnprotectedClaims>,
+    KbtCwt<IssuerPayloadClaims, Hasher, IssuerProtectedClaims, IssuerUnprotectedClaims, PayloadClaims, ProtectedClaims, UnprotectedClaims>,
     { <coset::CoseSign1 as coset::TaggedCborSerializable>::TAG },
 >;
 
 impl<
     IssuerPayloadClaims: Select,
+    Hasher: digest::Digest + Clone,
     IssuerProtectedClaims: CustomClaims,
     IssuerUnprotectedClaims: CustomClaims,
     ProtectedClaims: CustomClaims,
     UnprotectedClaims: CustomClaims,
     PayloadClaims: CustomClaims,
-> KbtCwt<IssuerPayloadClaims, IssuerProtectedClaims, IssuerUnprotectedClaims, PayloadClaims, ProtectedClaims, UnprotectedClaims>
+> KbtCwt<IssuerPayloadClaims, Hasher, IssuerProtectedClaims, IssuerUnprotectedClaims, PayloadClaims, ProtectedClaims, UnprotectedClaims>
 {
     /// Iterates through all the disclosed claims in this SD-KBT
     pub fn walk_disclosed_claims(&mut self) -> EsdicawtSpecResult<impl Iterator<Item = EsdicawtSpecResult<&Salted<ciborium::Value>>> + '_> {
