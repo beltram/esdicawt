@@ -25,11 +25,7 @@ ba00bd93f002beb7a2a2010000a91e09000000000000000000000000000000807296
     assert!(lst.replace(934534, 1).is_some());
     assert!(lst.replace(1000345, 1).is_some());
 
-    let status_list = StatusList {
-        bits: StatusBits::One,
-        lst: lst.into(),
-        aggregation_uri: None,
-    };
+    let status_list = StatusList::new(lst.into(), None);
 
     let mut buf = vec![];
     ciborium::into_writer(&status_list, &mut buf).unwrap();
@@ -67,11 +63,7 @@ fn two_bit_status_list() {
     assert!(lst.replace(934534, 2).is_some());
     assert!(lst.replace(1000345, 3).is_some());
 
-    let status_list = StatusList {
-        bits: StatusBits::Two,
-        lst: lst.into(),
-        aggregation_uri: None,
-    };
+    let status_list = StatusList::new(lst.into(), None);
 
     let mut buf = vec![];
     ciborium::into_writer(&status_list, &mut buf).unwrap();
@@ -123,11 +115,7 @@ c0cf3daf03000000000000000008ec03dc4c04c0"
 
     lst.replace(0, 1);
 
-    let status_list = StatusList {
-        bits: StatusBits::Four,
-        lst: lst.into(),
-        aggregation_uri: None,
-    };
+    let status_list = StatusList::new(lst.into(), None);
 
     let mut buf = vec![];
     ciborium::into_writer(&status_list, &mut buf).unwrap();
@@ -459,11 +447,7 @@ c8c2fd120000000000000000000000c1b95d022055434b0000000040008e91000000
     lst.replace(152133, 254);
     lst.replace(19535, 255);
 
-    let status_list = StatusList {
-        bits: StatusBits::Eight,
-        lst: lst.into(),
-        aggregation_uri: None,
-    };
+    let status_list = StatusList::new(lst.into(), None);
 
     let mut buf = vec![];
     ciborium::into_writer(&status_list, &mut buf).unwrap();
