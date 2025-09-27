@@ -28,6 +28,7 @@ p384.workspace = true
 rand.workspace = true
 cose-key = { workspace = true, features = ["p256", "p384", "ed25519"] }
 wasm-bindgen-test.workspace = true
+getrandom = { workspace = true, features = ["js"] }
 
 [features]
 default = []
