@@ -1,3 +1,5 @@
+#![doc = include_str!("../../README.md")]
+
 pub use {
     cose_key_confirmation::{error::CoseKeyConfirmationError, EncryptedCoseKey, KeyConfirmation},
     esdicawt_spec as spec,
