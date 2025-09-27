@@ -273,9 +273,9 @@ pub trait CwtAny: serde::Serialize + for<'de> serde::Deserialize<'de> + Clone {
 
 impl<T> CwtAny for T where T: serde::Serialize + for<'de> serde::Deserialize<'de> + Clone {}
 
-pub trait CustomClaims: std::fmt::Debug + CwtAny + Clone {}
+pub trait CustomClaims: std::fmt::Debug + PartialEq + CwtAny + Clone {}
 
-impl<T> CustomClaims for T where T: std::fmt::Debug + CwtAny + Clone {}
+impl<T> CustomClaims for T where T: std::fmt::Debug + PartialEq + CwtAny + Clone {}
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct NoClaims;

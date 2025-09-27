@@ -1,7 +1,7 @@
 #![doc = include_str!("../../README.md")]
 
 pub use {
-    cose_key_confirmation::{EncryptedCoseKey, KeyConfirmation, error::CoseKeyConfirmationError},
+    cose_key_confirmation::*,
     esdicawt_spec as spec,
     holder::{
         Holder,
@@ -16,6 +16,7 @@ pub use {
     lookup::*,
     read::{EsdicawtReadError, EsdicawtReadResult, SdCwtRead},
     signature::Keypair,
+    spec::reexports::*,
     spec::*,
     verifier::{
         Verifier,
@@ -45,4 +46,53 @@ pub(crate) fn now() -> u64 {
 pub(crate) fn now() -> u64 {
     let now = std::time::SystemTime::now();
     now.duration_since(std::time::SystemTime::UNIX_EPOCH).expect("System clock is before UNIX_EPOCH").as_secs()
+}
+
+/// Helps managing CBOR integer labels declared in an enum.
+/// Could have been a proc macro (but laziness stroke)
+#[macro_export]
+macro_rules! cwt_label {
+    ($label:ty) => {
+        impl PartialEq<ciborium::value::Integer> for $label {
+            fn eq(&self, other: &ciborium::value::Integer) -> bool {
+                ciborium::value::Integer::from(*self as i64).eq(other)
+            }
+        }
+
+        impl PartialEq<$label> for ciborium::value::Integer {
+            fn eq(&self, other: &$label) -> bool {
+                ciborium::value::Integer::from(*other as i64).eq(self)
+            }
+        }
+
+        impl PartialEq<i64> for $label {
+            fn eq(&self, other: &i64) -> bool {
+                (*self as i64).eq(other)
+            }
+        }
+
+        impl PartialEq<$label> for i64 {
+            fn eq(&self, other: &$label) -> bool {
+                (*other as i64).eq(self)
+            }
+        }
+
+        impl From<$label> for esdicawt::spec::ClaimName {
+            fn from(label: $label) -> Self {
+                (label as i64).into()
+            }
+        }
+
+        impl From<$label> for esdicawt::QueryElement {
+            fn from(label: $label) -> Self {
+                (label as i64).into()
+            }
+        }
+
+        impl From<$label> for ciborium::Value {
+            fn from(label: $label) -> Self {
+                (label as i64).into()
+            }
+        }
+    };
 }

@@ -97,6 +97,13 @@ impl<T: CwtAny> InlinedCbor<T> {
         })
     }
 
+    pub fn as_bytes(&self) -> EsdicawtSpecResult<std::borrow::Cow<'_, [u8]>> {
+        Ok(match self {
+            Self::Bytes(b, _) | Self::Value(_, Some(b)) => std::borrow::Cow::Borrowed(b),
+            Self::Value(v, _) => std::borrow::Cow::Owned(T::to_cbor_bytes(v)?),
+        })
+    }
+
     pub fn to_pair_mut(&mut self) -> EsdicawtSpecResult<(&mut T, &[u8])> {
         match self {
             Self::Value(v, Some(b)) | Self::Bytes(b, Some(v)) => Ok((v, b)),
