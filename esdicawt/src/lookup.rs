@@ -307,7 +307,7 @@ mod tests {
             audience: Default::default(),
             cti: Default::default(),
             cnonce: Default::default(),
-            expiry: Some(core::time::Duration::from_secs(90)),
+            expiry: None,
             with_not_before: true,
             with_issued_at: true,
             leeway: core::time::Duration::from_secs(1),
