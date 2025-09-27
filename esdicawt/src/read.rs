@@ -1,11 +1,14 @@
 use crate::lookup::TokenQuery;
+use crate::SdCwtVerified;
 use ciborium::Value;
 use coset::iana::CwtClaimName;
+use esdicawt_spec::issuance::SdCwtIssued;
+use esdicawt_spec::key_binding::KbtCwt;
 use esdicawt_spec::{
-    CustomClaims, Select,
-    issuance::SdCwtIssuedTagged,
-    key_binding::KbtCwtTagged,
+    issuance::SdCwtIssuedTagged, key_binding::KbtCwtTagged,
     reexports::{coset, coset::iana::EnumI64},
+    CustomClaims,
+    Select,
 };
 use std::borrow::Cow;
 
@@ -59,7 +62,28 @@ impl<IssuerPayloadClaims: Select, Hasher: digest::Digest + Clone, IssuerProtecte
 
     // sub is not redactable so we read it directly from the SD-CWT
     fn sub(&mut self) -> EsdicawtReadResult<Option<Cow<str>>> {
-        Ok(self.0.payload.to_value()?.inner.subject.as_deref().map(Cow::Borrowed))
+        SdCwtRead::sub(&mut self.0)
+    }
+}
+
+impl<IssuerPayloadClaims: Select, Hasher: digest::Digest + Clone, IssuerProtectedClaims: CustomClaims, IssuerUnprotectedClaims: CustomClaims> SdCwtRead
+    for SdCwtIssued<IssuerPayloadClaims, Hasher, IssuerProtectedClaims, IssuerUnprotectedClaims>
+{
+    type PayloadClaims = IssuerPayloadClaims;
+
+    // sub is not redactable so we read it directly from the SD-CWT
+    fn sub(&mut self) -> EsdicawtReadResult<Option<Cow<str>>> {
+        Ok(self.payload.to_value()?.inner.subject.as_deref().map(Cow::Borrowed))
+    }
+}
+
+impl<IssuerPayloadClaims: Select, Hasher: digest::Digest + Clone, IssuerProtectedClaims: CustomClaims, IssuerUnprotectedClaims: CustomClaims> SdCwtRead
+    for SdCwtVerified<IssuerPayloadClaims, Hasher, IssuerProtectedClaims, IssuerUnprotectedClaims>
+{
+    type PayloadClaims = IssuerPayloadClaims;
+
+    fn sub(&mut self) -> EsdicawtReadResult<Option<Cow<str>>> {
+        SdCwtRead::sub(&mut self.0.0)
     }
 }
 
@@ -72,6 +96,19 @@ impl<
     KbtProtectedClaims: CustomClaims,
     KbtUnprotectedClaims: CustomClaims,
 > SdCwtRead for KbtCwtTagged<IssuerPayloadClaims, Hasher, KbtPayloadClaims, IssuerProtectedClaims, IssuerUnprotectedClaims, KbtProtectedClaims, KbtUnprotectedClaims>
+{
+    type PayloadClaims = IssuerPayloadClaims;
+}
+
+impl<
+    IssuerPayloadClaims: Select,
+    Hasher: digest::Digest + Clone,
+    KbtPayloadClaims: CustomClaims,
+    IssuerProtectedClaims: CustomClaims,
+    IssuerUnprotectedClaims: CustomClaims,
+    KbtProtectedClaims: CustomClaims,
+    KbtUnprotectedClaims: CustomClaims,
+> SdCwtRead for KbtCwt<IssuerPayloadClaims, Hasher, KbtPayloadClaims, IssuerProtectedClaims, IssuerUnprotectedClaims, KbtProtectedClaims, KbtUnprotectedClaims>
 {
     type PayloadClaims = IssuerPayloadClaims;
 }
