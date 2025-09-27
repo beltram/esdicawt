@@ -100,7 +100,7 @@ where
                 let salted_element = sd_claims.push_ref(SaltedElementRef { salt, value: original_value })?;
                 let digest = digest(&salted_element)?;
                 let rce = RedactedClaimElement::from(&digest[..]);
-                *value = Value::serialized(&rce)?;
+                *value = rce.to_cbor_value()?;
             }
         }
         value => {
@@ -129,7 +129,7 @@ where
                         let salted_element = sd_claims.push_ref(disclosure)?;
                         let digest = digest(&salted_element)?;
                         let rce = RedactedClaimElement::from(&digest[..]);
-                        *value = Value::serialized(&rce)?;
+                        *value = rce.to_cbor_value()?;
                     }
                 }
             }
@@ -232,8 +232,8 @@ mod tests {
         // verify that the disclosure of mapping claim '1' contains a redacted array which itself
         // contains the redacted in place elements "a" and "b"
         let [a, b]: [RedactedClaimElement; 2] = d3.value.try_into().unwrap();
-        assert_eq!(Value::serialized(&a).unwrap(), element_digest(&d1));
-        assert_eq!(Value::serialized(&b).unwrap(), element_digest(&d2));
+        assert_eq!(a.to_cbor_value().unwrap(), element_digest(&d1));
+        assert_eq!(b.to_cbor_value().unwrap(), element_digest(&d2));
 
         let d1 = d1.deserialized::<SaltedElement<String>>().unwrap();
         assert_eq!(d1.value, "a".to_string());
@@ -262,12 +262,12 @@ mod tests {
         // verify that the disclosure of mapping claim '1' contains a redacted array which itself
         // contains a redacted array which itself contains the redacted in place elements "a" & "b"
         let [nested_array]: [RedactedClaimElement; 1] = d4.value.try_into().unwrap();
-        assert_eq!(Value::serialized(&nested_array).unwrap(), element_digest(&d3));
+        assert_eq!(nested_array.to_cbor_value().unwrap(), element_digest(&d3));
 
         let d3 = d3.deserialized::<SaltedElement<Vec<RedactedClaimElement>>>().unwrap();
         let [a, b]: [RedactedClaimElement; 2] = d3.value.try_into().unwrap();
-        assert_eq!(Value::serialized(&a).unwrap(), element_digest(&d1));
-        assert_eq!(Value::serialized(&b).unwrap(), element_digest(&d2));
+        assert_eq!(a.to_cbor_value().unwrap(), element_digest(&d1));
+        assert_eq!(b.to_cbor_value().unwrap(), element_digest(&d2));
 
         let d1 = d1.deserialized::<SaltedElement<String>>().unwrap();
         assert_eq!(d1.value, "a".to_string());
@@ -334,7 +334,7 @@ mod tests {
         assert!(matches!(&d0.name, ClaimName::Integer(n) if *n == 0));
 
         let [mapping12]: [RedactedClaimElement; 1] = d0.value.try_into().unwrap();
-        assert_eq!(Value::serialized(&mapping12).unwrap(), element_digest(&d1));
+        assert_eq!(mapping12.to_cbor_value().unwrap(), element_digest(&d1));
     }
 
     // TODO: if got time change return to '(Value, [Salted<Value>; N])'
@@ -350,7 +350,7 @@ mod tests {
         }
 
         let size = sd_claims.len();
-        let disclosures = sd_claims.iter().map(|s| s.unwrap().clone()).map(|s| Value::serialized(&s).unwrap()).collect::<Vec<_>>();
+        let disclosures = sd_claims.iter().map(|s| s.unwrap().clone()).map(|s| s.to_cbor_value().unwrap()).collect::<Vec<_>>();
         let disclosures = disclosures.try_into().unwrap_or_else(|_| panic!("Expected {N} disclosures but got {size}"));
 
         (payload, disclosures)

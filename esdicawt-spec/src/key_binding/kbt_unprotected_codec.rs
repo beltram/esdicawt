@@ -8,7 +8,7 @@ impl<Extra: CustomClaims> TryFrom<KbtUnprotected<Extra>> for coset::Header {
         let mut builder = coset::HeaderBuilder::new();
 
         // map extra claims
-        if let Some(claims) = kbtu.extra.as_ref().map(|e| Value::serialized(&e)).transpose()?.map(|v| v.into_map()).transpose()? {
+        if let Some(claims) = kbtu.extra.as_ref().map(Value::serialized).transpose()?.map(|v| v.into_map()).transpose()? {
             for (k, v) in claims {
                 builder = match k {
                     Value::Integer(i) => builder.value(i.try_into()?, v),
