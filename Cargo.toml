@@ -22,7 +22,7 @@ spice-oidc-cwt = { path = "spice-oidc-cwt" }
 status-list = { path = "status-list" }
 
 # CBOR
-coset = "0.3"
+coset = { version = "0.3", git = "https://github.com/beltram/coset.git", branch = "status-list" }
 ciborium = "0.2"
 dcbor = "0.22"
 
@@ -63,12 +63,6 @@ git = "https://github.com/beltram/ciborium"
 #branch = "simple-value"
 rev = "69c8aede"
 #path = "../ciborium/ciborium"
-
-
-[patch.crates-io.coset]
-git = "https://github.com/beltram/coset.git"
-branch = "status-list"
-#path = "../coset"
 
 [workspace.lints.clippy]
 # Enforced Groups
