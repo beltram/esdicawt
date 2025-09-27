@@ -519,64 +519,59 @@ pub mod ec_p384 {
 }
 
 #[cfg(feature = "pem")]
-pub mod pem {
-    use super::*;
-    #[allow(unused_imports)]
-    use pkcs8::DecodePublicKey as _;
+impl CoseKey {
+    #[allow(dead_code)]
+    pub fn from_public_key_pem(s: &str) -> pkcs8::spki::Result<Self> {
+        let (_, doc) = pkcs8::Document::from_pem(s)?;
+        Self::from_public_key_der(doc.as_bytes())
+    }
 
-    impl CoseKey {
-        #[allow(dead_code)]
-        pub fn from_public_key_pem(s: &str) -> pkcs8::spki::Result<Self> {
-            let (_, doc) = pkcs8::Document::from_pem(s)?;
-            Self::from_public_key_der(doc.as_bytes())
+    #[allow(dead_code, unreachable_code)]
+    pub fn from_public_key_der(#[allow(unused_variables)] bytes: &[u8]) -> pkcs8::spki::Result<Self> {
+        use pkcs8::DecodePublicKey as _;
+        #[cfg(all(feature = "ed25519", feature = "p256", feature = "p384"))]
+        {
+            let ck = ed25519_dalek::VerifyingKey::from_public_key_der(bytes).map(Into::into);
+            let ck = ck.or_else(|_| p256::ecdsa::VerifyingKey::from_public_key_der(bytes).and_then(|vk| Self::try_from(vk).map_err(|_| pkcs8::spki::Error::KeyMalformed)));
+            let ck = ck.or_else(|_| p384::ecdsa::VerifyingKey::from_public_key_der(bytes).and_then(|vk| Self::try_from(vk).map_err(|_| pkcs8::spki::Error::KeyMalformed)));
+            return ck.map_err(|_| pkcs8::spki::Error::KeyMalformed);
         }
-
-        #[allow(dead_code, unreachable_code)]
-        pub fn from_public_key_der(#[allow(unused_variables)] bytes: &[u8]) -> pkcs8::spki::Result<Self> {
-            #[cfg(all(feature = "ed25519", feature = "p256", feature = "p384"))]
-            {
-                let ck = ed25519_dalek::VerifyingKey::from_public_key_der(bytes).map(Into::into);
-                let ck = ck.or_else(|_| p256::ecdsa::VerifyingKey::from_public_key_der(bytes).and_then(|vk| Self::try_from(vk).map_err(|_| pkcs8::spki::Error::KeyMalformed)));
-                let ck = ck.or_else(|_| p384::ecdsa::VerifyingKey::from_public_key_der(bytes).and_then(|vk| Self::try_from(vk).map_err(|_| pkcs8::spki::Error::KeyMalformed)));
-                return ck.map_err(|_| pkcs8::spki::Error::KeyMalformed);
-            }
-            #[cfg(all(feature = "ed25519", feature = "p256"))]
-            {
-                let ck = ed25519_dalek::VerifyingKey::from_public_key_der(bytes).map(Into::into);
-                let ck = ck.or_else(|_| p256::ecdsa::VerifyingKey::from_public_key_der(bytes).and_then(|vk| Self::try_from(vk).map_err(|_| pkcs8::spki::Error::KeyMalformed)));
-                return ck.map_err(|_| pkcs8::spki::Error::KeyMalformed);
-            }
-            #[cfg(all(feature = "ed25519", feature = "p384"))]
-            {
-                let ck = ed25519_dalek::VerifyingKey::from_public_key_der(bytes).map(Into::into);
-                let ck = ck.or_else(|_| p384::ecdsa::VerifyingKey::from_public_key_der(bytes).and_then(|vk| Self::try_from(vk).map_err(|_| pkcs8::spki::Error::KeyMalformed)));
-                return ck.map_err(|_| pkcs8::spki::Error::KeyMalformed);
-            }
-            #[cfg(all(feature = "p256", feature = "p384"))]
-            {
-                let ck = p256::ecdsa::VerifyingKey::from_public_key_der(bytes).and_then(|vk| Self::try_from(vk).map_err(|_| pkcs8::spki::Error::KeyMalformed));
-                let ck = ck.or_else(|_| p384::ecdsa::VerifyingKey::from_public_key_der(bytes).and_then(|vk| Self::try_from(vk).map_err(|_| pkcs8::spki::Error::KeyMalformed)));
-                return ck.map_err(|_| pkcs8::spki::Error::KeyMalformed);
-            }
-            #[cfg(feature = "ed25519")]
-            {
-                let ck = ed25519_dalek::VerifyingKey::from_public_key_der(bytes).map(Into::into);
-                return ck.map_err(|_| pkcs8::spki::Error::KeyMalformed);
-            }
-            #[cfg(feature = "p256")]
-            {
-                let ck = p256::ecdsa::VerifyingKey::from_public_key_der(bytes).and_then(|vk| Self::try_from(vk).map_err(|_| pkcs8::spki::Error::KeyMalformed));
-                return ck.map_err(|_| pkcs8::spki::Error::KeyMalformed);
-            }
-            #[cfg(feature = "p384")]
-            {
-                let ck = p384::ecdsa::VerifyingKey::from_public_key_der(bytes).and_then(|vk| Self::try_from(vk).map_err(|_| pkcs8::spki::Error::KeyMalformed));
-                ck.map_err(|_| pkcs8::spki::Error::KeyMalformed)
-            }
-            #[cfg(not(any(feature = "ed25519", feature = "p256", feature = "p384")))]
-            {
-                return Err(pkcs8::spki::Error::KeyMalformed);
-            }
+        #[cfg(all(feature = "ed25519", feature = "p256"))]
+        {
+            let ck = ed25519_dalek::VerifyingKey::from_public_key_der(bytes).map(Into::into);
+            let ck = ck.or_else(|_| p256::ecdsa::VerifyingKey::from_public_key_der(bytes).and_then(|vk| Self::try_from(vk).map_err(|_| pkcs8::spki::Error::KeyMalformed)));
+            return ck.map_err(|_| pkcs8::spki::Error::KeyMalformed);
+        }
+        #[cfg(all(feature = "ed25519", feature = "p384"))]
+        {
+            let ck = ed25519_dalek::VerifyingKey::from_public_key_der(bytes).map(Into::into);
+            let ck = ck.or_else(|_| p384::ecdsa::VerifyingKey::from_public_key_der(bytes).and_then(|vk| Self::try_from(vk).map_err(|_| pkcs8::spki::Error::KeyMalformed)));
+            return ck.map_err(|_| pkcs8::spki::Error::KeyMalformed);
+        }
+        #[cfg(all(feature = "p256", feature = "p384"))]
+        {
+            let ck = p256::ecdsa::VerifyingKey::from_public_key_der(bytes).and_then(|vk| Self::try_from(vk).map_err(|_| pkcs8::spki::Error::KeyMalformed));
+            let ck = ck.or_else(|_| p384::ecdsa::VerifyingKey::from_public_key_der(bytes).and_then(|vk| Self::try_from(vk).map_err(|_| pkcs8::spki::Error::KeyMalformed)));
+            return ck.map_err(|_| pkcs8::spki::Error::KeyMalformed);
+        }
+        #[cfg(feature = "ed25519")]
+        {
+            let ck = ed25519_dalek::VerifyingKey::from_public_key_der(bytes).map(Into::into);
+            return ck.map_err(|_| pkcs8::spki::Error::KeyMalformed);
+        }
+        #[cfg(feature = "p256")]
+        {
+            let ck = p256::ecdsa::VerifyingKey::from_public_key_der(bytes).and_then(|vk| Self::try_from(vk).map_err(|_| pkcs8::spki::Error::KeyMalformed));
+            return ck.map_err(|_| pkcs8::spki::Error::KeyMalformed);
+        }
+        #[cfg(feature = "p384")]
+        {
+            let ck = p384::ecdsa::VerifyingKey::from_public_key_der(bytes).and_then(|vk| Self::try_from(vk).map_err(|_| pkcs8::spki::Error::KeyMalformed));
+            ck.map_err(|_| pkcs8::spki::Error::KeyMalformed)
+        }
+        #[cfg(not(any(feature = "ed25519", feature = "p256", feature = "p384")))]
+        {
+            return Err(pkcs8::spki::Error::KeyMalformed);
         }
     }
 }
