@@ -195,6 +195,8 @@ fn holder<H: digest::Digest + Clone>(i: &usize) -> (Ed25519Holder<VarSizePayload
         expiry: None,
         with_not_before: false,
         artificial_time: None,
+        time_verification: Default::default(),
+        leeway: Default::default(),
         extra_kbt_protected: None,
         extra_kbt_unprotected: None,
         extra_kbt_payload: None,

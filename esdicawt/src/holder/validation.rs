@@ -14,7 +14,7 @@ pub struct HolderValidationParams<'a> {
     pub leeway: core::time::Duration,
     pub time_verification: TimeVerification,
     /// for testing
-    pub artificial_time: Option<i64>,
+    pub artificial_time: Option<core::time::Duration>,
 }
 
 #[derive(Debug, thiserror::Error)]
