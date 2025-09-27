@@ -66,6 +66,7 @@ pub struct SdIssuedVerified<PayloadClaims: CustomClaims, ProtectedClaims: Custom
     pub protected: SdProtected<ProtectedClaims>,
     pub sd_unprotected: SdUnprotectedVerified<UnprotectedClaims>,
     pub payload: SdInnerPayload<PayloadClaims>,
+    pub cnf: cose_key_confirmation::KeyConfirmation,
 }
 
 impl<PayloadClaims: Select, Hasher: digest::Digest + Clone, ProtectedClaims: CustomClaims, UnprotectedClaims: CustomClaims>
@@ -74,10 +75,12 @@ impl<PayloadClaims: Select, Hasher: digest::Digest + Clone, ProtectedClaims: Cus
     type Error = EsdicawtSpecError;
 
     fn try_from(v: SdCwtIssued<PayloadClaims, Hasher, ProtectedClaims, UnprotectedClaims>) -> Result<Self, Self::Error> {
+        let payload = v.payload.try_into_value()?;
         Ok(Self {
             protected: v.protected.try_into_value()?,
             sd_unprotected: v.sd_unprotected.into(),
-            payload: v.payload.try_into_value()?.inner,
+            payload: payload.inner,
+            cnf: payload.cnf,
         })
     }
 }
