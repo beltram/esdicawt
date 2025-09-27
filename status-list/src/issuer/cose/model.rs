@@ -1,8 +1,8 @@
-use crate::StatusList;
+use crate::{Status, StatusList};
 
 #[derive(Debug, Clone, PartialEq, derive_builder::Builder)]
 #[builder(pattern = "mutable", setter(strip_option))]
-pub struct StatusListToken {
+pub struct StatusListToken<S: Status> {
     /// As generally defined in [RFC8392]. The subject claim MUST specify the URI of the Status List Token.
     /// The value MUST be equal to that of the uri claim contained in the status_list claim of the Referenced Token
     pub sub: url::Url,
@@ -13,7 +13,7 @@ pub struct StatusListToken {
     /// Unsigned integer (Major Type 0). The time to live claim, if present, MUST specify the maximum amount of time, in seconds, that the Status List Token can be cached by a consumer before a fresh copy SHOULD be retrieved.
     /// The value of the claim MUST be a positive number
     pub ttl: Option<u64>,
-    pub status_list: StatusList,
+    pub status_list: StatusList<S>,
     pub signature: serde_bytes::ByteBuf,
 }
 

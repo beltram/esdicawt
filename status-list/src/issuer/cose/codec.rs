@@ -1,5 +1,5 @@
 use crate::{
-    CborAny, StatusList,
+    CborAny, Status, StatusList,
     issuer::{
         StatusListToken, StatusListTokenBuilder,
         cose::{LABEL_TYPE, MEDIATYPE_STATUS_LIST_CWT},
@@ -12,7 +12,7 @@ use coset::{
     iana::CwtClaimName,
 };
 
-impl serde::Serialize for StatusListToken {
+impl<St: Status> serde::Serialize for StatusListToken<St> {
     fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
         use serde::ser::Error as _;
 
@@ -53,7 +53,7 @@ impl serde::Serialize for StatusListToken {
     }
 }
 
-impl<'de> serde::Deserialize<'de> for StatusListToken {
+impl<'de, S: Status> serde::Deserialize<'de> for StatusListToken<S> {
     fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
         use serde::de::Error as _;
 
@@ -94,7 +94,7 @@ impl<'de> serde::Deserialize<'de> for StatusListToken {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{Lst, StatusBits, StatusList};
+    use crate::{Lst, RawStatus, StatusList};
 
     #[test]
     fn should_roundtrip() {
@@ -103,11 +103,7 @@ mod tests {
             iat: 40,
             exp: Some(41),
             ttl: Some(42),
-            status_list: StatusList {
-                bits: StatusBits::One,
-                lst: Lst::new(vec![0xB9, 0xA3], StatusBits::One),
-                aggregation_uri: Some("https://agg.com".parse().unwrap()),
-            },
+            status_list: StatusList::<RawStatus<1>>::new(Lst::new(vec![0xB9, 0xA3]), Some("https://agg.com".parse().unwrap())),
             signature: b"signature".to_vec().into(),
         };
 

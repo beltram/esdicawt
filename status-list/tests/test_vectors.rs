@@ -1,4 +1,4 @@
-use status_list::{StatusBits, StatusList, issuer::LstMut};
+use status_list::{RawStatus, StatusBits, StatusList, issuer::LstMut};
 
 #[test]
 fn one_bit_status_list() {
@@ -11,19 +11,44 @@ ba00bd93f002beb7a2a2010000a91e09000000000000000000000000000000807296
         .lines()
         .collect::<String>();
 
-    let mut lst = LstMut::with_capacity(2usize.pow(20), StatusBits::One);
+    #[derive(Debug, Copy, Clone, Eq, PartialEq, Hash)]
+    #[repr(u8)]
+    enum Status {
+        Valid = 0x00,
+        Revoked = 0x01,
+    }
 
-    assert!(lst.replace(0, 1).is_some());
-    assert!(lst.replace(1993, 1).is_some());
-    assert!(lst.replace(25460, 1).is_some());
-    assert!(lst.replace(159495, 1).is_some());
-    assert!(lst.replace(495669, 1).is_some());
-    assert!(lst.replace(554353, 1).is_some());
-    assert!(lst.replace(645645, 1).is_some());
-    assert!(lst.replace(723232, 1).is_some());
-    assert!(lst.replace(854545, 1).is_some());
-    assert!(lst.replace(934534, 1).is_some());
-    assert!(lst.replace(1000345, 1).is_some());
+    impl status_list::Status for Status {
+        const BITS: StatusBits = StatusBits::One;
+    }
+    impl From<Status> for u8 {
+        fn from(s: Status) -> Self {
+            s as Self
+        }
+    }
+    impl From<u8> for Status {
+        fn from(s: u8) -> Self {
+            match s {
+                0x00 => Self::Valid,
+                0x01 => Self::Revoked,
+                _ => unreachable!(),
+            }
+        }
+    }
+
+    let mut lst = LstMut::<Status>::with_capacity(2usize.pow(20));
+
+    assert!(lst.replace(0, Status::Revoked).is_some());
+    assert!(lst.replace(1993, Status::Revoked).is_some());
+    assert!(lst.replace(25460, Status::Revoked).is_some());
+    assert!(lst.replace(159495, Status::Revoked).is_some());
+    assert!(lst.replace(495669, Status::Revoked).is_some());
+    assert!(lst.replace(554353, Status::Revoked).is_some());
+    assert!(lst.replace(645645, Status::Revoked).is_some());
+    assert!(lst.replace(723232, Status::Revoked).is_some());
+    assert!(lst.replace(854545, Status::Revoked).is_some());
+    assert!(lst.replace(934534, Status::Revoked).is_some());
+    assert!(lst.replace(1000345, Status::Revoked).is_some());
 
     let status_list = StatusList::new(lst.into(), None);
 
@@ -49,19 +74,48 @@ fn two_bit_status_list() {
         .lines()
         .collect::<String>();
 
-    let mut lst = LstMut::with_capacity(2usize.pow(21), StatusBits::Two);
+    #[derive(Debug, Copy, Clone, Eq, PartialEq, Hash)]
+    #[repr(u8)]
+    enum Status {
+        Valid = 0x00,
+        Revoked = 0x01,
+        Suspended = 0x02,
+        Unassigned = 0x03,
+    }
 
-    assert!(lst.replace(0, 1).is_some());
-    assert!(lst.replace(1993, 2).is_some());
-    assert!(lst.replace(25460, 1).is_some());
-    assert!(lst.replace(159495, 3).is_some());
-    assert!(lst.replace(495669, 1).is_some());
-    assert!(lst.replace(554353, 1).is_some());
-    assert!(lst.replace(645645, 2).is_some());
-    assert!(lst.replace(723232, 1).is_some());
-    assert!(lst.replace(854545, 1).is_some());
-    assert!(lst.replace(934534, 2).is_some());
-    assert!(lst.replace(1000345, 3).is_some());
+    impl status_list::Status for Status {
+        const BITS: StatusBits = StatusBits::Two;
+    }
+    impl From<Status> for u8 {
+        fn from(s: Status) -> Self {
+            s as Self
+        }
+    }
+    impl From<u8> for Status {
+        fn from(s: u8) -> Self {
+            match s {
+                0x00 => Self::Valid,
+                0x01 => Self::Revoked,
+                0x02 => Self::Suspended,
+                0x03 => Self::Unassigned,
+                _ => unreachable!(),
+            }
+        }
+    }
+
+    let mut lst = LstMut::<Status>::with_capacity(2usize.pow(21));
+
+    assert!(lst.replace(0, Status::Revoked).is_some());
+    assert!(lst.replace(1993, Status::Suspended).is_some());
+    assert!(lst.replace(25460, Status::Revoked).is_some());
+    assert!(lst.replace(159495, Status::Unassigned).is_some());
+    assert!(lst.replace(495669, Status::Revoked).is_some());
+    assert!(lst.replace(554353, Status::Revoked).is_some());
+    assert!(lst.replace(645645, Status::Suspended).is_some());
+    assert!(lst.replace(723232, Status::Revoked).is_some());
+    assert!(lst.replace(854545, Status::Revoked).is_some());
+    assert!(lst.replace(934534, Status::Suspended).is_some());
+    assert!(lst.replace(1000345, Status::Unassigned).is_some());
 
     let status_list = StatusList::new(lst.into(), None);
 
@@ -95,7 +149,7 @@ c0cf3daf03000000000000000008ec03dc4c04c0"
         .lines()
         .collect::<String>();
 
-    let mut lst = LstMut::with_capacity(2usize.pow(22), StatusBits::Four);
+    let mut lst = LstMut::<RawStatus<4>>::with_capacity(2usize.pow(22));
 
     lst.replace(0, 1);
     lst.replace(1993, 2);
@@ -112,8 +166,6 @@ c0cf3daf03000000000000000008ec03dc4c04c0"
     lst.replace(1030203, 13);
     lst.replace(1030204, 14);
     lst.replace(1030205, 15);
-
-    lst.replace(0, 1);
 
     let status_list = StatusList::new(lst.into(), None);
 
@@ -188,7 +240,7 @@ c8c2fd120000000000000000000000c1b95d022055434b0000000040008e91000000
         .lines()
         .collect::<String>();
 
-    let mut lst = LstMut::with_capacity(2usize.pow(23), StatusBits::Eight);
+    let mut lst = LstMut::<RawStatus<8>>::with_capacity(2usize.pow(23));
 
     lst.replace(233478, 0);
     lst.replace(52451, 1);
