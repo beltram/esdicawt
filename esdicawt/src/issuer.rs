@@ -8,8 +8,8 @@ use crate::{
 use ciborium::Value;
 use cose_key_confirmation::KeyConfirmation;
 use esdicawt_spec::{
-    AnyMap, COSE_SD_CLAIMS, CWT_CLAIM_SD_ALG, CWT_MEDIATYPE, ClaimName, CustomClaims, CwtAny, EsdicawtSpecError, MEDIATYPE_SD_CWT, SelectiveDisclosureHashAlg,
-    issuance::{SdCwtPayloadBuilder, SelectiveDisclosureIssuedTagged, SelectiveDisclosurePayloadBuilder},
+    AnyMap, COSE_SD_CLAIMS, CWT_CLAIM_SD_ALG, CWT_MEDIATYPE, ClaimName, CustomClaims, CwtAny, EsdicawtSpecError, MEDIATYPE_SD_CWT, SdHashAlg,
+    issuance::{SdCwtIssuedTagged, SdInnerPayloadBuilder, SdPayloadBuilder},
     reexports::coset::{
         TaggedCborSerializable, {self},
     },
@@ -62,7 +62,7 @@ pub trait Issuer {
     fn signer(&self) -> &Self::Signer;
 
     fn cwt_algorithm(&self) -> coset::iana::Algorithm;
-    fn hash_algorithm(&self) -> SelectiveDisclosureHashAlg;
+    fn hash_algorithm(&self) -> SdHashAlg;
 
     fn serialize_signature(&self, signature: &Self::Signature) -> Result<Vec<u8>, Self::Error>;
 
@@ -73,7 +73,7 @@ pub trait Issuer {
         &self,
         csprng: &mut dyn rand_core::CryptoRngCore,
         params: IssueCwtParams<'_, Self::ProtectedClaims, Self::UnprotectedClaims, Self::PayloadClaims, Self::DisclosableClaims>,
-    ) -> Result<SelectiveDisclosureIssuedTagged<Self::ProtectedClaims, Self::UnprotectedClaims, Self::PayloadClaims, Self::DisclosableClaims>, SdCwtIssuerError<Self::Error>> {
+    ) -> Result<SdCwtIssuedTagged<Self::ProtectedClaims, Self::UnprotectedClaims, Self::PayloadClaims, Self::DisclosableClaims>, SdCwtIssuerError<Self::Error>> {
         let alg = self.cwt_algorithm();
         let issuer = params.identifier;
         let key_location = params.key_location;
@@ -120,7 +120,7 @@ pub trait Issuer {
         let iat = now;
         let expiry = now + params.expiry.as_secs();
 
-        let mut inner_payload_builder = SdCwtPayloadBuilder::default();
+        let mut inner_payload_builder = SdInnerPayloadBuilder::default();
         inner_payload_builder
             .issuer(issuer)
             .subject(params.subject)
@@ -129,14 +129,14 @@ pub trait Issuer {
             .issued_at(iat as i64);
 
         if let Some(payload_claims) = params.payload_claims {
-            inner_payload_builder.claims(payload_claims);
+            inner_payload_builder.extra(payload_claims);
         }
 
         let inner = inner_payload_builder.build().map_err(EsdicawtSpecError::from)?;
 
-        let payload = SelectiveDisclosurePayloadBuilder::default()
+        let payload = SdPayloadBuilder::default()
             .inner(inner)
-            .key_confirmation(params.holder_confirmation_key)
+            .cnf(params.holder_confirmation_key)
             .build()
             .map_err(EsdicawtSpecError::from)?;
         let mut payload = Value::serialized(&payload).map_err(EsdicawtSpecError::from)?;
@@ -171,7 +171,7 @@ pub trait Issuer {
             .build()
             .to_tagged_vec()?;
 
-        Ok(SelectiveDisclosureIssuedTagged::from_cbor_bytes(&sign1)?)
+        Ok(SdCwtIssuedTagged::from_cbor_bytes(&sign1)?)
     }
 }
 
@@ -203,7 +203,7 @@ mod tests {
     };
     use ciborium::{Value, cbor};
     use digest::Digest as _;
-    use esdicawt_spec::{AnyMap, ClaimName, CustomClaims, CwtAny, MapKey, NoClaims, blinded_claims::Salted, issuance::SelectiveDisclosureIssuedTagged};
+    use esdicawt_spec::{AnyMap, ClaimName, CustomClaims, CwtAny, MapKey, NoClaims, blinded_claims::Salted, issuance::SdCwtIssuedTagged};
     use rand_core::SeedableRng;
     wasm_bindgen_test::wasm_bindgen_test_configure!(run_in_browser);
 
@@ -214,7 +214,7 @@ mod tests {
         let mut cwt = issue(disclosable_claims);
 
         let cwt_cbor = cwt.to_cbor_bytes().unwrap();
-        let cwt_2 = SelectiveDisclosureIssuedTagged::from_cbor_bytes(&cwt_cbor).unwrap();
+        let cwt_2 = SdCwtIssuedTagged::from_cbor_bytes(&cwt_cbor).unwrap();
         assert_eq!(cwt, cwt_2);
 
         // should have 'redacted_claim_keys' in the payload
@@ -281,7 +281,7 @@ mod tests {
         verify_issuance(cbor!({ "a" => [0] }), (None, cbor!(0)));
     }
 
-    fn issue<D: CustomClaims>(disclosable_claims: D) -> SelectiveDisclosureIssuedTagged<NoClaims, NoClaims, NoClaims, D> {
+    fn issue<D: CustomClaims>(disclosable_claims: D) -> SdCwtIssuedTagged<NoClaims, NoClaims, NoClaims, D> {
         let mut csprng = rand_chacha::ChaCha20Rng::from_entropy();
 
         let holder_signing_key = ed25519_dalek::SigningKey::generate(&mut csprng);
@@ -388,8 +388,8 @@ pub mod test_utils {
             coset::iana::Algorithm::EdDSA
         }
 
-        fn hash_algorithm(&self) -> SelectiveDisclosureHashAlg {
-            SelectiveDisclosureHashAlg::Sha256
+        fn hash_algorithm(&self) -> SdHashAlg {
+            SdHashAlg::Sha256
         }
 
         fn serialize_signature(&self, signature: &ed25519_dalek::Signature) -> Result<Vec<u8>, Self::Error> {
@@ -432,8 +432,8 @@ pub mod test_utils {
             coset::iana::Algorithm::ES256
         }
 
-        fn hash_algorithm(&self) -> SelectiveDisclosureHashAlg {
-            SelectiveDisclosureHashAlg::Sha256
+        fn hash_algorithm(&self) -> SdHashAlg {
+            SdHashAlg::Sha256
         }
 
         fn serialize_signature(&self, signature: &p256::ecdsa::Signature) -> Result<Vec<u8>, Self::Error> {

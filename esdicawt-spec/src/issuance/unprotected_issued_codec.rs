@@ -7,7 +7,7 @@ use super::SdUnprotected;
 
 impl<E: CustomClaims> serde::Serialize for SdUnprotected<E> {
     fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
-        let mut extra: Option<AnyMap> = self.claims.clone().map(|extra| extra.into());
+        let mut extra: Option<AnyMap> = self.extra.clone().map(|extra| extra.into());
         let extra_len = extra.as_ref().map(|extra| extra.len()).unwrap_or_default();
         let mut map = serializer.serialize_map(Some(1 + extra_len))?;
         map.serialize_entry(&COSE_SD_CLAIMS, &self.sd_claims)?;
@@ -53,7 +53,7 @@ impl<'de, E: CustomClaims> serde::Deserialize<'de> for SdUnprotected<E> {
 
                 Ok(SdUnprotected {
                     sd_claims,
-                    claims: if extra.is_empty() {
+                    extra: if extra.is_empty() {
                         None
                     } else {
                         Some(extra.try_into().map_err(|_err| A::Error::custom("Cannot deserialize CustomKeys".to_string()))?)

@@ -1,9 +1,9 @@
 use crate::{CwtPresentationParams, Presentation, SdCwtHolderError, now};
 use esdicawt_spec::{
-    CustomClaims, CwtAny, SelectiveDisclosureHashAlg,
+    CustomClaims, CwtAny, SdHashAlg,
     blinded_claims::SaltedArray,
-    issuance::SelectiveDisclosureIssuedTagged,
-    key_binding::{KeyBindingTokenPayload, KeyBindingTokenProtected, KeyBindingTokenTagged, KeyBindingTokenUnprotected},
+    issuance::SdCwtIssuedTagged,
+    key_binding::{KbtCwtTagged, KbtPayload, KbtProtected, KbtUnprotected},
     reexports::coset::{
         TaggedCborSerializable, {self},
     },
@@ -33,7 +33,7 @@ pub trait Holder {
     type DisclosedClaims: CustomClaims;
 
     fn cwt_algorithm(&self) -> coset::iana::Algorithm;
-    fn hash_algorithm(&self) -> SelectiveDisclosureHashAlg;
+    fn hash_algorithm(&self) -> SdHashAlg;
     fn hash(&self, msg: &[u8]) -> Vec<u8>;
 
     /// Build a new instance of a Holder by providing a signing key
@@ -74,7 +74,7 @@ pub trait Holder {
         sd_cwt_issued: &[u8],
         params: CwtPresentationParams<Self::KbtProtectedClaims, Self::KbtUnprotectedClaims, Self::KbtPayloadClaims>,
     ) -> Result<
-        KeyBindingTokenTagged<
+        KbtCwtTagged<
             Self::IssuerProtectedClaims,
             Self::IssuerUnprotectedClaims,
             Self::IssuerPayloadClaims,
@@ -85,12 +85,12 @@ pub trait Holder {
         >,
         SdCwtHolderError<Self::Error>,
     > {
-        let mut sd_cwt_issued = SelectiveDisclosureIssuedTagged::from_cbor_bytes(sd_cwt_issued)?;
+        let mut sd_cwt_issued = SdCwtIssuedTagged::from_cbor_bytes(sd_cwt_issued)?;
 
         // --- building the kbt ---
         // --- unprotected ---
-        let unprotected = KeyBindingTokenUnprotected {
-            claims: params.extra_kbt_unprotected,
+        let unprotected = KbtUnprotected {
+            extra: params.extra_kbt_unprotected,
         }
         .into();
 
@@ -105,14 +105,13 @@ pub trait Holder {
 
         // --- protected ---
         let alg = coset::Algorithm::Assigned(self.cwt_algorithm());
-        let protected =
-            KeyBindingTokenProtected::<Self::IssuerProtectedClaims, Self::IssuerUnprotectedClaims, Self::IssuerPayloadClaims, Self::KbtProtectedClaims, Self::DisclosedClaims> {
-                alg: alg.into(),
-                issuer_sd_cwt: sd_cwt_issued.into(),
-                claims: params.extra_kbt_protected,
-            }
-            .try_into()
-            .map_err(|_| SdCwtHolderError::ImplementationError("Failed mapping kbt protected to COSE header"))?;
+        let protected = KbtProtected::<Self::IssuerProtectedClaims, Self::IssuerUnprotectedClaims, Self::IssuerPayloadClaims, Self::KbtProtectedClaims, Self::DisclosedClaims> {
+            alg: alg.into(),
+            kcwt: sd_cwt_issued.into(),
+            extra: params.extra_kbt_protected,
+        }
+        .try_into()
+        .map_err(|_| SdCwtHolderError::ImplementationError("Failed mapping kbt protected to COSE header"))?;
 
         // --- payload ---
         let now = unix_timestamp(Some(params.leeway));
@@ -120,13 +119,13 @@ pub trait Holder {
         let not_before = Some(now as i64);
         let issued_at = now as i64;
 
-        let payload = KeyBindingTokenPayload {
+        let payload = KbtPayload {
             audience: params.audience.to_string(),
             expiration,
             not_before,
             issued_at,
-            client_nonce: None,
-            claims: params.extra_kbt_payload,
+            cnonce: None,
+            extra: params.extra_kbt_payload,
         };
 
         let sign1 = coset::CoseSign1Builder::new()
@@ -139,7 +138,7 @@ pub trait Holder {
             })?
             .build()
             .to_tagged_vec()?;
-        Ok(KeyBindingTokenTagged::from_cbor_bytes(&sign1)?)
+        Ok(KbtCwtTagged::from_cbor_bytes(&sign1)?)
     }
 }
 
@@ -205,7 +204,7 @@ mod tests {
         let mut sd_cwt_kbt = holder.new_presentation(&sd_cwt, presentation_params).unwrap();
 
         let sd_cwt_kbt_2 = sd_cwt_kbt.to_cbor_bytes().unwrap();
-        let sd_cwt_kbt_2 = KeyBindingTokenTagged::from_cbor_bytes(&sd_cwt_kbt_2).unwrap();
+        let sd_cwt_kbt_2 = KbtCwtTagged::from_cbor_bytes(&sd_cwt_kbt_2).unwrap();
         assert_eq!(sd_cwt_kbt, sd_cwt_kbt_2);
 
         let disclosable_claims = sd_cwt_kbt.0.walk_disclosed_claims().unwrap().collect::<Vec<_>>();
@@ -280,8 +279,8 @@ pub mod test_utils {
             coset::iana::Algorithm::EdDSA
         }
 
-        fn hash_algorithm(&self) -> esdicawt_spec::SelectiveDisclosureHashAlg {
-            esdicawt_spec::SelectiveDisclosureHashAlg::Sha256
+        fn hash_algorithm(&self) -> esdicawt_spec::SdHashAlg {
+            esdicawt_spec::SdHashAlg::Sha256
         }
 
         fn hash(&self, msg: &[u8]) -> Vec<u8> {
