@@ -34,7 +34,7 @@ fn issue_bench(c: &mut Criterion) {
                 BatchSize::LargeInput,
             )
         });
-        group.bench_with_input(BenchmarkId::new("Blake3b", i), &i, |b, i| {
+        group.bench_with_input(BenchmarkId::new("Blake3", i), &i, |b, i| {
             b.iter_batched(
                 || issuer::<blake3::Hasher>(i),
                 |(mut rng, issuer, params, ..)| black_box(issuer.issue_cwt(&mut rng, params).unwrap()),
@@ -69,7 +69,7 @@ fn holder_bench(c: &mut Criterion) {
                 BatchSize::LargeInput,
             )
         });
-        group.bench_with_input(BenchmarkId::new("Blake3b", i), &i, |b, i| {
+        group.bench_with_input(BenchmarkId::new("Blake3", i), &i, |b, i| {
             b.iter_batched(
                 || holder::<blake3::Hasher>(i),
                 |(holder, params, sd_cwt, ..)| black_box(holder.new_presentation(sd_cwt, params).unwrap()),
@@ -104,7 +104,7 @@ fn verifier_bench(c: &mut Criterion) {
                 BatchSize::LargeInput,
             )
         });
-        group.bench_with_input(BenchmarkId::new("Blake3b", i), &i, |b, i| {
+        group.bench_with_input(BenchmarkId::new("Blake3", i), &i, |b, i| {
             b.iter_batched(
                 || verifier::<blake3::Hasher>(i),
                 |(verifier, sd_kbt, params, cks, ..)| black_box(verifier.verify_sd_kbt(&sd_kbt, params, None, &cks).unwrap()),
@@ -139,7 +139,7 @@ fn shallow_verifier_bench(c: &mut Criterion) {
                 BatchSize::LargeInput,
             )
         });
-        group.bench_with_input(BenchmarkId::new("Blake3b", i), &i, |b, i| {
+        group.bench_with_input(BenchmarkId::new("Blake3", i), &i, |b, i| {
             b.iter_batched(
                 || verifier::<blake3::Hasher>(i),
                 |(verifier, sd_kbt, params, cks, ..)| black_box(verifier.verify_sd_kbt(&sd_kbt, params, None, &cks).unwrap()),
