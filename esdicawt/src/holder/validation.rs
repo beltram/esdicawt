@@ -1,4 +1,3 @@
-use crate::CoseKeyError;
 use crate::time::TimeVerification;
 use ciborium::Value;
 use esdicawt_spec::{REDACTED_CLAIM_ELEMENT_TAG, blinded_claims::Salted, redacted_claims::RedactedClaimKeys};
@@ -40,7 +39,7 @@ pub enum SdCwtHolderValidationError<CustomError: Send + Sync> {
     #[error(transparent)]
     SignatureError(#[from] signature::Error),
     #[error(transparent)]
-    CoseKeyError(#[from] CoseKeyError),
+    CoseKeyError(#[from] cose_key::CoseKeyError),
     #[error("Signature encoding error")]
     SignatureEncodingError,
     #[error("{0}")]
