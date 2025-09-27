@@ -9,13 +9,14 @@ authors.workspace = true
 cose-key.workspace = true
 serde.workspace = true
 thiserror.workspace = true
+coset.workspace = true
+indexmap = { workspace = true, features = ["serde"] }
 ed25519-dalek = { workspace = true, optional = true }
 p256 = { workspace = true, optional = true }
 p384 = { workspace = true, optional = true }
-getrandom = { workspace = true, features = ["js"] }
 
 [dev-dependencies]
-cose-key-set = { workspace = true, features = ["ed25519", "p256"] }
+cose-key-set = { workspace = true, features = ["ed25519", "p256", "p384"] }
 ed25519-dalek = { workspace = true, features = ["rand_core"] }
 p256.workspace = true
 rand.workspace = true
@@ -23,6 +24,7 @@ coset.workspace = true
 ciborium.workspace = true
 hex.workspace = true
 wasm-bindgen-test.workspace = true
+getrandom = { workspace = true, features = ["js"] }
 
 [features]
 default = []

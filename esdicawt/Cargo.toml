@@ -9,14 +9,15 @@ authors.workspace = true
 default = []
 pem = ["dep:pkcs8", "pkcs8?/pem"]
 der = ["dep:pkcs8"]
-ed25519 = ["cose-key-confirmation/ed25519"]
-p256 = ["cose-key-confirmation/p256"]
-p384 = ["cose-key-confirmation/p384"]
+ed25519 = ["dep:ed25519-dalek", "cose-key-confirmation/ed25519"]
+p256 = ["dep:p256", "cose-key-confirmation/p256"]
+p384 = ["dep:p384", "cose-key-confirmation/p384"]
 test-utils = ["dep:ed25519-dalek", "dep:p256", "dep:p384", "dep:sha2", "cose-key-confirmation/ed25519", "cose-key-confirmation/p256", "cose-key-confirmation/p384"]
 test-vectors = ["test-utils"]
 
 [dependencies]
 esdicawt-spec.workspace = true
+cose-key-set.workspace = true
 cose-key-confirmation.workspace = true
 signature = { workspace = true, features = ["std", "digest"] }
 digest.workspace = true
@@ -38,7 +39,7 @@ p384 = { optional = true, workspace = true }
 js-sys = "0.3"
 
 [dev-dependencies]
-esdicawt = { workspace = true, features = ["pem", "der", "test-utils", "test-vectors"] }
+esdicawt = { workspace = true, features = ["pem", "der", "test-utils", "test-vectors", "ed25519", "p256", "p384"] }
 serde = { workspace = true, features = ["derive"] }
 cose-key-confirmation = { workspace = true, features = ["ed25519", "p256", "p384"] }
 rand.workspace = true

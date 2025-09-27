@@ -1,4 +1,4 @@
-use crate::SdCwtHolderValidationError;
+use crate::{SdCwtHolderValidationError, signature_verifier::SignatureVerifierError};
 use esdicawt_spec::{EsdicawtSpecError, reexports::coset};
 
 pub type SdCwtHolderResult<T, CustomError> = Result<T, SdCwtHolderError<CustomError>>;
@@ -18,6 +18,8 @@ pub enum SdCwtHolderError<CustomError: Send + Sync> {
     Pkcs8Error(pkcs8::Error),
     #[error(transparent)]
     SignatureError(#[from] signature::Error),
+    #[error(transparent)]
+    SignatureValidationError(#[from] SignatureVerifierError),
     #[error(transparent)]
     IntError(#[from] core::num::TryFromIntError),
     #[error(transparent)]

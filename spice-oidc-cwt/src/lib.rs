@@ -724,6 +724,7 @@ mod tests {
     use super::{ed25519::*, *};
     use esdicawt::{
         CborPath, Holder, Issuer, Presentation,
+        cose_key_set::CoseKeySet,
         spec::{CwtAny, issuance::SdCwtIssuedTagged},
     };
 
@@ -764,7 +765,9 @@ mod tests {
         }));
 
         let alice_sd_cwt = alice_sd_cwt.to_cbor_bytes().unwrap();
-        let alice_sd_cwt = alice_holder.verify_sd_cwt(&alice_sd_cwt, Default::default(), &issuer_signing_key.verifying_key()).unwrap();
+        let alice_sd_cwt = alice_holder
+            .verify_sd_cwt(&alice_sd_cwt, Default::default(), &CoseKeySet::new(&issuer_signing_key).unwrap())
+            .unwrap();
 
         let mut alice_kbt = alice_holder
             .new_presentation(
@@ -889,14 +892,6 @@ mod ed25519 {
         fn hash_algorithm(&self) -> SdHashAlg {
             SdHashAlg::Sha256
         }
-
-        fn serialize_signature(&self, signature: &ed25519_dalek::Signature) -> Result<Vec<u8>, Self::Error> {
-            Ok(ed25519_dalek::Signature::to_bytes(signature).into())
-        }
-
-        fn deserialize_signature(&self, bytes: &[u8]) -> Result<ed25519_dalek::Signature, Self::Error> {
-            Ok(ed25519_dalek::Signature::try_from(bytes).unwrap())
-        }
     }
 
     pub struct Ed25519Holder {
@@ -910,9 +905,6 @@ mod ed25519 {
 
         type Signature = ed25519_dalek::Signature;
         type Verifier = ed25519_dalek::VerifyingKey;
-
-        type IssuerSignature = ed25519_dalek::Signature;
-        type IssuerVerifier = ed25519_dalek::VerifyingKey;
 
         type Hasher = sha2::Sha256;
         type IssuerProtectedClaims = NoClaims;
@@ -938,20 +930,12 @@ mod ed25519 {
             coset::iana::Algorithm::EdDSA
         }
 
-        fn serialize_signature(&self, signature: &ed25519_dalek::Signature) -> Result<Vec<u8>, Self::Error> {
-            Ok(ed25519_dalek::Signature::to_bytes(signature).into())
-        }
-
         fn supported_hash_alg(&self) -> &[SdHashAlg] {
             &[SdHashAlg::Sha256]
         }
 
         fn verifier(&self) -> &Self::Verifier {
             &self.verifying_key
-        }
-
-        fn deserialize_issuer_signature(&self, bytes: &[u8]) -> Result<Self::IssuerSignature, Self::Error> {
-            Ok(ed25519_dalek::Signature::try_from(bytes).unwrap())
         }
     }
 }
