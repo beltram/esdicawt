@@ -150,6 +150,9 @@ pub trait Issuer {
                 payload.push((Value::Integer(CWT_CLAIM_NOT_BEFORE.into()), nbf.as_secs().into()));
             }
             if params.with_issued_at {
+                #[cfg(not(feature = "test-vectors"))]
+                let iat = now - params.leeway;
+                #[cfg(feature = "test-vectors")]
                 let iat = now;
                 payload.push((Value::Integer(CWT_CLAIM_ISSUED_AT.into()), iat.as_secs().into()));
             }
@@ -545,6 +548,7 @@ mod tests {
 }
 
 #[cfg(any(test, feature = "test-utils"))]
+#[allow(unused)]
 pub mod claims {
     use ciborium::Value;
     use esdicawt_spec::{Select, sd};
