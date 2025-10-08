@@ -92,11 +92,22 @@ impl<S: Status> StatusList<S> {
     /// Note: will only copy the underlying bytes if there is another StatusList with the same content ; this
     /// should rarely happen with large enough lists (except at initialization which is expected).
     #[cfg(feature = "issuer")]
-    pub fn replace(&mut self, index: BitIndex, new: impl Into<S>) -> Option<S> {
+    pub fn set(&mut self, index: BitIndex, new: impl Into<S>) -> Option<S> {
         let mut lst_mut = issuer::LstMut::from(self.lst.clone());
-        let old_status = lst_mut.replace(index, new);
+        let old_status = lst_mut.set(index, new);
         self.lst = lst_mut.into();
         old_status
+    }
+
+    /// Read a status from the list as bit.
+    /// Might panic in case of overflow, prefer [Self::get_raw]
+    pub fn get_raw_unchecked(&self, index: BitIndex) -> S {
+        self.lst.get_raw_unchecked(index)
+    }
+
+    /// Read a status from the list as bit
+    pub fn get_raw(&self, index: BitIndex) -> Option<S> {
+        self.lst.get_raw(index)
     }
 
     pub fn lst(&self) -> &Lst<S> {

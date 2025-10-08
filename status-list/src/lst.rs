@@ -188,7 +188,7 @@ mod tests {
         // there's 0.1% chance this fails, fine :D
         for _ in 0..1000 {
             let idx = lst.next_vacant_bit_index(&mut rng).expect("Did not find a vacant index");
-            assert_eq!(lst.replace(idx, Status::Valid).unwrap(), Status::Undefined);
+            assert_eq!(lst.set(idx, Status::Valid).unwrap(), Status::Undefined);
         }
     }
 }

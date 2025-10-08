@@ -66,7 +66,7 @@ impl<S: Status> LstMut<S> {
 
     /// Replace the bit(s) at the ['index'] given, returning the old index.
     /// Does not do anything if the index is incorrect and returns ['None']
-    pub fn replace(&mut self, index: BitIndex, new: impl Into<S>) -> Option<S> {
+    pub fn set(&mut self, index: BitIndex, new: impl Into<S>) -> Option<S> {
         let bit_offset = Self::bit_offset(index);
         let byte = self.get_byte_mut(index)?;
         let old_byte = *byte;
@@ -123,27 +123,27 @@ mod tests {
     fn should_replace_in_example1() {
         let mut status = LstMut::<RawStatus<1>>::from_vec(vec![0xB9, 0xA3]);
         assert_eq!(status.get_raw_unchecked(0), 1.into());
-        assert_eq!(status.replace(0, 0).unwrap(), 1.into());
+        assert_eq!(status.set(0, 0).unwrap(), 1.into());
         assert_eq!(status.get_raw_unchecked(0), 0.into());
 
         assert_eq!(status.get_raw_unchecked(1), 0.into());
-        assert_eq!(status.replace(1, 1).unwrap(), 0.into());
+        assert_eq!(status.set(1, 1).unwrap(), 0.into());
         assert_eq!(status.get_raw_unchecked(1), 1.into());
 
         assert_eq!(status.get_raw_unchecked(7), 1.into());
-        assert_eq!(status.replace(7, 0).unwrap(), 1.into());
+        assert_eq!(status.set(7, 0).unwrap(), 1.into());
         assert_eq!(status.get_raw_unchecked(7), 0.into());
 
         assert_eq!(status.get_raw_unchecked(8), 1.into());
-        assert_eq!(status.replace(8, 0).unwrap(), 1.into());
+        assert_eq!(status.set(8, 0).unwrap(), 1.into());
         assert_eq!(status.get_raw_unchecked(8), 0.into());
 
         assert_eq!(status.get_raw_unchecked(9), 1.into());
-        assert_eq!(status.replace(9, 0).unwrap(), 1.into());
+        assert_eq!(status.set(9, 0).unwrap(), 1.into());
         assert_eq!(status.get_raw_unchecked(9), 0.into());
 
         assert_eq!(status.get_raw_unchecked(15), 1.into());
-        assert_eq!(status.replace(15, 0).unwrap(), 1.into());
+        assert_eq!(status.set(15, 0).unwrap(), 1.into());
         assert_eq!(status.get_raw_unchecked(15), 0.into());
     }
 
@@ -153,31 +153,31 @@ mod tests {
     fn should_replace_in_example2() {
         let mut status = LstMut::<RawStatus<2>>::from_vec(vec![0xC9, 0x44, 0xF9]);
         assert_eq!(status.get_raw_unchecked(0), 1.into());
-        assert_eq!(status.replace(0, 3).unwrap(), 1.into());
+        assert_eq!(status.set(0, 3).unwrap(), 1.into());
         assert_eq!(status.get_raw_unchecked(0), 3.into());
 
         assert_eq!(status.get_raw_unchecked(1), 2.into());
-        assert_eq!(status.replace(1, 0).unwrap(), 2.into());
+        assert_eq!(status.set(1, 0).unwrap(), 2.into());
         assert_eq!(status.get_raw_unchecked(1), 0.into());
 
         assert_eq!(status.get_raw_unchecked(2), 0.into());
-        assert_eq!(status.replace(2, 2).unwrap(), 0.into());
+        assert_eq!(status.set(2, 2).unwrap(), 0.into());
         assert_eq!(status.get_raw_unchecked(2), 2.into());
 
         assert_eq!(status.get_raw_unchecked(3), 3.into());
-        assert_eq!(status.replace(3, 1).unwrap(), 3.into());
+        assert_eq!(status.set(3, 1).unwrap(), 3.into());
         assert_eq!(status.get_raw_unchecked(3), 1.into());
 
         assert_eq!(status.get_raw_unchecked(4), 0.into());
-        assert_eq!(status.replace(4, 1).unwrap(), 0.into());
+        assert_eq!(status.set(4, 1).unwrap(), 0.into());
         assert_eq!(status.get_raw_unchecked(4), 1.into());
 
         assert_eq!(status.get_raw_unchecked(8), 1.into());
-        assert_eq!(status.replace(8, 2).unwrap(), 1.into());
+        assert_eq!(status.set(8, 2).unwrap(), 1.into());
         assert_eq!(status.get_raw_unchecked(8), 2.into());
 
         assert_eq!(status.get_raw_unchecked(11), 3.into());
-        assert_eq!(status.replace(11, 0).unwrap(), 3.into());
+        assert_eq!(status.set(11, 0).unwrap(), 3.into());
         assert_eq!(status.get_raw_unchecked(11), 0.into());
     }
 

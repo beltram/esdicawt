@@ -626,7 +626,7 @@ mod tests {
         assert!(matches!(err, SdCwtVerifierError::StatusError(SdCwtStatusVerifierError::StatusNotFound(uri)) if uri == status_uri));
 
         // 3. status at index is not valid
-        status_list.replace(64, OauthStatus::Invalid);
+        status_list.set(64, OauthStatus::Invalid);
         let status_token = status_issuer.issue_status_list_token(&status_list, status_list_issuer_params.clone()).unwrap();
         verifier.insert_status_in_cache(&status_uri, status_token.to_cbor_bytes().unwrap());
         let err = verifier
