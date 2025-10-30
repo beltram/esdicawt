@@ -43,13 +43,13 @@ pub fn bit_offset<S: Status>(index: BitIndex) -> u8 {
 /// Read a status from the list as bit.
 /// Might panic in case of overflow, prefer [crate::IntellijRustImportsMock::AnyLst::get_raw]
 #[inline(always)]
-pub fn get_raw_unchecked<S: Status>(status_list: &[u8], index: BitIndex) -> S {
-    get_raw(status_list, index).expect("Byte offset ouf of bounds")
+pub fn get_unchecked<S: Status>(status_list: &[u8], index: BitIndex) -> S {
+    get(status_list, index).expect("Byte offset ouf of bounds")
 }
 
 /// Read a status from the list as bit
 #[inline(always)]
-pub fn get_raw<S: Status>(status_list: &[u8], index: BitIndex) -> Option<S> {
+pub fn get<S: Status>(status_list: &[u8], index: BitIndex) -> Option<S> {
     // offset of the byte we want to read in the byte array.
     // We have to consider the status bit here.
     // For example if it's 2 then there are only 4 status per byte hence the whole byte offset changes
@@ -89,7 +89,7 @@ pub fn next_vacant_bit_index<S: Status + crate::StatusUndefined>(bytes: &[u8], r
             return None;
         }
         let proposed_index = rng.gen_range(0..max);
-        match get_raw::<S>(bytes, proposed_index) {
+        match get::<S>(bytes, proposed_index) {
             Some(s) if s.is_undefined() => return Some(proposed_index),
             _ => i += 1,
         }

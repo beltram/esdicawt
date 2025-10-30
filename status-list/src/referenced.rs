@@ -5,7 +5,7 @@ use crate::BitIndex;
 #[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct StatusClaim {
     #[serde(rename = "status_list")]
-    status_list: StatusListClaim,
+    pub status_list: StatusListClaim,
 }
 
 impl StatusClaim {
@@ -23,9 +23,9 @@ impl StatusClaim {
 #[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct StatusListClaim {
     #[serde(rename = "idx")]
-    idx: BitIndex,
+    pub idx: BitIndex,
     #[serde(rename = "uri")]
-    uri: url::Url,
+    pub uri: url::Url,
 }
 
 #[cfg(test)]

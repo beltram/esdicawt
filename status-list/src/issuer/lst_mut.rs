@@ -54,14 +54,14 @@ impl<S: Status> LstMut<S> {
     }
 
     /// Read a status from the list as bit.
-    /// Might panic in case of overflow, prefer [Self::get_raw]
-    pub fn get_raw_unchecked(&self, index: BitIndex) -> S {
-        crate::inner::get_raw_unchecked::<S>(self.status_list(), index)
+    /// Might panic in case of overflow, prefer [Self::get]
+    pub fn get_unchecked(&self, index: BitIndex) -> S {
+        crate::inner::get_unchecked::<S>(self.status_list(), index)
     }
 
     /// Read a status from the list as bit
-    pub fn get_raw(&self, index: BitIndex) -> Option<S> {
-        crate::inner::get_raw::<S>(self.status_list(), index)
+    pub fn get(&self, index: BitIndex) -> Option<S> {
+        crate::inner::get::<S>(self.status_list(), index)
     }
 
     /// Replace the bit(s) at the ['index'] given, returning the old index.
@@ -122,29 +122,29 @@ mod tests {
     #[wasm_bindgen_test::wasm_bindgen_test]
     fn should_replace_in_example1() {
         let mut status = LstMut::<RawStatus<1>>::from_vec(vec![0xB9, 0xA3]);
-        assert_eq!(status.get_raw_unchecked(0), 1.into());
+        assert_eq!(status.get_unchecked(0), 1.into());
         assert_eq!(status.set(0, 0).unwrap(), 1.into());
-        assert_eq!(status.get_raw_unchecked(0), 0.into());
+        assert_eq!(status.get_unchecked(0), 0.into());
 
-        assert_eq!(status.get_raw_unchecked(1), 0.into());
+        assert_eq!(status.get_unchecked(1), 0.into());
         assert_eq!(status.set(1, 1).unwrap(), 0.into());
-        assert_eq!(status.get_raw_unchecked(1), 1.into());
+        assert_eq!(status.get_unchecked(1), 1.into());
 
-        assert_eq!(status.get_raw_unchecked(7), 1.into());
+        assert_eq!(status.get_unchecked(7), 1.into());
         assert_eq!(status.set(7, 0).unwrap(), 1.into());
-        assert_eq!(status.get_raw_unchecked(7), 0.into());
+        assert_eq!(status.get_unchecked(7), 0.into());
 
-        assert_eq!(status.get_raw_unchecked(8), 1.into());
+        assert_eq!(status.get_unchecked(8), 1.into());
         assert_eq!(status.set(8, 0).unwrap(), 1.into());
-        assert_eq!(status.get_raw_unchecked(8), 0.into());
+        assert_eq!(status.get_unchecked(8), 0.into());
 
-        assert_eq!(status.get_raw_unchecked(9), 1.into());
+        assert_eq!(status.get_unchecked(9), 1.into());
         assert_eq!(status.set(9, 0).unwrap(), 1.into());
-        assert_eq!(status.get_raw_unchecked(9), 0.into());
+        assert_eq!(status.get_unchecked(9), 0.into());
 
-        assert_eq!(status.get_raw_unchecked(15), 1.into());
+        assert_eq!(status.get_unchecked(15), 1.into());
         assert_eq!(status.set(15, 0).unwrap(), 1.into());
-        assert_eq!(status.get_raw_unchecked(15), 0.into());
+        assert_eq!(status.get_unchecked(15), 0.into());
     }
 
     // see https://datatracker.ietf.org/doc/html/draft-ietf-oauth-status-list-11#section-4.1-10
@@ -152,33 +152,33 @@ mod tests {
     #[wasm_bindgen_test::wasm_bindgen_test]
     fn should_replace_in_example2() {
         let mut status = LstMut::<RawStatus<2>>::from_vec(vec![0xC9, 0x44, 0xF9]);
-        assert_eq!(status.get_raw_unchecked(0), 1.into());
+        assert_eq!(status.get_unchecked(0), 1.into());
         assert_eq!(status.set(0, 3).unwrap(), 1.into());
-        assert_eq!(status.get_raw_unchecked(0), 3.into());
+        assert_eq!(status.get_unchecked(0), 3.into());
 
-        assert_eq!(status.get_raw_unchecked(1), 2.into());
+        assert_eq!(status.get_unchecked(1), 2.into());
         assert_eq!(status.set(1, 0).unwrap(), 2.into());
-        assert_eq!(status.get_raw_unchecked(1), 0.into());
+        assert_eq!(status.get_unchecked(1), 0.into());
 
-        assert_eq!(status.get_raw_unchecked(2), 0.into());
+        assert_eq!(status.get_unchecked(2), 0.into());
         assert_eq!(status.set(2, 2).unwrap(), 0.into());
-        assert_eq!(status.get_raw_unchecked(2), 2.into());
+        assert_eq!(status.get_unchecked(2), 2.into());
 
-        assert_eq!(status.get_raw_unchecked(3), 3.into());
+        assert_eq!(status.get_unchecked(3), 3.into());
         assert_eq!(status.set(3, 1).unwrap(), 3.into());
-        assert_eq!(status.get_raw_unchecked(3), 1.into());
+        assert_eq!(status.get_unchecked(3), 1.into());
 
-        assert_eq!(status.get_raw_unchecked(4), 0.into());
+        assert_eq!(status.get_unchecked(4), 0.into());
         assert_eq!(status.set(4, 1).unwrap(), 0.into());
-        assert_eq!(status.get_raw_unchecked(4), 1.into());
+        assert_eq!(status.get_unchecked(4), 1.into());
 
-        assert_eq!(status.get_raw_unchecked(8), 1.into());
+        assert_eq!(status.get_unchecked(8), 1.into());
         assert_eq!(status.set(8, 2).unwrap(), 1.into());
-        assert_eq!(status.get_raw_unchecked(8), 2.into());
+        assert_eq!(status.get_unchecked(8), 2.into());
 
-        assert_eq!(status.get_raw_unchecked(11), 3.into());
+        assert_eq!(status.get_unchecked(11), 3.into());
         assert_eq!(status.set(11, 0).unwrap(), 3.into());
-        assert_eq!(status.get_raw_unchecked(11), 0.into());
+        assert_eq!(status.get_unchecked(11), 0.into());
     }
 
     #[test]

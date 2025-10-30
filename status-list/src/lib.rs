@@ -100,14 +100,14 @@ impl<S: Status> StatusList<S> {
     }
 
     /// Read a status from the list as bit.
-    /// Might panic in case of overflow, prefer [Self::get_raw]
-    pub fn get_raw_unchecked(&self, index: BitIndex) -> S {
-        self.lst.get_raw_unchecked(index)
+    /// Might panic in case of overflow, prefer [Self::get]
+    pub fn get_unchecked(&self, index: BitIndex) -> S {
+        self.lst.get_unchecked(index)
     }
 
     /// Read a status from the list as bit
-    pub fn get_raw(&self, index: BitIndex) -> Option<S> {
-        self.lst.get_raw(index)
+    pub fn get(&self, index: BitIndex) -> Option<S> {
+        self.lst.get(index)
     }
 
     pub fn lst(&self) -> &Lst<S> {

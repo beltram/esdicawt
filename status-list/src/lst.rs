@@ -43,14 +43,14 @@ impl<S: Status> Lst<S> {
     }
 
     /// Read a status from the list as bit.
-    /// Might panic in case of overflow, prefer [Self::get_raw]
-    pub fn get_raw_unchecked(&self, index: BitIndex) -> S {
-        crate::inner::get_raw_unchecked::<S>(self.status_list(), index)
+    /// Might panic in case of overflow, prefer [Self::get]
+    pub fn get_unchecked(&self, index: BitIndex) -> S {
+        crate::inner::get_unchecked::<S>(self.status_list(), index)
     }
 
     /// Read a status from the list as bit
-    pub fn get_raw(&self, index: BitIndex) -> Option<S> {
-        crate::inner::get_raw::<S>(self.status_list(), index)
+    pub fn get(&self, index: BitIndex) -> Option<S> {
+        crate::inner::get::<S>(self.status_list(), index)
     }
 
     /// Highest bit index possible with the current list
@@ -95,22 +95,22 @@ mod tests {
     #[wasm_bindgen_test::wasm_bindgen_test]
     fn example1() {
         let status = Lst::<RawStatus<1>>::from_vec(vec![0xB9, 0xA3]);
-        assert_eq!(status.get_raw_unchecked(0), RawStatus(1));
-        assert_eq!(status.get_raw_unchecked(1), RawStatus(0));
-        assert_eq!(status.get_raw_unchecked(2), RawStatus(0));
-        assert_eq!(status.get_raw_unchecked(3), RawStatus(1));
-        assert_eq!(status.get_raw_unchecked(4), RawStatus(1));
-        assert_eq!(status.get_raw_unchecked(5), RawStatus(1));
-        assert_eq!(status.get_raw_unchecked(6), RawStatus(0));
-        assert_eq!(status.get_raw_unchecked(7), RawStatus(1));
-        assert_eq!(status.get_raw_unchecked(8), RawStatus(1));
-        assert_eq!(status.get_raw_unchecked(9), RawStatus(1));
-        assert_eq!(status.get_raw_unchecked(10), RawStatus(0));
-        assert_eq!(status.get_raw_unchecked(11), RawStatus(0));
-        assert_eq!(status.get_raw_unchecked(12), RawStatus(0));
-        assert_eq!(status.get_raw_unchecked(13), RawStatus(1));
-        assert_eq!(status.get_raw_unchecked(14), RawStatus(0));
-        assert_eq!(status.get_raw_unchecked(15), RawStatus(1));
+        assert_eq!(status.get_unchecked(0), RawStatus(1));
+        assert_eq!(status.get_unchecked(1), RawStatus(0));
+        assert_eq!(status.get_unchecked(2), RawStatus(0));
+        assert_eq!(status.get_unchecked(3), RawStatus(1));
+        assert_eq!(status.get_unchecked(4), RawStatus(1));
+        assert_eq!(status.get_unchecked(5), RawStatus(1));
+        assert_eq!(status.get_unchecked(6), RawStatus(0));
+        assert_eq!(status.get_unchecked(7), RawStatus(1));
+        assert_eq!(status.get_unchecked(8), RawStatus(1));
+        assert_eq!(status.get_unchecked(9), RawStatus(1));
+        assert_eq!(status.get_unchecked(10), RawStatus(0));
+        assert_eq!(status.get_unchecked(11), RawStatus(0));
+        assert_eq!(status.get_unchecked(12), RawStatus(0));
+        assert_eq!(status.get_unchecked(13), RawStatus(1));
+        assert_eq!(status.get_unchecked(14), RawStatus(0));
+        assert_eq!(status.get_unchecked(15), RawStatus(1));
     }
 
     // see https://datatracker.ietf.org/doc/html/draft-ietf-oauth-status-list-11#section-4.1-10
@@ -118,18 +118,18 @@ mod tests {
     #[wasm_bindgen_test::wasm_bindgen_test]
     fn example2() {
         let status = Lst::<RawStatus<2>>::from_vec(vec![0xC9, 0x44, 0xF9]);
-        assert_eq!(status.get_raw_unchecked(0), RawStatus(1));
-        assert_eq!(status.get_raw_unchecked(1), RawStatus(2));
-        assert_eq!(status.get_raw_unchecked(2), RawStatus(0));
-        assert_eq!(status.get_raw_unchecked(3), RawStatus(3));
-        assert_eq!(status.get_raw_unchecked(4), RawStatus(0));
-        assert_eq!(status.get_raw_unchecked(5), RawStatus(1));
-        assert_eq!(status.get_raw_unchecked(6), RawStatus(0));
-        assert_eq!(status.get_raw_unchecked(7), RawStatus(1));
-        assert_eq!(status.get_raw_unchecked(8), RawStatus(1));
-        assert_eq!(status.get_raw_unchecked(9), RawStatus(2));
-        assert_eq!(status.get_raw_unchecked(10), RawStatus(3));
-        assert_eq!(status.get_raw_unchecked(11), RawStatus(3));
+        assert_eq!(status.get_unchecked(0), RawStatus(1));
+        assert_eq!(status.get_unchecked(1), RawStatus(2));
+        assert_eq!(status.get_unchecked(2), RawStatus(0));
+        assert_eq!(status.get_unchecked(3), RawStatus(3));
+        assert_eq!(status.get_unchecked(4), RawStatus(0));
+        assert_eq!(status.get_unchecked(5), RawStatus(1));
+        assert_eq!(status.get_unchecked(6), RawStatus(0));
+        assert_eq!(status.get_unchecked(7), RawStatus(1));
+        assert_eq!(status.get_unchecked(8), RawStatus(1));
+        assert_eq!(status.get_unchecked(9), RawStatus(2));
+        assert_eq!(status.get_unchecked(10), RawStatus(3));
+        assert_eq!(status.get_unchecked(11), RawStatus(3));
     }
 
     #[test]
