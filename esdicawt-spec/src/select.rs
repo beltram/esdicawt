@@ -53,6 +53,9 @@ impl<T: std::fmt::Debug + CwtAny + Clone> SelectExt for T {}
 
 impl Select for Value {}
 
+/// Useful when an issuer is reused as a StatusListIssuer
+impl Select for () {}
+
 /// Indicates that a mapping claim or an array element must be redacted by the issuer
 #[macro_export]
 macro_rules! sd {
