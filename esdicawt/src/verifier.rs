@@ -292,7 +292,8 @@ pub trait VerifierWithStatus: Verifier {
 
         // Read the StatusClaim from the SD-CWT to know where to fetch the Status from
         // Note: no StatusList for the SD-KBT as it is self-issued by a Holder
-        let (idx, status_url) = sd_cwt_payload.inner.status.get();
+        let idx = sd_cwt_payload.inner.status.status_list.idx;
+        let status_url = &sd_cwt_payload.inner.status.status_list.uri;
         // we then ask the Verifier to resolve the Status, so either:
         // - get it from a local in-memory cache
         // - get it from a database in case it was already set by another thread
@@ -318,7 +319,7 @@ pub trait VerifierWithStatus: Verifier {
             return Err(SdCwtStatusVerifierError::IndexOutOfBounds(status_url.clone()).into());
         }
 
-        let Some(status) = status_token.status_list.lst().get_raw(idx) else {
+        let Some(status) = status_token.status_list.lst().get(idx) else {
             return Err(SdCwtStatusVerifierError::StatusIndexNotFound(idx, status_url.clone()).into());
         };
 
