@@ -20,7 +20,7 @@ pub const COSE_SD_KBT: i64 = 18;
 
 /// Used for redacted claims in an array
 /// TODO: Pending IANA registration. Later on we should get it via coset
-pub const REDACTED_CLAIM_ELEMENT_TAG: u64 = 59;
+pub const REDACTED_CLAIM_ELEMENT_TAG: u64 = 60;
 pub const TO_BE_REDACTED_TAG: u64 = 58;
 
 pub const CWT_CLAIM_ALG: i64 = 1;
