@@ -1,3 +1,4 @@
+use crate::spec::reexports::coset;
 use crate::{
     HolderParams, HolderValidationParams, SdCwtHolderError, SdCwtHolderValidationError,
     holder::validation::validate_disclosures,
@@ -6,11 +7,10 @@ use crate::{
         CustomClaims, CwtAny, NoClaims, Select,
         issuance::SdCwtIssuedTagged,
         key_binding::{KbtCwtTagged, KbtPayload, KbtProtected, KbtUnprotected},
-        reexports::coset::{
-            CoseSign1, TaggedCborSerializable, {self},
-        },
     },
 };
+use coset::{AsCborValue, TaggedCborSerializable};
+
 use ciborium::Value;
 use cose_key_confirmation::{KeyConfirmation, error::CoseKeyConfirmationError};
 
@@ -82,7 +82,7 @@ pub trait Holder {
         params: HolderValidationParams,
         keyset: &cose_key_set::CoseKeySet,
     ) -> Result<SdCwtVerified<Self::IssuerPayloadClaims, Self::Hasher, Self::IssuerProtectedClaims, Self::IssuerUnprotectedClaims>, SdCwtHolderError<Self::Error>> {
-        let cose_sign1_sd_cwt = CoseSign1::from_tagged_slice(sd_cwt)?;
+        let cose_sign1_sd_cwt = coset::CoseSign1::from_tagged_slice(sd_cwt)?;
 
         validate_signature(&cose_sign1_sd_cwt, keyset)?;
 
@@ -241,9 +241,8 @@ pub trait Holder {
                 let signature = self.signer().try_sign(tbs)?;
                 Result::<_, signature::Error>::Ok(signature.to_bytes().as_ref().to_vec())
             })?
-            .build()
-            .to_tagged_vec()?;
-        Ok(sign1)
+            .build();
+        Ok(Value::Tag(coset::CoseSign1::TAG, Box::new(sign1.to_cbor_value()?)).to_cbor_cde_bytes()?)
     }
 
     /// Simple API when a holder wants all the redacted claims to be disclosed to the Verifier
@@ -417,7 +416,7 @@ mod tests {
         };
         let sd_cwt = holder.verify_sd_cwt(&sd_cwt, Default::default(), &CoseKeySet::new(&issuer_signing_key).unwrap()).unwrap();
         let sd_kbt_bytes = holder.new_presentation(sd_cwt, presentation_params).unwrap().to_cbor_bytes().unwrap();
-        let raw_sd_kbt = CoseSign1::from_tagged_slice(&sd_kbt_bytes).unwrap();
+        let raw_sd_kbt = coset::CoseSign1::from_tagged_slice(&sd_kbt_bytes).unwrap();
         let payload = Value::from_cbor_bytes(&raw_sd_kbt.payload.unwrap()).unwrap().into_map().unwrap();
 
         for entry in payload {

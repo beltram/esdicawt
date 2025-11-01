@@ -238,6 +238,14 @@ pub(crate) trait CborAny: serde::Serialize + for<'de> serde::Deserialize<'de> + 
     }
 
     #[allow(dead_code)]
+    /// Uses CBOR Canonical encoding (CDE)
+    fn to_cbor_cde_bytes(&self) -> StatusListResult<Vec<u8>> {
+        let mut buf = vec![];
+        ciborium::value::canonical_into_writer(self, &mut buf)?;
+        Ok(buf)
+    }
+
+    #[allow(dead_code)]
     fn from_cbor_bytes(bytes: &[u8]) -> StatusListResult<Self>
     where
         Self: Sized,
