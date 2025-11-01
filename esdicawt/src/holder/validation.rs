@@ -40,6 +40,8 @@ pub enum SdCwtHolderValidationError<CustomError: Send + Sync> {
     SignatureError(#[from] signature::Error),
     #[error(transparent)]
     CoseKeyError(#[from] cose_key::CoseKeyError),
+    #[error("The type of Key Confirmation in the SD-CWT is not supported")]
+    UnsupportedKeyConfirmation,
     #[error("Signature encoding error")]
     SignatureEncodingError,
     #[error("{0}")]

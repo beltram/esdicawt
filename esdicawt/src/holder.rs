@@ -1,18 +1,18 @@
 use crate::{
-    HolderParams, HolderValidationParams, SdCwtHolderError, SdCwtHolderValidationError,
-    holder::validation::validate_disclosures,
-    signature_verifier::validate_signature,
-    spec::{
-        CustomClaims, CwtAny, NoClaims, Select,
-        issuance::SdCwtIssuedTagged,
-        key_binding::{KbtCwtTagged, KbtPayload, KbtProtected, KbtUnprotected},
-        reexports::coset::{
+    holder::validation::validate_disclosures, signature_verifier::validate_signature, spec::{
+        issuance::SdCwtIssuedTagged, key_binding::{KbtCwtTagged, KbtPayload, KbtProtected, KbtUnprotected}, reexports::coset::{
             CoseSign1, TaggedCborSerializable, {self},
-        },
-    },
+        }, CustomClaims,
+        CwtAny,
+        NoClaims,
+        Select,
+    }, HolderParams,
+    HolderValidationParams,
+    SdCwtHolderError,
+    SdCwtHolderValidationError,
 };
 use ciborium::Value;
-use cose_key_confirmation::{KeyConfirmation, error::CoseKeyConfirmationError};
+use cose_key_confirmation::KeyConfirmation;
 
 pub mod error;
 pub mod params;
@@ -31,7 +31,11 @@ pub trait Holder {
     type Signer: signature::Signer<Self::Signature> + pkcs8::DecodePrivateKey;
 
     type Signature: signature::SignatureEncoding;
-    type Verifier: signature::Verifier<Self::Signature> + PartialEq + for<'a> TryFrom<&'a KeyConfirmation, Error = CoseKeyConfirmationError>;
+    type Verifier: signature::Verifier<Self::Signature>
+        + Clone
+        + PartialEq
+        + TryInto<cose_key::CoseKey, Error = cose_key::CoseKeyError>
+        + for<'a> TryFrom<&'a cose_key::CoseKey, Error = cose_key::CoseKeyError>;
 
     type IssuerPayloadClaims: Select;
     type IssuerProtectedClaims: CustomClaims;
@@ -141,11 +145,27 @@ pub trait Holder {
         }
 
         // key confirmation
-        let expected = self.verifier();
-        let actual: Self::Verifier = (&payload.cnf).try_into()?;
-        if actual != *expected {
-            return Err(SdCwtHolderError::ValidationError(SdCwtHolderValidationError::VerifyingKeyMismatch));
-        }
+        let expected_verifier = self.verifier();
+
+        match &payload.cnf {
+            KeyConfirmation::CoseKey(cose_key) => {
+                let cose_key_cnf: cose_key::CoseKey = self.verifier().clone().try_into().unwrap();
+                if &cose_key_cnf != cose_key {
+                    return Err(SdCwtHolderError::ValidationError(SdCwtHolderValidationError::VerifyingKeyMismatch));
+                }
+            }
+            #[cfg(feature = "thumbprint")]
+            KeyConfirmation::Thumbprint(thumbprint) => {
+                /*let expected_thumbprint = CoseKeyThumbprint::<32>::compute::<sha2::Sha256>(expected_verifier)?;
+                if &expected_thumbprint != thumbprint {
+                    return Err(SdCwtHolderError::ValidationError(SdCwtHolderValidationError::VerifyingKeyMismatch));
+                }*/
+                todo!()
+            }
+            KeyConfirmation::EncryptedCoseKey(_) | KeyConfirmation::Kid(_) => {
+                return Err(SdCwtHolderError::ValidationError(SdCwtHolderValidationError::UnsupportedKeyConfirmation));
+            }
+        };
 
         // validate disclosure
         let disclosures = sd_cwt.0.disclosures();
@@ -285,12 +305,12 @@ impl<PayloadClaims: Select, Hasher: digest::Digest + Clone, ProtectedClaims: Cus
 #[cfg(test)]
 mod tests {
     use super::{claims::CustomTokenClaims, test_utils::Ed25519Holder, *};
-    use crate::{CwtStdLabel, Issuer, IssuerParams, Presentation, StatusParams, TimeArg, holder::params::CborPath, issuer::test_utils::Ed25519Issuer};
+    use crate::{holder::params::CborPath, issuer::test_utils::Ed25519Issuer, CwtStdLabel, Issuer, IssuerParams, Presentation, StatusParams, TimeArg};
     use ciborium::cbor;
     use cose_key_set::CoseKeySet;
     use esdicawt_spec::{
-        ClaimName, NoClaims,
-        blinded_claims::{Salted, SaltedClaim},
+        blinded_claims::{Salted, SaltedClaim}, ClaimName,
+        NoClaims,
     };
     use std::collections::HashMap;
 
@@ -464,7 +484,7 @@ mod tests {
 #[cfg(test)]
 pub mod claims {
     use ciborium::Value;
-    use esdicawt_spec::{Select, sd};
+    use esdicawt_spec::{sd, Select};
     use std::collections::HashMap;
 
     #[derive(Default, Debug, Clone, PartialEq, serde::Serialize)]
@@ -525,7 +545,7 @@ pub mod claims {
 
 #[cfg(feature = "test-utils")]
 pub mod test_utils {
-    use crate::spec::{CustomClaims, NoClaims, Select, reexports::coset};
+    use crate::spec::{reexports::coset, CustomClaims, NoClaims, Select};
 
     #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
     pub struct Ed25519Holder<DisclosedClaims: CustomClaims, KbtClaims: CustomClaims> {

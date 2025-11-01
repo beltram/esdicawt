@@ -127,21 +127,15 @@ pub trait Verifier {
 
                         #[cfg(feature = "ed25519")]
                         {
-                            let cose_key: cose_key::CoseKey = hvk.clone().try_into().map_err(SdCwtVerifierError::from)?;
-                            let computed_thumbprint = cose_key_thumbprint::CoseKeyThumbprint::<32>::compute::<sha2::Sha256>(cose_key).map_err(SdCwtVerifierError::from)?;
+                            let computed_thumbprint = cose_key_thumbprint::CoseKeyThumbprint::<32>::compute::<sha2::Sha256>(hvk.clone())?;
+                            if &computed_thumbprint != thumbprint {
+                                return Err(SdCwtVerifierError::UnexpectedKeyConfirmation);
+                            }
+                            Cow::Borrowed(hvk)
                         }
-                        // #[cfg(feature = "ed25519")]
-                        // let computed_thumbprint = cose_key_thumbprint::CoseKeyThumbprint::<32>::compute::<sha2::Sha256>(hvk).map_err(SdCwtVerifierError::from)?;
-                        /*
-                        #[cfg(feature = "ed25519")]
-                        if &computed_thumbprint != thumbprint {
-                            return Err(SdCwtVerifierError::UnexpectedKeyConfirmation);
-                        }*/
-                        Cow::Borrowed(hvk)
                     }
                     _ => return Err(SdCwtVerifierError::UnsupportedAlgorithm),
                 }
-                // CoseKeyThumbprint
             }
             KeyConfirmation::EncryptedCoseKey(_) | KeyConfirmation::Kid(_) => return Err(SdCwtVerifierError::UnsupportedKeyConfirmation),
         };
@@ -152,14 +146,6 @@ pub trait Verifier {
             let signature = Self::HolderSignature::try_from(signature).map_err(|_| SdCwtVerifierError::SignatureEncodingError)?;
             holder_confirmation_key.verify(raw_data, &signature).map_err(SdCwtVerifierError::from)
         })?;
-
-        /*// verify confirmation key advertised in the KBT matches the expected one if supplied
-        if let Some(hvk) = holder_verifier {
-            let key_confirmation: Self::HolderVerifier = key_confirmation.try_into()?;
-            if key_confirmation != *hvk {
-                return Err(SdCwtVerifierError::UnexpectedKeyConfirmation);
-            }
-        }*/
 
         let kbt_payload = kbt.0.payload.to_value()?;
 
@@ -393,7 +379,9 @@ mod tests {
         VerifierParams,
     };
     use ciborium::{cbor, Value};
+    use cose_key_confirmation::KeyConfirmation;
     use cose_key_set::CoseKeySet;
+    use cose_key_thumbprint::CoseKeyThumbprint;
     use esdicawt_spec::{verified::KbtCwtVerified, CustomClaims, CwtAny, NoClaims, Select};
     use status_list::{issuer::StatusListIssuerParams, OauthStatus, StatusList};
 
@@ -405,6 +393,24 @@ mod tests {
         let payload = CustomTokenClaims { name: Some("Alice Smith".into()) };
         let holder_signing_key = ed25519_dalek::SigningKey::generate(&mut rand::thread_rng());
         let issuer_params = default_issuer_params(Some(payload), &holder_signing_key);
+        let verified = verify(issuer_params, default_holder_params::<NoClaims>(), &holder_signing_key);
+
+        assert_eq!(verified.claimset.as_ref().unwrap().name.as_deref(), Some("Alice Smith"));
+        assert_eq!(verified.sd_cwt().payload.subject, Some("https://example.com/u/alice.smith".into()));
+
+        // should work without disclosures
+        let issuer_params = default_issuer_params(None::<Value>, &holder_signing_key);
+        verify(issuer_params, default_holder_params::<NoClaims>(), &holder_signing_key);
+    }
+
+    #[test]
+    #[wasm_bindgen_test::wasm_bindgen_test]
+    fn should_verify_valid_sd_cwt_with_thumbprint_cnf() {
+        let payload = CustomTokenClaims { name: Some("Alice Smith".into()) };
+        let holder_signing_key = ed25519_dalek::SigningKey::generate(&mut rand::thread_rng());
+        let mut issuer_params = default_issuer_params(Some(payload), &holder_signing_key);
+        let thumbprint = CoseKeyThumbprint::<32>::compute::<sha2::Sha256>(&holder_signing_key).unwrap();
+        issuer_params.holder_confirmation_key = KeyConfirmation::Thumbprint(thumbprint);
         let verified = verify(issuer_params, default_holder_params::<NoClaims>(), &holder_signing_key);
 
         assert_eq!(verified.claimset.as_ref().unwrap().name.as_deref(), Some("Alice Smith"));
