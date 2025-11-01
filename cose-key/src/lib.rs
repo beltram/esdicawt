@@ -144,27 +144,33 @@ pub mod ed25519 {
     }
 
     /// See https://datatracker.ietf.org/doc/html/rfc8152#section-8.2
-    impl From<&ed25519_dalek::VerifyingKey> for CoseKey {
-        fn from(pk: &ed25519_dalek::VerifyingKey) -> Self {
-            Self(
+    impl TryFrom<&ed25519_dalek::VerifyingKey> for CoseKey {
+        type Error = CoseKeyError;
+
+        fn try_from(pk: &ed25519_dalek::VerifyingKey) -> Result<Self, Self::Error> {
+            Ok(Self(
                 coset::CoseKeyBuilder::new_okp_key()
                     .algorithm(iana::Algorithm::EdDSA)
                     .param(iana::OkpKeyParameter::X.to_i64(), ciborium::Value::Bytes(pk.as_bytes().into()))
                     .param(iana::OkpKeyParameter::Crv.to_i64(), ciborium::Value::Integer(iana::EllipticCurve::Ed25519.to_i64().into()))
                     .build(),
-            )
+            ))
         }
     }
 
-    impl From<ed25519_dalek::VerifyingKey> for CoseKey {
-        fn from(pk: ed25519_dalek::VerifyingKey) -> Self {
-            (&pk).into()
+    impl TryFrom<ed25519_dalek::VerifyingKey> for CoseKey {
+        type Error = CoseKeyError;
+
+        fn try_from(pk: ed25519_dalek::VerifyingKey) -> Result<Self, Self::Error> {
+            (&pk).try_into()
         }
     }
 
-    impl From<&ed25519_dalek::SigningKey> for CoseKey {
-        fn from(sk: &ed25519_dalek::SigningKey) -> Self {
-            sk.verifying_key().into()
+    impl TryFrom<&ed25519_dalek::SigningKey> for CoseKey {
+        type Error = CoseKeyError;
+
+        fn try_from(sk: &ed25519_dalek::SigningKey) -> Result<Self, Self::Error> {
+            sk.verifying_key().try_into()
         }
     }
 
@@ -579,7 +585,7 @@ mod tests {
     fn from_public_key_pem_should_succeed() {
         // Ed25519
         let vk = ed25519_dalek::SigningKey::generate(&mut rand::thread_rng()).verifying_key();
-        let ck = CoseKey::from(&vk);
+        let ck = CoseKey::try_from(&vk).unwrap();
 
         let pem = vk.to_public_key_pem(LF).unwrap();
         let ck_pem = CoseKey::from_public_key_pem::<ed25519_dalek::VerifyingKey, _>(&pem).unwrap();

@@ -159,7 +159,7 @@ mod ed25519 {
         type Error = error::CoseKeyConfirmationError;
 
         fn try_from(pk: &ed25519_dalek::VerifyingKey) -> Result<Self, Self::Error> {
-            Ok(Self::CoseKey(cose_key::CoseKey::from(pk)))
+            Ok(Self::CoseKey(cose_key::CoseKey::try_from(pk)?))
         }
     }
 

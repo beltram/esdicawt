@@ -31,6 +31,7 @@ pub trait Verifier {
         + Clone
         + PartialEq
         + for<'a> TryFrom<&'a cose_key::CoseKey, Error = cose_key::CoseKeyError>
+        + TryInto<cose_key::CoseKey, Error = cose_key::CoseKeyError>
         + for<'a> TryFrom<&'a KeyConfirmation, Error = CoseKeyConfirmationError>;
 
     type IssuerProtectedClaims: CustomClaims;
@@ -124,8 +125,13 @@ pub trait Verifier {
                         #[cfg(not(feature = "ed25519"))]
                         return Err(SdCwtVerifierError::MissingFeaturesVerifyingCoseKeyThumbprint("ed25519"));
 
-                        /*#[cfg(feature = "ed25519")]
-                        let computed_thumbprint = CoseKeyThumbprint::<32>::compute::<sha2::Sha256, _>(hvk).map_err(SdCwtVerifierError::from)?;
+                        // #[cfg(feature = "ed25519")]
+                        // let cose_key: cose_key::CoseKey = hvk.clone().try_into().map_err(SdCwtVerifierError::from)?;
+                        #[cfg(feature = "ed25519")]
+                        let computed_thumbprint = cose_key_thumbprint::CoseKeyThumbprint::<32>::compute::<sha2::Sha256>(hvk).map_err(SdCwtVerifierError::from)?;
+                        // let computed_thumbprint = cose_key_thumbprint::CoseKeyThumbprint::<32>::compute::<sha2::Sha256>(hvk).map_err(SdCwtVerifierError::from)?;
+                        /*
+                        #[cfg(feature = "ed25519")]
                         if &computed_thumbprint != thumbprint {
                             return Err(SdCwtVerifierError::UnexpectedKeyConfirmation);
                         }*/
