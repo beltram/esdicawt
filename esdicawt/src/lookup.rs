@@ -89,9 +89,8 @@ where
                         {
                             // if we found an element with a matching claim name, check that it is present in the payload's
                             // redacted claim keys list
-                            let mut cbor = vec![];
-                            ciborium::into_writer(&sc, &mut cbor)?;
-                            let hashed: Value = Hasher::digest(cbor.clone()).to_vec().into();
+                            #[allow(deprecated)]
+                            let hashed: Value = Hasher::digest(&sc.to_cbor_bytes()?).as_slice().into();
 
                             if rcks.contains(&hashed) {
                                 // TODO: try removing this clone
@@ -108,16 +107,15 @@ where
                 }
             }
         }
-        Some(QueryElement::Index(index)) => match payload.as_array().and_then(|v| v.get(*index)).cloned() {
+        Some(QueryElement::Index(index)) => match payload.as_array().and_then(|v| v.get(*index)) {
             Some(Value::Tag(REDACTED_CLAIM_ELEMENT_TAG, value)) => {
                 let mut found = None;
 
                 for salted in array.iter().flatten() {
                     if let Salted::Element(sc) = salted {
-                        let mut cbor = vec![];
-                        ciborium::into_writer(&sc, &mut cbor)?;
-                        let hashed: Value = Hasher::digest(cbor.clone()).to_vec().into();
-                        if *value == hashed {
+                        #[allow(deprecated)]
+                        let hashed: Value = Hasher::digest(sc.to_cbor_bytes()?).as_slice().into();
+                        if **value == hashed {
                             // TODO: try removing this clone
                             found = Some(sc.value.clone());
                         }
@@ -129,7 +127,7 @@ where
                     None => return Ok(None),
                 }
             }
-            Some(v) => v,
+            Some(v) => v.clone(),
             None => return Ok(None),
         },
         None => return Ok(None),
@@ -159,7 +157,7 @@ impl<PayloadClaims: Select, Hasher: digest::Digest + Clone, ProtectedClaims: Cus
     for SdCwtIssued<PayloadClaims, Hasher, ProtectedClaims, UnprotectedClaims>
 {
     fn query(&mut self, token_query: Query) -> EsdicawtSpecResult<Option<Value>> {
-        let payload = Value::from_cbor_bytes(self.payload.to_bytes()?)?;
+        let payload = self.payload.to_value()?.to_cbor_value()?;
         self.disclosures_mut()
             .map(|d| query_inner::<Hasher>(d, &payload, &token_query.elements))
             .unwrap_or(Ok(None))
@@ -170,7 +168,7 @@ impl<PayloadClaims: Select, Hasher: digest::Digest + Clone, ProtectedClaims: Cus
     for SdCwtVerified<PayloadClaims, Hasher, ProtectedClaims, UnprotectedClaims>
 {
     fn query(&mut self, token_query: Query) -> EsdicawtSpecResult<Option<Value>> {
-        let payload = Value::from_cbor_bytes(self.0.0.payload.to_bytes()?)?;
+        let payload = self.0.0.payload.to_value()?.to_cbor_value()?;
         self.0
             .0
             .disclosures_mut()
