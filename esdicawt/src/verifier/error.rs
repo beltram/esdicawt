@@ -29,6 +29,8 @@ pub enum SdCwtVerifierError<CustomError: Send + Sync> {
     #[error(transparent)]
     CoseKeyError(#[from] cose_key::CoseKeyError),
     #[error(transparent)]
+    CoseKeyThumbprintError(#[from] cose_key_thumbprint::CoseKeyThumbprintError),
+    #[error(transparent)]
     SpecError(#[from] esdicawt_spec::EsdicawtSpecError),
     #[error("Invalid SD-CWT")]
     InvalidSdCwt,
