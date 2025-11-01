@@ -1,6 +1,5 @@
 mod codec;
 mod error;
-pub(crate) mod utils;
 
 use ciborium::Value;
 use coset::{Algorithm, KeyOperation, KeyType, Label, iana, iana::EnumI64};
@@ -148,8 +147,8 @@ pub mod ed25519 {
             Self(
                 coset::CoseKeyBuilder::new_okp_key()
                     .algorithm(iana::Algorithm::EdDSA)
-                    .param(iana::OkpKeyParameter::X.to_i64(), ciborium::Value::Bytes(pk.as_bytes().into()))
-                    .param(iana::OkpKeyParameter::Crv.to_i64(), ciborium::Value::Integer(iana::EllipticCurve::Ed25519.to_i64().into()))
+                    .param(iana::OkpKeyParameter::X.to_i64(), Value::Bytes(pk.as_bytes().into()))
+                    .param(iana::OkpKeyParameter::Crv.to_i64(), Value::Integer(iana::EllipticCurve::Ed25519.to_i64().into()))
                     .build(),
             )
         }
@@ -190,7 +189,7 @@ pub mod ed25519 {
             }
 
             // verify curve
-            let Some((_, ciborium::Value::Integer(crv))) = params.iter().find(|(k, _)| k == &coset::Label::Int(iana::OkpKeyParameter::Crv.to_i64())) else {
+            let Some((_, Value::Integer(crv))) = params.iter().find(|(k, _)| k == &Label::Int(iana::OkpKeyParameter::Crv.to_i64())) else {
                 return Err(CoseKeyError::MissingCrv);
             };
             let crv: i64 = (*crv).try_into().map_err(CoseKeyError::InvalidCborIntegerClaimKey)?;
@@ -200,7 +199,7 @@ pub mod ed25519 {
             }
 
             // read x
-            let Some((_, ciborium::Value::Bytes(x))) = params.iter().find(|(k, _)| k == &coset::Label::Int(iana::OkpKeyParameter::X.to_i64())) else {
+            let Some((_, Value::Bytes(x))) = params.iter().find(|(k, _)| k == &Label::Int(iana::OkpKeyParameter::X.to_i64())) else {
                 return Err(CoseKeyError::MissingPoint("Missing 'x' claim"));
             };
             let x = x[..].try_into().map_err(|_| CoseKeyError::InvalidKeyLength(ed25519_dalek::PUBLIC_KEY_LENGTH, x.len()))?;
@@ -297,7 +296,7 @@ pub mod ec_p256 {
             }
 
             // verify curve
-            let Some((_, ciborium::Value::Integer(crv))) = params.iter().find(|(k, _)| k == &coset::Label::Int(iana::Ec2KeyParameter::Crv.to_i64())) else {
+            let Some((_, Value::Integer(crv))) = params.iter().find(|(k, _)| k == &Label::Int(iana::Ec2KeyParameter::Crv.to_i64())) else {
                 return Err(CoseKeyError::MissingCrv);
             };
             let crv: i64 = (*crv).try_into().map_err(CoseKeyError::InvalidCborIntegerClaimKey)?;
@@ -307,11 +306,11 @@ pub mod ec_p256 {
             }
 
             // read x & y
-            let Some((_, ciborium::Value::Bytes(x))) = params.iter().find(|(k, _)| k == &coset::Label::Int(iana::Ec2KeyParameter::X.to_i64())) else {
+            let Some((_, Value::Bytes(x))) = params.iter().find(|(k, _)| k == &Label::Int(iana::Ec2KeyParameter::X.to_i64())) else {
                 return Err(CoseKeyError::MissingPoint("Missing 'x' claim"));
             };
 
-            let Some((_, ciborium::Value::Bytes(y))) = params.iter().find(|(k, _)| k == &coset::Label::Int(iana::Ec2KeyParameter::Y.to_i64())) else {
+            let Some((_, Value::Bytes(y))) = params.iter().find(|(k, _)| k == &Label::Int(iana::Ec2KeyParameter::Y.to_i64())) else {
                 return Err(CoseKeyError::MissingPoint("Missing 'y' claim"));
             };
 
@@ -447,7 +446,7 @@ pub mod ec_p384 {
             }
 
             // verify curve
-            let Some((_, ciborium::Value::Integer(crv))) = params.iter().find(|(k, _)| k == &coset::Label::Int(iana::Ec2KeyParameter::Crv.to_i64())) else {
+            let Some((_, Value::Integer(crv))) = params.iter().find(|(k, _)| k == &Label::Int(iana::Ec2KeyParameter::Crv.to_i64())) else {
                 return Err(CoseKeyError::MissingCrv);
             };
             let crv: i64 = (*crv).try_into().map_err(CoseKeyError::InvalidCborIntegerClaimKey)?;
@@ -457,11 +456,11 @@ pub mod ec_p384 {
             }
 
             // read x & y
-            let Some((_, ciborium::Value::Bytes(x))) = params.iter().find(|(k, _)| k == &coset::Label::Int(iana::Ec2KeyParameter::X.to_i64())) else {
+            let Some((_, Value::Bytes(x))) = params.iter().find(|(k, _)| k == &Label::Int(iana::Ec2KeyParameter::X.to_i64())) else {
                 return Err(CoseKeyError::MissingPoint("Missing 'x' claim"));
             };
 
-            let Some((_, ciborium::Value::Bytes(y))) = params.iter().find(|(k, _)| k == &coset::Label::Int(iana::Ec2KeyParameter::Y.to_i64())) else {
+            let Some((_, Value::Bytes(y))) = params.iter().find(|(k, _)| k == &Label::Int(iana::Ec2KeyParameter::Y.to_i64())) else {
                 return Err(CoseKeyError::MissingPoint("Missing 'y' claim"));
             };
 
