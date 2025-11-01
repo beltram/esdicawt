@@ -373,7 +373,7 @@ fn nested_test_vectors() {
         },
     };
 
-    let spec_sd_cwt_bytes = include_bytes!("../../draft-ietf-spice-sd-cwt/examples/issuer_nested_cwt.cbor");
+    let spec_sd_cwt_bytes = include_bytes!("../../draft-ietf-spice-sd-cwt/examples/nested_issuer_cwt.cbor");
     let spec_sd_kbt_bytes = include_bytes!("../../draft-ietf-spice-sd-cwt/examples/nested_kbt.cbor");
 
     test_vectors::<NestedPayload>(
@@ -501,8 +501,8 @@ fn test_vectors<P: Select>(payload: P, spec_sd_cwt_bytes: &[u8], spec_sd_kbt_byt
 
     let params = HolderParams {
         presentation: Default::default(),
-        audience: "https://verifier.example",
-        cnonce: None,
+        audience: "https://verifier.example/app",
+        cnonce: Some(&hex::decode("8c0f5f523b95bea44a9a48c649240803").unwrap()),
         expiry: None,
         with_not_before: false,
         artificial_time: Some(core::time::Duration::from_secs(NOW + 37)),
