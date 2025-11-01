@@ -20,6 +20,7 @@ subtle.workspace = true
 serde_bytes.workspace = true
 
 [dev-dependencies]
+cose-key-thumbprint = { workspace = true, features = ["ed25519", "p256", "p384"] }
 ciborium.workspace = true
 sha2.workspace = true
 ed25519-dalek = { workspace = true, features = ["rand_core", "pem"] }

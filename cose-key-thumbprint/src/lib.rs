@@ -1,5 +1,5 @@
 use ciborium::Value;
-use cose_key::CborDeterministicEncoded;
+use cose_key::{CborDeterministicEncoded, CoseKey};
 
 mod error;
 
@@ -43,11 +43,26 @@ macro_rules! thumbprint_compute {
         impl CoseKeyThumbprint<$length> {
             /// Will hash either a [cose_key::CoseKey] or a verifying key (ed25519, p256, p384 all
             /// supported via features) with the provided hasher
-            pub fn compute<Hasher>(key: impl TryInto<cose_key::CoseKey, Error: Into<error::CoseKeyThumbprintError>>) -> Result<Self, error::CoseKeyThumbprintError>
+            pub fn compute<Hasher, K>(key: &K) -> Result<Self, error::CoseKeyThumbprintError>
+            where
+                for<'a> &'a K: TryInto<cose_key::CoseKey, Error = cose_key::CoseKeyError>,
+                Hasher: digest::Digest + digest::OutputSizeUser<OutputSize = $size>,
+            {
+                let key: cose_key::CoseKey = key.try_into()?;
+                let cbor_encoded = Self::_compute(&key)?;
+
+                // Hash the bytes produced in step 2 with a cryptographic hash function H
+                // see https://datatracker.ietf.org/doc/html/rfc9679#section-3-2.3.1
+                let hash = Hasher::digest(&cbor_encoded[..]);
+
+                Ok(Self(hash.into()))
+            }
+
+            pub fn compute_cose_key<Hasher>(key: cose_key::CoseKey) -> Result<Self, error::CoseKeyThumbprintError>
             where
                 Hasher: digest::Digest + digest::OutputSizeUser<OutputSize = $size>,
             {
-                let cbor_encoded = Self::_compute(key)?;
+                let cbor_encoded = Self::_compute(&key)?;
 
                 // Hash the bytes produced in step 2 with a cryptographic hash function H
                 // see https://datatracker.ietf.org/doc/html/rfc9679#section-3-2.3.1
@@ -64,10 +79,9 @@ thumbprint_compute!(48, digest::typenum::U48);
 thumbprint_compute!(64, digest::typenum::U64);
 
 impl<const N: usize> CoseKeyThumbprint<N> {
-    fn _compute(key: impl TryInto<cose_key::CoseKey, Error: Into<CoseKeyThumbprintError>>) -> Result<Vec<u8>, CoseKeyThumbprintError> {
+    fn _compute(key: &CoseKey) -> Result<Vec<u8>, CoseKeyThumbprintError>
+    {
         use coset::iana::{self, EnumI64 as _};
-
-        let key: cose_key::CoseKey = key.try_into().map_err(Into::into)?;
 
         let mut value = Value::serialized(&key)?;
         let Some(claims) = value.as_map_mut() else {
@@ -175,11 +189,11 @@ MCowBQYDK2VwAyEAAPT6nOPM+sC2JTf5mjzxSA1noZJND75aQjWqw80LLcM=
         const EXPECTED_ED25519_PUBLIC_KEY_ENCODING: &str = r#"a30101200621582000f4fa9ce3ccfac0b62537f99a3cf1480d67a1924d0fbe5a4235aac3cd0b2dc3"#;
 
         let p256_key = p256::PublicKey::from_public_key_pem(P256_PUBLIC_KEY).unwrap();
-        let thumbprint = CoseKeyThumbprint::<32>::_compute(p256_key).unwrap().encode_hex::<String>();
+        let thumbprint = CoseKeyThumbprint::<32>::_compute(&p256_key.try_into().unwrap()).unwrap().encode_hex::<String>();
         assert_eq!(thumbprint, EXPECTED_P256_PUBLIC_KEY_ENCODING);
 
         let ed25519_key = ed25519_dalek::VerifyingKey::from_public_key_pem(ED25519_PUBLIC_KEY).unwrap();
-        let thumbprint = CoseKeyThumbprint::<32>::_compute(ed25519_key).unwrap().encode_hex::<String>();
+        let thumbprint = CoseKeyThumbprint::<32>::_compute(&ed25519_key.try_into().unwrap()).unwrap().encode_hex::<String>();
         assert_eq!(thumbprint, EXPECTED_ED25519_PUBLIC_KEY_ENCODING);
     }
 
@@ -199,14 +213,14 @@ MCowBQYDK2VwAyEAAPT6nOPM+sC2JTf5mjzxSA1noZJND75aQjWqw80LLcM=
         let key: p256::PublicKey = cose_key.clone().try_into().unwrap();
 
         // Now computing the thumbprint
-        let thumbprint = CoseKeyThumbprint::<32>::compute::<sha2::Sha256>(&key).unwrap();
+        let thumbprint = CoseKeyThumbprint::<32>::compute::<sha2::Sha256, _>(&key).unwrap();
 
         let expected_thumbprint = "496bd8afadf307e5b08c64b0421bf9dc01528a344a43bda88fadd1669da253ec";
 
         assert_eq!(&thumbprint.to_string(), expected_thumbprint);
 
         // Should be the same outcome when providing a raw CoseKey
-        let thumbprint = CoseKeyThumbprint::<32>::compute::<sha2::Sha256>(cose_key).unwrap();
+        let thumbprint = CoseKeyThumbprint::<32>::compute_cose_key::<sha2::Sha256>(cose_key).unwrap();
         assert_eq!(&thumbprint.to_string(), expected_thumbprint);
     }
 
@@ -214,10 +228,10 @@ MCowBQYDK2VwAyEAAPT6nOPM+sC2JTf5mjzxSA1noZJND75aQjWqw80LLcM=
     /// see https://datatracker.ietf.org/doc/html/rfc9679#section-5.2
     #[allow(dead_code)]
     fn supported_hashers_should_compile() {
-        CoseKeyThumbprint::<32>::compute::<sha2::Sha256>(any_cose_key()).unwrap();
-        CoseKeyThumbprint::<32>::compute::<sha2::Sha512_256>(any_cose_key()).unwrap();
-        CoseKeyThumbprint::<48>::compute::<sha2::Sha384>(any_cose_key()).unwrap();
-        CoseKeyThumbprint::<64>::compute::<sha2::Sha512>(any_cose_key()).unwrap();
+        CoseKeyThumbprint::<32>::compute_cose_key::<sha2::Sha256>(any_cose_key()).unwrap();
+        CoseKeyThumbprint::<32>::compute_cose_key::<sha2::Sha512_256>(any_cose_key()).unwrap();
+        CoseKeyThumbprint::<48>::compute_cose_key::<sha2::Sha384>(any_cose_key()).unwrap();
+        CoseKeyThumbprint::<64>::compute_cose_key::<sha2::Sha512>(any_cose_key()).unwrap();
     }
 
     /// should just compile
@@ -226,26 +240,26 @@ MCowBQYDK2VwAyEAAPT6nOPM+sC2JTf5mjzxSA1noZJND75aQjWqw80LLcM=
         // ... and accept either a CoseKey or a verifying key
 
         // owned CoseKey
-        CoseKeyThumbprint::<32>::compute::<sha2::Sha256>(any_cose_key()).unwrap();
+        CoseKeyThumbprint::<32>::compute_cose_key::<sha2::Sha256>(any_cose_key()).unwrap();
 
         // owned coset::CoseKey
-        CoseKeyThumbprint::<32>::compute::<sha2::Sha256>(any_coset_cose_key()).unwrap();
+        // CoseKeyThumbprint::<32>::compute_cose_key::<sha2::Sha256>(any_coset_cose_key()).unwrap();
 
         // borrowed ed25519 keys
         let sk = ed25519_dalek::SigningKey::generate(&mut rand::thread_rng());
-        CoseKeyThumbprint::<32>::compute::<sha2::Sha256>(&sk.verifying_key()).unwrap();
+        CoseKeyThumbprint::<32>::compute::<sha2::Sha256, _>(&sk.verifying_key()).unwrap();
 
         // borrowed ecdsa keys
         let sk = p256::ecdsa::SigningKey::random(&mut rand::thread_rng());
-        CoseKeyThumbprint::<32>::compute::<sha2::Sha256>(sk.verifying_key()).unwrap();
+        CoseKeyThumbprint::<32>::compute::<sha2::Sha256, _>(&*sk.verifying_key()).unwrap();
         let sk = p384::ecdsa::SigningKey::random(&mut rand::thread_rng());
-        CoseKeyThumbprint::<32>::compute::<sha2::Sha256>(sk.verifying_key()).unwrap();
+        CoseKeyThumbprint::<32>::compute::<sha2::Sha256, _>(&*sk.verifying_key()).unwrap();
 
         // borrowed ec keys
         let sk = p256::SecretKey::random(&mut rand::thread_rng());
-        CoseKeyThumbprint::<32>::compute::<sha2::Sha256>(sk.public_key()).unwrap();
+        CoseKeyThumbprint::<32>::compute::<sha2::Sha256, _>(&sk.public_key()).unwrap();
         let sk = p384::SecretKey::random(&mut rand::thread_rng());
-        CoseKeyThumbprint::<32>::compute::<sha2::Sha256>(sk.public_key()).unwrap();
+        CoseKeyThumbprint::<32>::compute::<sha2::Sha256, _>(&sk.public_key()).unwrap();
     }
 
     fn any_cose_key() -> CoseKey {

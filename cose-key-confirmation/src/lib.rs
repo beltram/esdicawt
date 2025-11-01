@@ -145,7 +145,7 @@ mod pem {
 impl KeyConfirmation {
     pub fn new_thumbprint(pk: impl TryInto<cose_key::CoseKey, Error: Into<error::CoseKeyConfirmationError>>) -> Result<Self, error::CoseKeyConfirmationError> {
         let key = pk.try_into().map_err(Into::into)?;
-        let thumbprint = cose_key_thumbprint::CoseKeyThumbprint::<32>::compute::<sha2::Sha256>(key)?;
+        let thumbprint = cose_key_thumbprint::CoseKeyThumbprint::<32>::compute_cose_key::<sha2::Sha256>(key)?;
         Ok(Self::Thumbprint(thumbprint))
     }
 }
@@ -334,7 +334,7 @@ mod tests {
             let key = coset::CoseKeyBuilder::new_ec2_pub_key(iana::EllipticCurve::P_256, x, y).key_id(kid.clone()).build();
             (cose_key::CoseKey::from(key), Value::Bytes(kid))
         };
-        let thumbprint = CoseKeyThumbprint::<32>::compute::<sha2::Sha256>(cose_key.clone()).unwrap();
+        let thumbprint = CoseKeyThumbprint::<32>::compute_cose_key::<sha2::Sha256>(cose_key.clone()).unwrap();
         let cnf = KeyConfirmation::Thumbprint(thumbprint);
         let expected = cbor!({
             /*COSE_Key_Thumbprint*/ 5 => expected_thumbprint

@@ -7,7 +7,7 @@ pub enum CoseKeyThumbprintError {
     #[error(transparent)]
     CborSerializationError(#[from] ciborium::ser::Error<std::io::Error>),
     #[error(transparent)]
-    DeterminiticCborSerializationError(#[from] cose_key::DeterministicEncodingError),
+    DeterministicCborSerializationError(#[from] cose_key::DeterministicEncodingError),
     #[error("Invalid CoseKey supplied")]
     InvalidCoseKey,
     #[error(transparent)]

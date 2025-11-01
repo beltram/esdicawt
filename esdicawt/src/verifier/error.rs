@@ -27,19 +27,27 @@ pub enum SdCwtVerifierError<CustomError: Send + Sync> {
     #[error(transparent)]
     CoseError(#[from] esdicawt_spec::reexports::coset::CoseError),
     #[error(transparent)]
+    CoseKeyError(#[from] cose_key::CoseKeyError),
+    #[error(transparent)]
     SpecError(#[from] esdicawt_spec::EsdicawtSpecError),
+    #[error(transparent)]
+    CoseKeyThumbprintError(#[from] cose_key_thumbprint::CoseKeyThumbprintError),
     #[error("Invalid SD-CWT")]
     InvalidSdCwt,
     #[error("Invalid SD-KBT")]
     InvalidSdKbt,
     #[error("This algorithm is not supported")]
     UnsupportedAlgorithm,
+    #[error("Feature '{0}' must be turned on to verify the CoseKey Thumbprint key confirmation")]
+    MissingFeaturesVerifyingCoseKeyThumbprint(&'static str),
     #[error(transparent)]
     KeyConfirmationError(#[from] cose_key_confirmation::error::CoseKeyConfirmationError),
     #[error(transparent)]
     IssuerSignatureValidationError(#[from] SignatureVerifierError),
     #[error(transparent)]
     TimeError(#[from] CwtTimeError),
+    #[error("The confirmation key in the SD-CWT is a CoseKeyThumbprint hence the actual Holder public key is required for validation")]
+    ExplicitHolderConfirmationKeyRequired,
     #[error("The type of Key Confirmation in the SD-CWT is not supported")]
     UnsupportedKeyConfirmation,
     #[error("The Key Confirmation in the SD-KBT is not the expected one")]
