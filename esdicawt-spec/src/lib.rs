@@ -274,6 +274,13 @@ pub trait CwtAny: serde::Serialize + for<'de> serde::Deserialize<'de> + Clone {
         Ok(buf)
     }
 
+    /// Uses CBOR Canonical encoding (CDE)
+    fn to_cbor_cde_bytes(&self) -> EsdicawtSpecResult<Vec<u8>> {
+        let mut buf = vec![];
+        ciborium::value::canonical_into_writer(self, &mut buf)?;
+        Ok(buf)
+    }
+
     fn from_cbor_bytes(bytes: &[u8]) -> EsdicawtSpecResult<Self>
     where
         Self: Sized,

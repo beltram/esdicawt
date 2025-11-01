@@ -4,13 +4,11 @@ mod redaction;
 
 use crate::issuer::{error::SdCwtIssuerError, params::IssuerParams, redaction::redact};
 use ciborium::Value;
+use coset::{AsCborValue as _, TaggedCborSerializable as _};
+use esdicawt_spec::reexports::coset;
 use esdicawt_spec::{
     COSE_SD_CLAIMS, CWT_CLAIM_AUDIENCE, CWT_CLAIM_CNONCE, CWT_CLAIM_CTI, CWT_CLAIM_EXPIRES_AT, CWT_CLAIM_ISSUED_AT, CWT_CLAIM_ISSUER, CWT_CLAIM_KEY_CONFIRMATION,
-    CWT_CLAIM_NOT_BEFORE, CWT_CLAIM_SD_ALG, CWT_CLAIM_SUBJECT, CWT_MEDIATYPE, CustomClaims, CwtAny, MEDIATYPE_SD_CWT, SdHashAlg, Select,
-    issuance::SdCwtIssuedTagged,
-    reexports::coset::{
-        TaggedCborSerializable, {self},
-    },
+    CWT_CLAIM_NOT_BEFORE, CWT_CLAIM_SD_ALG, CWT_CLAIM_SUBJECT, CWT_MEDIATYPE, CustomClaims, CwtAny, MEDIATYPE_SD_CWT, SdHashAlg, Select, issuance::SdCwtIssuedTagged,
 };
 use signature::{Keypair, SignatureEncoding, Signer};
 
@@ -63,11 +61,11 @@ pub trait Issuer {
     fn hash_algorithm(&self) -> SdHashAlg;
 
     #[allow(clippy::type_complexity)]
-    fn issue_cwt(
+    fn issue_raw_cwt(
         &self,
         csprng: &mut dyn rand_core::CryptoRngCore,
         params: IssuerParams<'_, Self::PayloadClaims, Self::ProtectedClaims, Self::UnprotectedClaims>,
-    ) -> Result<SdCwtIssuedTagged<Self::PayloadClaims, <Self as Issuer>::Hasher, Self::ProtectedClaims, Self::UnprotectedClaims>, SdCwtIssuerError<<Self as Issuer>::Error>> {
+    ) -> Result<Vec<u8>, SdCwtIssuerError<<Self as Issuer>::Error>> {
         let alg = Issuer::cwt_algorithm(self);
 
         let mut protected_builder = coset::HeaderBuilder::new()
@@ -178,9 +176,18 @@ pub trait Issuer {
                 let signature = Issuer::signer(self).try_sign(tbs)?;
                 Result::<_, signature::Error>::Ok(signature.to_bytes().as_ref().to_vec())
             })?
-            .build()
-            .to_tagged_vec()?;
+            .build();
 
+        Ok(Value::Tag(coset::CoseSign1::TAG, Box::new(sign1.to_cbor_value()?)).to_cbor_cde_bytes()?)
+    }
+
+    #[allow(clippy::type_complexity)]
+    fn issue_cwt(
+        &self,
+        csprng: &mut dyn rand_core::CryptoRngCore,
+        params: IssuerParams<'_, Self::PayloadClaims, Self::ProtectedClaims, Self::UnprotectedClaims>,
+    ) -> Result<SdCwtIssuedTagged<Self::PayloadClaims, <Self as Issuer>::Hasher, Self::ProtectedClaims, Self::UnprotectedClaims>, SdCwtIssuerError<<Self as Issuer>::Error>> {
+        let sign1 = self.issue_raw_cwt(csprng, params)?;
         Ok(SdCwtIssuedTagged::from_cbor_bytes(&sign1)?)
     }
 }
