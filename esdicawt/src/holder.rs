@@ -12,7 +12,11 @@ use crate::{
     SdCwtHolderValidationError,
 };
 use ciborium::Value;
-use cose_key_confirmation::KeyConfirmation;
+use cose_key_confirmation::{
+    error::CoseKeyConfirmationError,
+    KeyConfirmation
+};
+use cose_key_thumbprint::CoseKeyThumbprint;
 
 pub mod error;
 pub mod params;
@@ -34,8 +38,8 @@ pub trait Holder {
     type Verifier: signature::Verifier<Self::Signature>
         + Clone
         + PartialEq
-        + TryInto<cose_key::CoseKey, Error = cose_key::CoseKeyError>
-        + for<'a> TryFrom<&'a cose_key::CoseKey, Error = cose_key::CoseKeyError>;
+    + for<'a> TryFrom<&'a cose_key::CoseKey, Error = cose_key::CoseKeyError>
+    + TryInto<cose_key::CoseKey, Error = cose_key::CoseKeyError>;
 
     type IssuerPayloadClaims: Select;
     type IssuerProtectedClaims: CustomClaims;
@@ -149,18 +153,18 @@ pub trait Holder {
 
         match &payload.cnf {
             KeyConfirmation::CoseKey(cose_key) => {
-                let cose_key_cnf: cose_key::CoseKey = self.verifier().clone().try_into().unwrap();
-                if &cose_key_cnf != cose_key {
+                let expected_cose_key: cose_key::CoseKey = self.verifier().clone().try_into().map_err(SdCwtHolderValidationError::from)?;
+                if &expected_cose_key != cose_key {
                     return Err(SdCwtHolderError::ValidationError(SdCwtHolderValidationError::VerifyingKeyMismatch));
                 }
             }
             #[cfg(feature = "thumbprint")]
             KeyConfirmation::Thumbprint(thumbprint) => {
-                /*let expected_thumbprint = CoseKeyThumbprint::<32>::compute::<sha2::Sha256>(expected_verifier)?;
+                let cose_key_cnf: cose_key::CoseKey = self.verifier().clone().try_into().map_err(SdCwtHolderValidationError::from)?;
+                let expected_thumbprint = CoseKeyThumbprint::<32>::compute::<Self::Hasher>(cose_key_cnf).unwrap();
                 if &expected_thumbprint != thumbprint {
                     return Err(SdCwtHolderError::ValidationError(SdCwtHolderValidationError::VerifyingKeyMismatch));
-                }*/
-                todo!()
+                }
             }
             KeyConfirmation::EncryptedCoseKey(_) | KeyConfirmation::Kid(_) => {
                 return Err(SdCwtHolderError::ValidationError(SdCwtHolderValidationError::UnsupportedKeyConfirmation));

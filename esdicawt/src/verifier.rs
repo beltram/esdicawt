@@ -11,7 +11,7 @@ use crate::{
     VerifierParams,
 };
 use ciborium::{value::Integer, Value};
-use cose_key_confirmation::{error::CoseKeyConfirmationError, KeyConfirmation};
+use cose_key_confirmation::KeyConfirmation;
 use esdicawt_spec::reexports::coset;
 use esdicawt_spec::{
     issuance::SdInnerPayload, key_binding::KbtCwtTagged, reexports::coset::{CoseSign1, TaggedCborSerializable}, verified::KbtCwtVerified, CustomClaims,
@@ -20,8 +20,7 @@ use esdicawt_spec::{
     Select,
     CWT_CLAIM_KEY_CONFIRMATION,
 };
-use std::borrow::Cow;
-use std::collections::HashMap;
+use std::{borrow::Cow, collections::HashMap};
 
 pub trait Verifier {
     type Error: core::error::Error + Send + Sync;
@@ -31,8 +30,7 @@ pub trait Verifier {
         + Clone
         + PartialEq
         + for<'a> TryFrom<&'a cose_key::CoseKey, Error = cose_key::CoseKeyError>
-        + TryInto<cose_key::CoseKey, Error = cose_key::CoseKeyError>
-        + for<'a> TryFrom<&'a KeyConfirmation, Error = CoseKeyConfirmationError>;
+        + TryInto<cose_key::CoseKey, Error = cose_key::CoseKeyError>;
 
     type IssuerProtectedClaims: CustomClaims;
     type IssuerUnprotectedClaims: CustomClaims;
