@@ -3,29 +3,35 @@ pub mod params;
 mod walk;
 
 use crate::{
-    ShallowVerifierParams, VerifierParams,
-    any_digest::AnyDigest,
-    elapsed_since_epoch,
+    any_digest::AnyDigest, elapsed_since_epoch,
     signature_verifier::validate_signature,
     time::verify_time_claims,
     verifier::error::{SdCwtVerifierError, SdCwtVerifierResult},
+    ShallowVerifierParams,
+    VerifierParams,
 };
-use ciborium::{Value, value::Integer};
-use cose_key_confirmation::{KeyConfirmation, error::CoseKeyConfirmationError};
+use ciborium::{value::Integer, Value};
+use cose_key_confirmation::{error::CoseKeyConfirmationError, KeyConfirmation};
+use esdicawt_spec::reexports::coset;
 use esdicawt_spec::{
-    CWT_CLAIM_KEY_CONFIRMATION, CustomClaims, CwtAny, SdHashAlg, Select,
-    issuance::SdInnerPayload,
-    key_binding::KbtCwtTagged,
-    reexports::coset::{CoseSign1, TaggedCborSerializable},
-    verified::KbtCwtVerified,
+    issuance::SdInnerPayload, key_binding::KbtCwtTagged, reexports::coset::{CoseSign1, TaggedCborSerializable}, verified::KbtCwtVerified, CustomClaims,
+    CwtAny,
+    SdHashAlg,
+    Select,
+    CWT_CLAIM_KEY_CONFIRMATION,
 };
+use std::borrow::Cow;
 use std::collections::HashMap;
 
 pub trait Verifier {
     type Error: core::error::Error + Send + Sync;
 
     type HolderSignature: signature::SignatureEncoding;
-    type HolderVerifier: signature::Verifier<Self::HolderSignature> + PartialEq + for<'a> TryFrom<&'a KeyConfirmation, Error = CoseKeyConfirmationError>;
+    type HolderVerifier: signature::Verifier<Self::HolderSignature>
+        + Clone
+        + PartialEq
+        + for<'a> TryFrom<&'a cose_key::CoseKey, Error = cose_key::CoseKeyError>
+        + for<'a> TryFrom<&'a KeyConfirmation, Error = CoseKeyConfirmationError>;
 
     type IssuerProtectedClaims: CustomClaims;
     type IssuerUnprotectedClaims: CustomClaims;
@@ -91,12 +97,46 @@ pub trait Verifier {
         let kbt_protected = kbt.0.protected.to_value_mut()?;
         let (sd_cwt, sd_cwt_bytes) = kbt_protected.kcwt.to_pair_mut()?;
         let sd_cwt_payload = sd_cwt.0.payload.to_value_mut()?;
-        let key_confirmation = &sd_cwt_payload.cnf;
 
         let kbt_cose_sign1 = CoseSign1::from_tagged_slice(raw_sd_kbt)?;
         let sd_cwt_cose_sign1 = CoseSign1::from_tagged_slice(sd_cwt_bytes)?;
 
-        let holder_confirmation_key: Self::HolderVerifier = key_confirmation.try_into()?;
+        let holder_confirmation_key: Cow<Self::HolderVerifier> = match &sd_cwt_payload.cnf {
+            KeyConfirmation::CoseKey(cose_key) => {
+                let cose_key_cnf = cose_key.try_into().map_err(SdCwtVerifierError::from)?;
+                // verify confirmation key advertised in the KBT matches the expected one if supplied
+                if let Some(hvk) = holder_verifier {
+                    if cose_key_cnf != *hvk {
+                        return Err(SdCwtVerifierError::UnexpectedKeyConfirmation);
+                    }
+                    Cow::Borrowed(hvk)
+                } else {
+                    Cow::Owned(cose_key_cnf)
+                }
+            }
+            #[cfg(feature = "thumbprint")]
+            KeyConfirmation::Thumbprint(thumbprint) => {
+                let Some(hvk) = holder_verifier else {
+                    return Err(SdCwtVerifierError::ExplicitHolderConfirmationKeyRequired);
+                };
+                match *kbt_protected.alg {
+                    coset::Algorithm::Assigned(coset::iana::Algorithm::EdDSA) => {
+                        #[cfg(not(feature = "ed25519"))]
+                        return Err(SdCwtVerifierError::MissingFeaturesVerifyingCoseKeyThumbprint("ed25519"));
+
+                        /*#[cfg(feature = "ed25519")]
+                        let computed_thumbprint = CoseKeyThumbprint::<32>::compute::<sha2::Sha256, _>(hvk).map_err(SdCwtVerifierError::from)?;
+                        if &computed_thumbprint != thumbprint {
+                            return Err(SdCwtVerifierError::UnexpectedKeyConfirmation);
+                        }*/
+                        Cow::Borrowed(hvk)
+                    }
+                    _ => return Err(SdCwtVerifierError::UnsupportedAlgorithm),
+                }
+                // CoseKeyThumbprint
+            }
+            KeyConfirmation::EncryptedCoseKey(_) | KeyConfirmation::Kid(_) => return Err(SdCwtVerifierError::UnsupportedKeyConfirmation),
+        };
 
         // First the Verifier must validate the SD-KBT as described in Section 7.2 of [RFC8392].
         // verifying signature
@@ -105,13 +145,13 @@ pub trait Verifier {
             holder_confirmation_key.verify(raw_data, &signature).map_err(SdCwtVerifierError::from)
         })?;
 
-        // verify confirmation key advertised in the KBT matches the expected one if supplied
+        /*// verify confirmation key advertised in the KBT matches the expected one if supplied
         if let Some(hvk) = holder_verifier {
             let key_confirmation: Self::HolderVerifier = key_confirmation.try_into()?;
             if key_confirmation != *hvk {
                 return Err(SdCwtVerifierError::UnexpectedKeyConfirmation);
             }
-        }
+        }*/
 
         let kbt_payload = kbt.0.payload.to_value()?;
 
@@ -338,16 +378,16 @@ mod tests {
     use super::claims::CustomTokenClaims;
     use crate::verifier::error::SdCwtStatusVerifierError;
     use crate::{
-        HolderParams, Issuer, IssuerParams, Presentation, SdCwtVerifierError, StatusParams, TimeArg, Verifier, VerifierParams,
-        holder::Holder,
-        signature_verifier::SignatureVerifierError,
-        test_utils::{Ed25519Holder, Ed25519Issuer},
-        verifier::{VerifierWithStatus, params::StatusListVerifierParams, test_utils::HybridVerifier},
+        holder::Holder, signature_verifier::SignatureVerifierError, test_utils::{Ed25519Holder, Ed25519Issuer}, verifier::{params::StatusListVerifierParams, test_utils::HybridVerifier, VerifierWithStatus}, HolderParams, Issuer, IssuerParams, Presentation, SdCwtVerifierError,
+        StatusParams,
+        TimeArg,
+        Verifier,
+        VerifierParams,
     };
-    use ciborium::{Value, cbor};
+    use ciborium::{cbor, Value};
     use cose_key_set::CoseKeySet;
-    use esdicawt_spec::{CustomClaims, CwtAny, NoClaims, Select, verified::KbtCwtVerified};
-    use status_list::{OauthStatus, StatusList, issuer::StatusListIssuerParams};
+    use esdicawt_spec::{verified::KbtCwtVerified, CustomClaims, CwtAny, NoClaims, Select};
+    use status_list::{issuer::StatusListIssuerParams, OauthStatus, StatusList};
 
     wasm_bindgen_test::wasm_bindgen_test_configure!(run_in_browser);
 
@@ -760,7 +800,7 @@ mod tests {
 #[cfg(test)]
 pub mod claims {
     use ciborium::Value;
-    use esdicawt_spec::{Select, sd};
+    use esdicawt_spec::{sd, Select};
 
     #[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
     pub(super) struct CustomTokenClaims {

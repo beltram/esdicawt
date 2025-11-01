@@ -8,18 +8,20 @@ authors.workspace = true
 [features]
 default = []
 pem = ["dep:pkcs8", "pkcs8?/pem", "cose-key-set/pem", "cose-key-confirmation/pem"]
-ed25519 = ["dep:ed25519-dalek", "cose-key-confirmation/ed25519", "dep:sha2"]
-p256 = ["dep:p256", "cose-key-confirmation/p256", "dep:sha2"]
-p384 = ["dep:p384", "cose-key-confirmation/p384", "dep:sha2"]
+ed25519 = ["dep:ed25519-dalek", "cose-key-confirmation/ed25519", "cose-key-thumbprint?/ed25519", "dep:sha2"]
+p256 = ["dep:p256", "cose-key-confirmation/p256", "cose-key-thumbprint?/p256", "dep:sha2"]
+p384 = ["dep:p384", "cose-key-confirmation/p384", "cose-key-thumbprint?/p384", "dep:sha2"]
 test-utils = ["ed25519", "p256", "p384", "dep:sha2", "cose-key-confirmation/ed25519", "cose-key-confirmation/p256", "cose-key-confirmation/p384", "status"]
 test-vectors = ["test-utils"]
 status = ["dep:status-list", "esdicawt-spec/status"]
+thumbprint = ["dep:cose-key-thumbprint", "cose-key-confirmation/thumbprint"]
 
 [dependencies]
 esdicawt-spec.workspace = true
 cose-key-set.workspace = true
 cose-key.workspace = true
 cose-key-confirmation.workspace = true
+cose-key-thumbprint = { workspace = true, optional = true }
 signature = { workspace = true, features = ["std", "digest"] }
 digest.workspace = true
 rand_core = { workspace = true, features = ["std"] }
@@ -43,7 +45,7 @@ js-sys = "0.3"
 getrandom = { workspace = true, features = ["js"] }
 
 [dev-dependencies]
-esdicawt = { workspace = true, features = ["pem", "test-utils", "test-vectors", "ed25519", "p256", "p384", "status"] }
+esdicawt = { workspace = true, features = ["pem", "test-utils", "test-vectors", "ed25519", "p256", "p384", "status", "thumbprint"] }
 serde = { workspace = true, features = ["derive"] }
 cose-key-confirmation = { workspace = true, features = ["ed25519", "p256", "p384"] }
 rand.workspace = true
