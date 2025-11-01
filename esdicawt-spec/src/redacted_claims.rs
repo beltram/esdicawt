@@ -87,11 +87,11 @@ impl<'a> std::ops::Deref for RedactedClaimKeysRef<'a> {
 /// Digest of a value in a CBOR Array represented by a [crate::blinded_claims::SaltedElement] in the disclosures
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 #[serde(transparent)]
-pub struct RedactedClaimElement(ciborium::tag::Required<serde_bytes::ByteBuf, REDACTED_CLAIM_ELEMENT_TAG>);
+pub struct RedactedClaimElement(ciborium::tag::RequireExact<serde_bytes::ByteBuf, REDACTED_CLAIM_ELEMENT_TAG>);
 
 impl From<&[u8]> for RedactedClaimElement {
     fn from(v: &[u8]) -> Self {
-        Self(ciborium::tag::Required(v.to_vec().into()))
+        Self(ciborium::tag::RequireExact(v.to_vec().into()))
     }
 }
 

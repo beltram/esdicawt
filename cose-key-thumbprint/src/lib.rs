@@ -1,5 +1,4 @@
 use ciborium::Value;
-use cose_key::CborDeterministicEncoded;
 
 mod error;
 
@@ -144,7 +143,8 @@ impl<const N: usize> CoseKeyThumbprint<N> {
 
         // Apply the deterministic encoding described in Section 4.2.1 of [RFC8949]
         // see https://datatracker.ietf.org/doc/html/rfc9679#section-3-2.2.1
-        let cbor_encoded = value.deterministically_serialize_map()?;
+        let mut cbor_encoded = vec![];
+        ciborium::value::canonical_into_writer(&value, &mut cbor_encoded)?;
 
         Ok(cbor_encoded)
     }

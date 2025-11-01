@@ -195,7 +195,7 @@ impl<'a> From<&'a Value> for SaltedOrValue<'a> {
 mod tests {
     use super::*;
     use crate::{salted, spec::blinded_claims::SaltedArray};
-    use ciborium::{Value, Value::Simple, cbor, tag::Required};
+    use ciborium::{Value, Value::Simple, cbor, tag::RequireExact};
     use esdicawt_spec::{
         Salt,
         blinded_claims::{SaltedClaimRef, SaltedElementRef, SaltedRef},
@@ -330,7 +330,7 @@ mod tests {
     fn array() {
         let [array, a] = find_cbor_paths([
             salted!(obj => "array", cbor!([
-                Required::<_, 59>(salted!(digest => cbor!("a"))),
+                RequireExact::<_, 59>(salted!(digest => cbor!("a"))),
             ])),
             salted!("a"),
         ]);
@@ -343,7 +343,7 @@ mod tests {
         let [array, a] = find_cbor_paths([
             salted!("a"),
             salted!(obj => "array", cbor!([
-                Required::<_, 59>(salted!(digest => cbor!("a"))),
+                RequireExact::<_, 59>(salted!(digest => cbor!("a"))),
             ])),
         ]);
         assert_eq!(array, vec![CborPath::Str("array".into())]);
@@ -354,8 +354,8 @@ mod tests {
     fn array_many_elements() {
         let [array, a, b] = find_cbor_paths([
             salted!(obj => "array", cbor!([
-                Required::<_, 59>(salted!(digest => cbor!("a"))),
-                Required::<_, 59>(salted!(digest => cbor!("b"))),
+                RequireExact::<_, 59>(salted!(digest => cbor!("a"))),
+                RequireExact::<_, 59>(salted!(digest => cbor!("b"))),
             ])),
             salted!("a"),
             salted!("b"),
@@ -369,12 +369,12 @@ mod tests {
     fn array_nested_redacted_array() {
         let [array1, array2, a] = find_cbor_paths([
             salted!(obj => "array", cbor!([
-                Required::<_, 59>(salted!(digest => cbor!([
-                    Required::<_, 59>(salted!(digest => cbor!("a")))
+                RequireExact::<_, 59>(salted!(digest => cbor!([
+                    RequireExact::<_, 59>(salted!(digest => cbor!("a")))
                 ]))),
             ])),
             salted!(obj => cbor!([
-                Required::<_, 59>(salted!(digest => cbor!("a")))
+                RequireExact::<_, 59>(salted!(digest => cbor!("a")))
             ])),
             salted!("a"),
         ]);
@@ -388,11 +388,11 @@ mod tests {
         let [array, a, b, c] = find_cbor_paths([
             salted!(obj => "array", cbor!([
                 [
-                    Required::<_, 59>(salted!(digest => cbor!("a"))),
-                    Required::<_, 59>(salted!(digest => cbor!("b"))),
+                    RequireExact::<_, 59>(salted!(digest => cbor!("a"))),
+                    RequireExact::<_, 59>(salted!(digest => cbor!("b"))),
                 ],
                 [
-                    Required::<_, 59>(salted!(digest => cbor!("c"))),
+                    RequireExact::<_, 59>(salted!(digest => cbor!("c"))),
                 ],
             ])),
             salted!("a"),
@@ -411,7 +411,7 @@ mod tests {
             salted!(obj => "array", cbor!([
                 [
                     [
-                        Required::<_, 59>(salted!(digest => cbor!("a"))),
+                        RequireExact::<_, 59>(salted!(digest => cbor!("a"))),
                     ]
                 ]
             ])),
@@ -425,7 +425,7 @@ mod tests {
     fn array_nested_redacted_mapping() {
         let [array, map, a] = find_cbor_paths([
             salted!(obj => "array", cbor!([
-                Required::<_, 59>(salted!(digest => cbor!({
+                RequireExact::<_, 59>(salted!(digest => cbor!({
                     Simple(59) => [salted!(digest => "a", cbor!(1))]
                 }))),
             ])),
