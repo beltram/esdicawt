@@ -125,7 +125,7 @@ pub type KbtCwtTagged<
     IssuerUnprotectedClaims = NoClaims,
     ProtectedClaims = NoClaims,
     UnprotectedClaims = NoClaims,
-> = ciborium::tag::Required<
+> = ciborium::tag::RequireExact<
     KbtCwt<IssuerPayloadClaims, Hasher, PayloadClaims, IssuerProtectedClaims, IssuerUnprotectedClaims, ProtectedClaims, UnprotectedClaims>,
     { <coset::CoseSign1 as coset::TaggedCborSerializable>::TAG },
 >;

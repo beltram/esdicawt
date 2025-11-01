@@ -57,7 +57,7 @@ impl<St: Status> serde::Serialize for StatusListToken<St> {
             .to_cbor_value()
             .map_err(S::Error::custom)?;
 
-        ciborium::tag::Required::<_, { <coset::CoseSign1 as TaggedCborSerializable>::TAG }>(value).serialize(serializer)
+        ciborium::tag::RequireExact::<_, { <coset::CoseSign1 as TaggedCborSerializable>::TAG }>(value).serialize(serializer)
     }
 }
 
