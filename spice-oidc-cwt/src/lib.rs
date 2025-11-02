@@ -1,5 +1,6 @@
 //! See https://www.ietf.org/archive/id/draft-ietf-spice-oidc-cwt-01.html
 
+use ahash::HashMap;
 use enum_variants_strings::EnumVariantsStrings;
 use esdicawt::{
     EsdicawtReadResult, SdCwtVerified, TokenQuery, cwt_label,
@@ -10,7 +11,7 @@ use esdicawt::{
     },
 };
 use serde::ser::SerializeMap;
-use std::{borrow::Cow, collections::HashMap, sync::LazyLock};
+use std::{borrow::Cow, sync::LazyLock};
 use url::Url;
 
 #[derive(Debug, Copy, Clone, serde_repr::Serialize_repr, serde_repr::Deserialize_repr, enum_variants_strings::EnumVariantsStrings)]

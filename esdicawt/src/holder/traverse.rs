@@ -1,11 +1,12 @@
 use crate::{SdCwtHolderError, SdCwtHolderResult, holder::params::CborPath};
+use ahash::HashMap;
 use ciborium::Value;
 use digest::Digest;
 use esdicawt_spec::{
     CWT_LABEL_REDACTED_KEYS, CwtAny, REDACTED_CLAIM_ELEMENT_TAG,
     blinded_claims::{Salted, SaltedClaim, SaltedElement},
 };
-use std::{borrow::Cow, collections::HashMap};
+use std::borrow::Cow;
 
 type PathAndSalted = Vec<(Vec<CborPath>, Salted<Value>)>;
 type PathAndSaltedAndDigest = Vec<(Vec<CborPath>, Salted<Value>, Vec<u8>)>;

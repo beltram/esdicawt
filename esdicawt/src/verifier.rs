@@ -10,6 +10,7 @@ use crate::{
     time::verify_time_claims,
     verifier::error::{SdCwtVerifierError, SdCwtVerifierResult},
 };
+use ahash::HashMap;
 use ciborium::{Value, value::Integer};
 use cose_key_confirmation::{KeyConfirmation, error::CoseKeyConfirmationError};
 use esdicawt_spec::{
@@ -19,7 +20,6 @@ use esdicawt_spec::{
     reexports::coset::{CoseSign1, TaggedCborSerializable},
     verified::KbtCwtVerified,
 };
-use std::collections::HashMap;
 
 pub trait Verifier {
     type Error: core::error::Error + Send + Sync;

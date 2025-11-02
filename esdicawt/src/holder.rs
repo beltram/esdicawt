@@ -285,13 +285,13 @@ impl<PayloadClaims: Select, Hasher: digest::Digest + Clone, ProtectedClaims: Cus
 mod tests {
     use super::{claims::CustomTokenClaims, test_utils::Ed25519Holder, *};
     use crate::{CwtStdLabel, Issuer, IssuerParams, Presentation, StatusParams, TimeArg, holder::params::CborPath, issuer::test_utils::Ed25519Issuer};
+    use ahash::HashMap;
     use ciborium::cbor;
     use cose_key_set::CoseKeySet;
     use esdicawt_spec::{
         ClaimName, NoClaims,
         blinded_claims::{Salted, SaltedClaim},
     };
-    use std::collections::HashMap;
 
     wasm_bindgen_test::wasm_bindgen_test_configure!(run_in_browser);
 
@@ -462,9 +462,9 @@ mod tests {
 
 #[cfg(test)]
 pub mod claims {
+    use ahash::HashMap;
     use ciborium::Value;
     use esdicawt_spec::{Select, sd};
-    use std::collections::HashMap;
 
     #[derive(Default, Debug, Clone, PartialEq, serde::Serialize)]
     pub(super) struct CustomTokenClaims {

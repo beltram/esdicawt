@@ -21,6 +21,7 @@ thiserror.workspace = true
 cose-key-confirmation.workspace = true
 digest.workspace = true
 status-list = { workspace = true, optional = true }
+ahash.workspace = true
 hex.workspace = true
 
 [lints]

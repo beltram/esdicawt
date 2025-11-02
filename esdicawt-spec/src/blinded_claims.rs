@@ -1,8 +1,9 @@
 use super::{ClaimName, CwtAny, Salt};
 use crate::{EsdicawtSpecResult, inlined_cbor::InlinedCbor};
+use ahash::HashMap;
 use ciborium::Value;
 use serde::ser::SerializeSeq;
-use std::{borrow::Cow, collections::HashMap};
+use std::borrow::Cow;
 
 #[derive(Clone, Eq, PartialEq, serde_tuple::Serialize_tuple, serde_tuple::Deserialize_tuple)]
 pub struct SaltedElement<T: CwtAny> {

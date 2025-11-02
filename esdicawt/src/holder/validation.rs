@@ -1,7 +1,8 @@
 use crate::time::TimeVerification;
+use ahash::HashMap;
 use ciborium::Value;
 use esdicawt_spec::{REDACTED_CLAIM_ELEMENT_TAG, blinded_claims::Salted, redacted_claims::RedactedClaimKeys};
-use std::{borrow::Cow, collections::HashMap};
+use std::borrow::Cow;
 
 #[derive(Default, Debug, Clone)]
 pub struct HolderValidationParams<'a> {
