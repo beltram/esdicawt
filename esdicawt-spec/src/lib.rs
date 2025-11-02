@@ -325,7 +325,7 @@ pub struct Salt(#[serde(with = "serde_bytes")] pub [u8; Salt::SIZE]);
 
 impl std::fmt::Debug for Salt {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{:x?}", self.0)
+        write!(f, "{}", hex::encode(self.0))
     }
 }
 
