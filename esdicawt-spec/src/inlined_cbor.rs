@@ -3,8 +3,8 @@ use super::{CwtAny, EsdicawtSpecError, EsdicawtSpecResult};
 #[derive(Clone, Eq, PartialEq)]
 pub enum InlinedCbor<T: CwtAny> {
     // bool stands for "modified" and is true when the value has been mutably borrowed
-    Bytes(Vec<u8>, Option<T>, bool),
-    Value(T, Option<Vec<u8>>, bool),
+    Bytes(bytes::Bytes, Option<T>, bool),
+    Value(T, Option<bytes::Bytes>, bool),
 }
 
 impl<T: CwtAny + std::fmt::Debug> std::fmt::Debug for InlinedCbor<T> {
@@ -23,11 +23,11 @@ impl<T: CwtAny> serde::Serialize for InlinedCbor<T> {
         use serde::ser::Error as _;
 
         match self {
-            Self::Value(_, Some(b), false) | Self::Bytes(b, _, false) => serde_bytes::serialize(b, serializer),
+            Self::Value(_, Some(b), false) | Self::Bytes(b, _, false) => serde_bytes::serialize(&b[..], serializer),
             Self::Value(v, ..) | Self::Bytes(_, Some(v), true) => {
                 use serde::ser::Error as _;
                 let b = v.to_cbor_bytes().map_err(S::Error::custom)?;
-                serde_bytes::serialize(&b, serializer)
+                serde_bytes::serialize(&b[..], serializer)
             }
             Self::Bytes(_, None, true) => Err(S::Error::custom("InlineCbor implementation error")),
         }
@@ -36,7 +36,7 @@ impl<T: CwtAny> serde::Serialize for InlinedCbor<T> {
 
 impl<'de, T: CwtAny> serde::Deserialize<'de> for InlinedCbor<T> {
     fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-        let bytes = serde_bytes::deserialize::<Vec<u8>, _>(deserializer)?;
+        let bytes: bytes::Bytes = serde::Deserialize::deserialize(deserializer)?;
         Ok(Self::Bytes(bytes, None, false))
     }
 }
@@ -90,8 +90,7 @@ impl<T: CwtAny> InlinedCbor<T> {
                 Ok(b)
             }
             Self::Value(v, b, ..) => {
-                let bytes = v.to_cbor_bytes()?;
-                b.replace(bytes);
+                b.replace(v.to_cbor_bytes()?);
                 // SAFETY: we just replaced the value so we can safely unwrap it
                 Ok(b.as_ref().unwrap())
             }
@@ -99,7 +98,7 @@ impl<T: CwtAny> InlinedCbor<T> {
         }
     }
 
-    pub fn clone_bytes(&self) -> EsdicawtSpecResult<Vec<u8>> {
+    pub fn clone_bytes(&self) -> EsdicawtSpecResult<bytes::Bytes> {
         Ok(match self {
             Self::Bytes(b, _, false) | Self::Value(_, Some(b), false) => b.clone(),
             Self::Value(v, ..) | Self::Bytes(_, Some(v), true) => v.to_cbor_bytes()?,
@@ -107,10 +106,10 @@ impl<T: CwtAny> InlinedCbor<T> {
         })
     }
 
-    pub fn as_bytes(&self) -> EsdicawtSpecResult<std::borrow::Cow<'_, [u8]>> {
+    pub fn as_bytes(&self) -> EsdicawtSpecResult<bytes::Bytes> {
         Ok(match self {
-            Self::Bytes(b, _, false) | Self::Value(_, Some(b), false) => std::borrow::Cow::Borrowed(b),
-            Self::Value(v, ..) | Self::Bytes(_, Some(v), true) => std::borrow::Cow::Owned(T::to_cbor_bytes(v)?),
+            Self::Bytes(b, _, false) | Self::Value(_, Some(b), false) => b.clone(),
+            Self::Value(v, ..) | Self::Bytes(_, Some(v), true) => T::to_cbor_bytes(v)?,
             Self::Bytes(_, None, true) => return Err(EsdicawtSpecError::ImplementationError("InlineCbor implementation error")),
         })
     }
@@ -134,11 +133,6 @@ impl<T: CwtAny> InlinedCbor<T> {
                 Ok((v.as_mut().unwrap(), b))
             }
         }
-    }
-
-    // conflicting with `impl From<T>`
-    pub fn from_bytes(b: Vec<u8>) -> Self {
-        Self::Bytes(b, None, false)
     }
 
     pub fn try_into_value(self) -> EsdicawtSpecResult<T> {

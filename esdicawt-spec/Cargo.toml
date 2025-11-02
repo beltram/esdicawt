@@ -23,6 +23,7 @@ digest.workspace = true
 status-list = { workspace = true, optional = true }
 ahash.workspace = true
 hex.workspace = true
+bytes = { workspace = true, features = ["serde"] }
 
 [lints]
 workspace = true

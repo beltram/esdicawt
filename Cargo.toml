@@ -57,13 +57,17 @@ indexmap = "2.9"
 bytes = "1.10"
 flate2 = { version = "1.1", default-features = false }
 tokio = { version = "1.47", default-features = true }
-ahash = "0.8"
+ahash = "=0.8.11"
 
 [patch.crates-io.ciborium]
 git = "https://github.com/beltram/ciborium"
 branch = "simple-value+cde"
 #rev = "69c8aede"
 #path = "../ciborium/ciborium"
+
+# enable when generating flamegraph out of benches
+#[profile.bench]
+#debug = true
 
 [workspace.lints.clippy]
 # Enforced Groups

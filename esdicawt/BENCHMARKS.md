@@ -48,4 +48,3 @@
 
 ---
 Made with [criterion-table](https://github.com/nu11ptr/criterion-table)
-

@@ -33,6 +33,7 @@ enum-variants-strings.workspace = true
 status-list = { workspace = true, optional = true }
 url.workspace = true
 ahash.workspace = true
+bytes.workspace = true
 
 sha2 = { optional = true, workspace = true }
 ed25519-dalek = { optional = true, workspace = true, features = ["rand_core", "pem", "serde"] }
@@ -52,14 +53,15 @@ sha2.workspace = true
 thiserror.workspace = true
 wasm-bindgen-test.workspace = true
 hex.workspace = true
-spice-oidc-cwt = { workspace = true }
+spice-oidc-cwt.workspace = true
 derive_builder.workspace = true
 serde_repr.workspace = true
 blake3 = { version = "1.8", features = ["traits-preview"] }
 tokio = { workspace = true, features = ["macros", "rt"] }
 
 [target.'cfg(not(target_arch = "wasm32"))'.dev-dependencies]
-criterion = "0.6"
+criterion = "0.5"
+pprof = { version = "0.15", features = ["criterion", "flamegraph"] }
 
 [lints]
 workspace = true

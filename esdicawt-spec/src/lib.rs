@@ -268,17 +268,17 @@ impl From<&str> for ClaimName {
 }
 
 pub trait CwtAny: serde::Serialize + for<'de> serde::Deserialize<'de> + Clone {
-    fn to_cbor_bytes(&self) -> EsdicawtSpecResult<Vec<u8>> {
+    fn to_cbor_bytes(&self) -> EsdicawtSpecResult<bytes::Bytes> {
         let mut buf = vec![];
         ciborium::into_writer(self, &mut buf)?;
-        Ok(buf)
+        Ok(buf.into())
     }
 
     /// Uses CBOR Canonical encoding (CDE)
-    fn to_cbor_cde_bytes(&self) -> EsdicawtSpecResult<Vec<u8>> {
+    fn to_cbor_cde_bytes(&self) -> EsdicawtSpecResult<bytes::Bytes> {
         let mut buf = vec![];
         ciborium::value::canonical_into_writer(self, &mut buf)?;
-        Ok(buf)
+        Ok(buf.into())
     }
 
     fn from_cbor_bytes(bytes: &[u8]) -> EsdicawtSpecResult<Self>

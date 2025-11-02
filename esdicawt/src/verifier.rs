@@ -93,17 +93,7 @@ pub trait Verifier {
         let sd_cwt_payload = sd_cwt.0.payload.to_value_mut()?;
         let key_confirmation = &sd_cwt_payload.cnf;
 
-        let kbt_cose_sign1 = CoseSign1::from_tagged_slice(raw_sd_kbt)?;
-        let sd_cwt_cose_sign1 = CoseSign1::from_tagged_slice(sd_cwt_bytes)?;
-
         let holder_confirmation_key: Self::HolderVerifier = key_confirmation.try_into()?;
-
-        // First the Verifier must validate the SD-KBT as described in Section 7.2 of [RFC8392].
-        // verifying signature
-        kbt_cose_sign1.verify_signature(&[], |signature, raw_data| {
-            let signature = Self::HolderSignature::try_from(signature).map_err(|_| SdCwtVerifierError::SignatureEncodingError)?;
-            holder_confirmation_key.verify(raw_data, &signature).map_err(SdCwtVerifierError::from)
-        })?;
 
         // verify confirmation key advertised in the KBT matches the expected one if supplied
         if let Some(hvk) = holder_verifier {
@@ -112,6 +102,16 @@ pub trait Verifier {
                 return Err(SdCwtVerifierError::UnexpectedKeyConfirmation);
             }
         }
+
+        let kbt_cose_sign1 = CoseSign1::from_tagged_slice(raw_sd_kbt)?;
+        let sd_cwt_cose_sign1 = CoseSign1::from_tagged_slice(sd_cwt_bytes)?;
+
+        // First the Verifier must validate the SD-KBT as described in Section 7.2 of [RFC8392].
+        // verifying signature
+        kbt_cose_sign1.verify_signature(&[], |signature, raw_data| {
+            let signature = Self::HolderSignature::try_from(signature).map_err(|_| SdCwtVerifierError::SignatureEncodingError)?;
+            holder_confirmation_key.verify(raw_data, &signature).map_err(SdCwtVerifierError::from)
+        })?;
 
         let kbt_payload = kbt.0.payload.to_value()?;
 
@@ -685,7 +685,7 @@ mod tests {
         issuer_params: IssuerParams<T>,
         holder_params: HolderParams<'_, U>,
         holder_signing_key: &ed25519_dalek::SigningKey,
-    ) -> (CoseKeySet, Vec<u8>, ed25519_dalek::SigningKey) {
+    ) -> (CoseKeySet, bytes::Bytes, ed25519_dalek::SigningKey) {
         let issuer_signing_key = ed25519_dalek::SigningKey::generate(&mut rand::thread_rng());
 
         let issuer = Ed25519Issuer::new(issuer_signing_key.clone());
@@ -788,7 +788,7 @@ pub mod test_utils {
     #[allow(dead_code)]
     #[derive(Debug, Clone)]
     pub struct HybridVerifier<DisclosedClaims: CustomClaims, KbtClaims: CustomClaims> {
-        pub status_cache: HashMap<url::Url, Vec<u8>>,
+        pub status_cache: HashMap<Url, bytes::Bytes>,
         pub _marker: core::marker::PhantomData<(DisclosedClaims, KbtClaims)>,
     }
 
@@ -807,7 +807,7 @@ pub mod test_utils {
             self.status_cache.clear();
         }
 
-        pub(crate) fn insert_status_in_cache(&mut self, status_url: &Url, status_token: Vec<u8>) {
+        pub(crate) fn insert_status_in_cache(&mut self, status_url: &Url, status_token: bytes::Bytes) {
             self.status_cache.entry(status_url.clone()).insert_entry(status_token);
         }
     }
@@ -826,7 +826,7 @@ pub mod test_utils {
 
     impl<T: Select, U: CustomClaims> VerifierWithStatus for HybridVerifier<T, U> {
         async fn get_status(&mut self, status_url: &Url) -> Result<Option<&[u8]>, Self::Error> {
-            Ok(self.status_cache.get(status_url).map(Vec::as_slice))
+            Ok(self.status_cache.get(status_url).map(|u| u.as_ref()))
         }
     }
 }

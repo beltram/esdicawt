@@ -65,7 +65,7 @@ pub trait Issuer {
         &self,
         csprng: &mut dyn rand_core::CryptoRngCore,
         params: IssuerParams<'_, Self::PayloadClaims, Self::ProtectedClaims, Self::UnprotectedClaims>,
-    ) -> Result<Vec<u8>, SdCwtIssuerError<<Self as Issuer>::Error>> {
+    ) -> Result<bytes::Bytes, SdCwtIssuerError<<Self as Issuer>::Error>> {
         let alg = Issuer::cwt_algorithm(self);
 
         let mut protected_builder = coset::HeaderBuilder::new()
@@ -171,7 +171,7 @@ pub trait Issuer {
         let sign1 = coset::CoseSign1Builder::new()
             .protected(protected)
             .unprotected(unprotected)
-            .payload(payload.to_cbor_bytes()?)
+            .payload(payload.to_cbor_bytes()?.into())
             .try_create_signature(&[], |tbs| {
                 let signature = Issuer::signer(self).try_sign(tbs)?;
                 Result::<_, signature::Error>::Ok(signature.to_bytes().as_ref().to_vec())

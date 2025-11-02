@@ -175,7 +175,7 @@ pub trait Holder {
         &self,
         mut sd_cwt: SdCwtVerified<Self::IssuerPayloadClaims, Self::Hasher, Self::IssuerProtectedClaims, Self::IssuerUnprotectedClaims>,
         params: HolderParams<Self::KbtPayloadClaims, Self::KbtProtectedClaims, Self::KbtUnprotectedClaims>,
-    ) -> Result<Vec<u8>, SdCwtHolderError<Self::Error>> {
+    ) -> Result<bytes::Bytes, SdCwtHolderError<Self::Error>> {
         // verify again the time claims of the SD-CWT as time could have gone by between the last 'verify_sd_cwt'
         #[cfg(not(feature = "test-vectors"))] // FIXME: draft samples are expired
         {
@@ -235,7 +235,7 @@ pub trait Holder {
         let sign1 = coset::CoseSign1Builder::new()
             .protected(protected)
             .unprotected(unprotected)
-            .payload(payload.to_cbor_bytes()?)
+            .payload(payload.to_cbor_bytes()?.into())
             .try_create_signature(&[], |tbs| {
                 use signature::{SignatureEncoding as _, Signer as _};
                 let signature = self.signer().try_sign(tbs)?;
