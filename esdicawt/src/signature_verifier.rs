@@ -1,12 +1,16 @@
-use crate::spec::reexports::coset::{Algorithm, CoseSign1, iana, iana::EnumI64};
+use crate::spec::reexports::coset;
+use coset::{CoseSign1, iana, iana::EnumI64};
 
-pub fn validate_signature(sign1: &CoseSign1, cks: &cose_key_set::CoseKeySet) -> Result<(), SignatureVerifierError> {
+pub fn cose_sign1_alg(sign1: &CoseSign1) -> Result<iana::Algorithm, SignatureVerifierError> {
     let alg = sign1.protected.header.alg.as_ref().ok_or(SignatureVerifierError::InvalidCwt)?;
-    let alg = match alg {
-        Algorithm::Assigned(i) => iana::Algorithm::from_i64(i.to_i64()).ok_or(SignatureVerifierError::UnsupportedAlgorithm)?,
+    Ok(match alg {
+        coset::Algorithm::Assigned(i) => iana::Algorithm::from_i64(i.to_i64()).ok_or(SignatureVerifierError::UnsupportedAlgorithm)?,
         _ => return Err(SignatureVerifierError::UnsupportedAlgorithm),
-    };
+    })
+}
 
+pub fn validate_cose_sign1_signature(sign1: &CoseSign1, cks: &cose_key_set::CoseKeySet) -> Result<(), SignatureVerifierError> {
+    let alg = cose_sign1_alg(sign1)?;
     sign1.verify_signature(&[], |#[allow(unused_variables)] signature, #[allow(unused_variables)] raw_data| {
         for key in cks.find_keys(&alg) {
             match key.crv() {
@@ -50,4 +54,6 @@ pub enum SignatureVerifierError {
     CoseKeyError(#[from] cose_key::CoseKeyError),
     #[error("Signature verification error: {0}")]
     SignatureError(#[from] signature::Error),
+    #[error(transparent)]
+    TryFromSliceError(#[from] std::array::TryFromSliceError),
 }
