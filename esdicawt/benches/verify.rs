@@ -4,7 +4,6 @@ use cose_key_set::CoseKeySet;
 use criterion::{BatchSize, BenchmarkId, Criterion, criterion_group, criterion_main};
 use esdicawt::{Holder, HolderParams, Issuer, IssuerParams, SdCwtVerified, ShallowVerifierParams, StatusParams, Verifier, VerifierParams};
 use esdicawt_spec::{CwtAny, Select, SelectExt};
-use rand::prelude::ThreadRng;
 use std::{collections::HashMap, hint::black_box};
 
 #[path = "../tests/fmk.rs"]
@@ -153,13 +152,13 @@ fn shallow_verifier_bench(c: &mut Criterion) {
 fn issuer<H: digest::Digest + Clone>(
     i: &usize,
 ) -> (
-    ThreadRng,
+    rand::rngs::OsRng,
     Ed25519Issuer<VarSizePayload, H>,
     IssuerParams<'_, VarSizePayload>,
     CoseKeySet,
     Ed25519Holder<VarSizePayload, H>,
 ) {
-    let mut rng = rand::thread_rng();
+    let mut rng = rand::rngs::OsRng::default();
     let issuer = Ed25519Issuer::<VarSizePayload, H>::new(ed25519_dalek::SigningKey::generate(&mut rng));
     let cks = CoseKeySet::new(issuer.signer()).unwrap();
     let holder = Ed25519Holder::<VarSizePayload, H>::new(ed25519_dalek::SigningKey::generate(&mut rng));
