@@ -206,9 +206,9 @@ mod tests {
             sd,
         },
     };
+    use ahash::HashMap;
     use ciborium::{Value, cbor};
     use digest::Digest as _;
-    use std::collections::HashMap;
 
     wasm_bindgen_test::wasm_bindgen_test_configure!(run_in_browser);
 
