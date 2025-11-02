@@ -1,11 +1,11 @@
 use crate::{SdCwtVerifierError, SdCwtVerifierResult};
+use ahash::HashMap;
 use ciborium::Value;
 use esdicawt_spec::{
     CwtAny,
     blinded_claims::{Salted, SaltedClaim, SaltedElement},
     redacted_claims::{RedactedClaimElement, RedactedClaimKeys},
 };
-use std::collections::HashMap;
 
 // wrapping "_walk" is required for fallible recursion
 pub fn walk_payload<E>(payload: &mut Value, disclosures: &mut HashMap<Vec<u8>, &mut Salted<Value>>) -> SdCwtVerifierResult<(), E>
