@@ -6,26 +6,22 @@ use crate::{
     ShallowVerifierParams, VerifierParams,
     any_digest::AnyDigest,
     elapsed_since_epoch,
-    signature_verifier::validate_signature,
+    spec::reexports::coset,
     time::verify_time_claims,
     verifier::error::{SdCwtVerifierError, SdCwtVerifierResult},
 };
 use ciborium::{Value, value::Integer};
 use cose_key_confirmation::{KeyConfirmation, error::CoseKeyConfirmationError};
-use esdicawt_spec::{
-    CWT_CLAIM_KEY_CONFIRMATION, CustomClaims, CwtAny, SdHashAlg, Select,
-    issuance::SdInnerPayload,
-    key_binding::KbtCwtTagged,
-    reexports::coset::{CoseSign1, TaggedCborSerializable},
-    verified::KbtCwtVerified,
-};
+use coset::{CoseSign1, TaggedCborSerializable};
+use esdicawt_spec::{CWT_CLAIM_KEY_CONFIRMATION, CustomClaims, CwtAny, SdHashAlg, Select, issuance::SdInnerPayload, key_binding::KbtCwtTagged, verified::KbtCwtVerified};
 use std::collections::HashMap;
 
 pub trait Verifier {
     type Error: core::error::Error + Send + Sync;
 
     type HolderSignature: signature::SignatureEncoding;
-    type HolderVerifier: signature::Verifier<Self::HolderSignature> + PartialEq + for<'a> TryFrom<&'a KeyConfirmation, Error = CoseKeyConfirmationError>;
+
+    type HolderVerifier: signature::Verifier<Self::HolderSignature> + AsRef<[u8]> + PartialEq + for<'a> TryFrom<&'a KeyConfirmation, Error = CoseKeyConfirmationError>;
 
     type IssuerProtectedClaims: CustomClaims;
     type IssuerUnprotectedClaims: CustomClaims;
@@ -76,8 +72,6 @@ pub trait Verifier {
         >,
         SdCwtVerifierError<Self::Error>,
     > {
-        use signature::Verifier as _;
-
         let mut kbt = KbtCwtTagged::<
             Self::IssuerPayloadClaims,
             AnyDigest,
@@ -96,14 +90,9 @@ pub trait Verifier {
         let kbt_cose_sign1 = CoseSign1::from_tagged_slice(raw_sd_kbt)?;
         let sd_cwt_cose_sign1 = CoseSign1::from_tagged_slice(sd_cwt_bytes)?;
 
-        let holder_confirmation_key: Self::HolderVerifier = key_confirmation.try_into()?;
-
         // First the Verifier must validate the SD-KBT as described in Section 7.2 of [RFC8392].
         // verifying signature
-        kbt_cose_sign1.verify_signature(&[], |signature, raw_data| {
-            let signature = Self::HolderSignature::try_from(signature).map_err(|_| SdCwtVerifierError::SignatureEncodingError)?;
-            holder_confirmation_key.verify(raw_data, &signature).map_err(SdCwtVerifierError::from)
-        })?;
+        let holder_verifier_key: Self::HolderVerifier = key_confirmation.try_into()?;
 
         // verify confirmation key advertised in the KBT matches the expected one if supplied
         if let Some(hvk) = holder_verifier {
@@ -113,16 +102,67 @@ pub trait Verifier {
             }
         }
 
+        #[cfg(feature = "ed25519")]
+        {
+            let kbt_tbs = &kbt_cose_sign1.tbs_data(&[]);
+            let kbt_signature = ed25519_dalek::Signature::from_slice(&kbt_cose_sign1.signature)?;
+
+            let sd_cwt_tbs = &sd_cwt_cose_sign1.tbs_data(&[]);
+            let sd_cwt_signature = ed25519_dalek::Signature::from_slice(&sd_cwt_cose_sign1.signature)?;
+
+            let alg = crate::signature_verifier::cose_sign1_alg(&sd_cwt_cose_sign1)?;
+            if alg != coset::iana::Algorithm::EdDSA {
+                return Err(SdCwtVerifierError::UnsupportedAlgorithm);
+            }
+
+            let holder_verifying_key = holder_verifier_key.as_ref().try_into().map_err(crate::signature_verifier::SignatureVerifierError::from)?;
+            let holder_verifier_key = ed25519_dalek::VerifyingKey::from_bytes(holder_verifying_key).map_err(crate::signature_verifier::SignatureVerifierError::from)?;
+
+            let mut verified = false;
+            let mut first_err = None;
+            for key in cks.find_keys(&alg) {
+                if key.crv() == Some(coset::iana::EllipticCurve::Ed25519) {
+                    let sd_cwt_verifier = ed25519_dalek::VerifyingKey::try_from(key).map_err(crate::signature_verifier::SignatureVerifierError::from)?;
+                    let verification = ed25519_dalek::verify_batch(&[kbt_tbs, sd_cwt_tbs], &[kbt_signature, sd_cwt_signature], &[holder_verifier_key, sd_cwt_verifier]);
+                    match verification {
+                        Ok(_) => {
+                            verified = true;
+                            break;
+                        }
+                        Err(e) => {
+                            if first_err.is_none() {
+                                first_err.replace(e);
+                            }
+                        }
+                    }
+                }
+            }
+            if !verified {
+                return first_err.map_or_else(
+                    || Err(crate::signature_verifier::SignatureVerifierError::NoSigner.into()),
+                    |e| Err(SdCwtVerifierError::SignatureError(e)),
+                );
+            }
+        }
+
+        #[cfg(not(feature = "ed25519"))]
+        {
+            use signature::Verifier as _;
+            kbt_cose_sign1.verify_signature(&[], |signature, raw_data| {
+                let signature = Self::HolderSignature::try_from(signature).map_err(|_| SdCwtVerifierError::SignatureEncodingError)?;
+                holder_verifier_key.verify(raw_data, &signature).map_err(SdCwtVerifierError::from)
+            })?;
+            // After validation, the SD-CWT MUST be extracted from the kcwt header, and validated as described in Section 7.2 of [RFC8392].
+            // verify signature if a verifying key supplied
+            crate::signature_verifier::validate_cose_sign1_signature(&sd_cwt_cose_sign1, cks)?;
+        }
+
         let kbt_payload = kbt.0.payload.to_value()?;
 
         // verify time claims of the SD-KBT
         let validation_time = params.artificial_time.map_or_else(|| elapsed_since_epoch().as_secs(), |t| t as u64);
         let (iat, exp, nbf) = (Some(kbt_payload.issued_at), kbt_payload.expiration, kbt_payload.not_before);
         verify_time_claims(validation_time, params.sd_kbt_leeway, iat, exp, nbf, params.sd_kbt_time_verification)?;
-
-        // After validation, the SD-CWT MUST be extracted from the kcwt header, and validated as described in Section 7.2 of [RFC8392].
-        // verify signature if a verifying key supplied
-        validate_signature(&sd_cwt_cose_sign1, cks)?;
 
         // verify time claims of the SD-CWT
         let (iat, exp, nbf) = (sd_cwt_payload.inner.issued_at, sd_cwt_payload.inner.expiration, sd_cwt_payload.inner.not_before);
@@ -306,7 +346,7 @@ pub trait VerifierWithStatus: Verifier {
         let status_token_sign1 = CoseSign1::from_tagged_slice(raw_status_token)?;
 
         // We validate the signature of the StatusListToken
-        validate_signature(&status_token_sign1, status_list_cks).map_err(SdCwtStatusVerifierError::InvalidStatusTokenSignature)?;
+        crate::signature_verifier::validate_cose_sign1_signature(&status_token_sign1, status_list_cks).map_err(SdCwtStatusVerifierError::InvalidStatusTokenSignature)?;
 
         // verify time claims of the SD-CWT
         let validation_time = status_list_params.artificial_time.map_or_else(|| elapsed_since_epoch().as_secs(), |t| t as u64);
@@ -336,13 +376,11 @@ pub trait VerifierWithStatus: Verifier {
 #[cfg(test)]
 mod tests {
     use super::claims::CustomTokenClaims;
-    use crate::verifier::error::SdCwtStatusVerifierError;
     use crate::{
         HolderParams, Issuer, IssuerParams, Presentation, SdCwtVerifierError, StatusParams, TimeArg, Verifier, VerifierParams,
         holder::Holder,
-        signature_verifier::SignatureVerifierError,
         test_utils::{Ed25519Holder, Ed25519Issuer},
-        verifier::{VerifierWithStatus, params::StatusListVerifierParams, test_utils::HybridVerifier},
+        verifier::{VerifierWithStatus, error::SdCwtStatusVerifierError, params::StatusListVerifierParams, test_utils::HybridVerifier},
     };
     use ciborium::{Value, cbor};
     use cose_key_set::CoseKeySet;
@@ -391,7 +429,7 @@ mod tests {
                 Some(&holder_signing_key.verifying_key()),
                 &CoseKeySet::new(&issuer_verifying_key_bis).unwrap()
             ),
-            Err(SdCwtVerifierError::IssuerSignatureValidationError(SignatureVerifierError::SignatureError(_)))
+            Err(SdCwtVerifierError::SignatureError(_))
         ));
     }
 

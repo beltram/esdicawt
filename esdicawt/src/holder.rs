@@ -2,7 +2,7 @@ use crate::spec::reexports::coset;
 use crate::{
     HolderParams, HolderValidationParams, SdCwtHolderError, SdCwtHolderValidationError,
     holder::validation::validate_disclosures,
-    signature_verifier::validate_signature,
+    signature_verifier::validate_cose_sign1_signature,
     spec::{
         CustomClaims, CwtAny, NoClaims, Select,
         issuance::SdCwtIssuedTagged,
@@ -84,7 +84,7 @@ pub trait Holder {
     ) -> Result<SdCwtVerified<Self::IssuerPayloadClaims, Self::Hasher, Self::IssuerProtectedClaims, Self::IssuerUnprotectedClaims>, SdCwtHolderError<Self::Error>> {
         let cose_sign1_sd_cwt = coset::CoseSign1::from_tagged_slice(sd_cwt)?;
 
-        validate_signature(&cose_sign1_sd_cwt, keyset)?;
+        validate_cose_sign1_signature(&cose_sign1_sd_cwt, keyset)?;
 
         let mut sd_cwt = SdCwtIssuedTagged::from_cbor_bytes(sd_cwt)?;
         let payload = sd_cwt.0.payload.to_value()?;
