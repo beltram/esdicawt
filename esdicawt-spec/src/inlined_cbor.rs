@@ -66,7 +66,7 @@ impl<T: CwtAny> InlinedCbor<T> {
             }
         }
     }
-
+    
     pub fn to_value_mut(&mut self) -> EsdicawtSpecResult<&mut T> {
         match self {
             Self::Value(v, _, modified) | Self::Bytes(_, Some(v), modified) => {

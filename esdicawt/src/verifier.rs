@@ -3,17 +3,17 @@ pub mod params;
 mod walk;
 
 use crate::{
-    ShallowVerifierParams, VerifierParams,
-    any_digest::AnyDigest,
-    elapsed_since_epoch,
+    any_digest::AnyDigest, elapsed_since_epoch,
     spec::reexports::coset,
     time::verify_time_claims,
     verifier::error::{SdCwtVerifierError, SdCwtVerifierResult},
+    ShallowVerifierParams,
+    VerifierParams,
 };
-use ciborium::{Value, value::Integer};
-use cose_key_confirmation::{KeyConfirmation, error::CoseKeyConfirmationError};
+use ciborium::{value::Integer, Value};
+use cose_key_confirmation::{error::CoseKeyConfirmationError, KeyConfirmation};
 use coset::{CoseSign1, TaggedCborSerializable};
-use esdicawt_spec::{CWT_CLAIM_KEY_CONFIRMATION, CustomClaims, CwtAny, SdHashAlg, Select, issuance::SdInnerPayload, key_binding::KbtCwtTagged, verified::KbtCwtVerified};
+use esdicawt_spec::{issuance::SdInnerPayload, key_binding::KbtCwtTagged, verified::KbtCwtVerified, CustomClaims, CwtAny, SdHashAlg, Select, CWT_CLAIM_KEY_CONFIRMATION};
 use std::collections::HashMap;
 
 pub trait Verifier {
@@ -190,11 +190,15 @@ pub trait Verifier {
         >,
         SdCwtVerifierError<Self::Error>,
     > {
-        let mut kbt = self.shallow_verify_sd_kbt(raw_sd_kbt, params.shallow(), holder_verifier, cks)?;
+        let kbt = self.shallow_verify_sd_kbt(raw_sd_kbt, params.shallow(), holder_verifier, cks)?;
 
-        let kbt_protected = kbt.0.protected.to_value_mut()?;
-        let sd_cwt = kbt_protected.kcwt.to_value_mut()?;
-        let sd_cwt_payload = sd_cwt.0.payload.to_value_mut()?;
+        let kbt_protected = kbt.0.protected.try_into_value()?;
+
+        let (kbt_protected_verified, sd_cwt) = kbt_protected.take_kcwt_and_verified()?;
+
+        let (sd_cwt_protected, sd_cwt_unprotected, sd_cwt_payload) = sd_cwt.0.into_parts();
+        let sd_cwt_payload = sd_cwt_payload.try_into_value()?;
+        let sd_cwt_protected = sd_cwt_protected.try_into_value()?;
 
         let kbt_payload = kbt.0.payload.try_into_value()?;
 
@@ -250,10 +254,10 @@ pub trait Verifier {
         }
 
         let mut payload = sd_cwt_payload.to_cbor_value()?;
-        let sd_alg = sd_cwt.0.protected.to_value_mut()?.sd_alg;
+        let sd_alg = sd_cwt_protected.sd_alg;
 
         // now verifying the disclosures
-        if let Some(disclosures) = sd_cwt.0.disclosures_mut() {
+        if let Some(mut disclosures) = sd_cwt_unprotected.sd_claims {
             let disclosures_size = disclosures.len();
 
             // compute the hash of all disclosures
@@ -285,11 +289,10 @@ pub trait Verifier {
         let sd_cwt_payload = payload.deserialized::<SdInnerPayload<Self::IssuerPayloadClaims>>()?;
         let claimset = sd_cwt_payload.extra;
 
-        let protected = kbt.0.protected.try_into_value()?.try_into()?;
         let unprotected = kbt.0.unprotected;
 
         Ok(KbtCwtVerified {
-            protected,
+            protected: kbt_protected_verified,
             unprotected,
             payload: kbt_payload,
             claimset,
@@ -377,15 +380,15 @@ pub trait VerifierWithStatus: Verifier {
 mod tests {
     use super::claims::CustomTokenClaims;
     use crate::{
-        HolderParams, Issuer, IssuerParams, Presentation, SdCwtVerifierError, StatusParams, TimeArg, Verifier, VerifierParams,
-        holder::Holder,
-        test_utils::{Ed25519Holder, Ed25519Issuer},
-        verifier::{VerifierWithStatus, error::SdCwtStatusVerifierError, params::StatusListVerifierParams, test_utils::HybridVerifier},
+        holder::Holder, test_utils::{Ed25519Holder, Ed25519Issuer}, verifier::{error::SdCwtStatusVerifierError, params::StatusListVerifierParams, test_utils::HybridVerifier, VerifierWithStatus}, HolderParams, Issuer, IssuerParams, Presentation, SdCwtVerifierError, StatusParams,
+        TimeArg,
+        Verifier,
+        VerifierParams,
     };
-    use ciborium::{Value, cbor};
+    use ciborium::{cbor, Value};
     use cose_key_set::CoseKeySet;
-    use esdicawt_spec::{CustomClaims, CwtAny, NoClaims, Select, verified::KbtCwtVerified};
-    use status_list::{OauthStatus, StatusList, issuer::StatusListIssuerParams};
+    use esdicawt_spec::{verified::KbtCwtVerified, CustomClaims, CwtAny, NoClaims, Select};
+    use status_list::{issuer::StatusListIssuerParams, OauthStatus, StatusList};
 
     wasm_bindgen_test::wasm_bindgen_test_configure!(run_in_browser);
 
@@ -798,7 +801,7 @@ mod tests {
 #[cfg(test)]
 pub mod claims {
     use ciborium::Value;
-    use esdicawt_spec::{Select, sd};
+    use esdicawt_spec::{sd, Select};
 
     #[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
     pub(super) struct CustomTokenClaims {

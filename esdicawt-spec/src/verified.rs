@@ -1,8 +1,9 @@
+use crate::issuance::SdCwtIssuedTagged;
 use crate::{
-    CustomClaims, EsdicawtSpecError, NoClaims, Select,
-    alg::Algorithm,
-    issuance::{SdCwtIssued, SdInnerPayload, SdProtected, SdUnprotected},
-    key_binding::{KbtPayload, KbtProtected, KbtUnprotected},
+    alg::Algorithm, issuance::{SdCwtIssued, SdInnerPayload, SdProtected, SdUnprotected}, key_binding::{KbtPayload, KbtProtected, KbtUnprotected}, CustomClaims,
+    EsdicawtSpecError,
+    NoClaims,
+    Select,
 };
 
 #[derive(Debug, Clone, PartialEq)]
@@ -44,6 +45,28 @@ pub struct KbtProtectedVerified<
     pub alg: Algorithm,
     pub issuer_sd_cwt: SdIssuedVerified<IssuerPayloadClaims, IssuerProtectedClaims, IssuerUnprotectedClaims>,
     pub claims: Option<Extra>,
+}
+
+impl<IssuerPayloadClaims: Select, Hasher: digest::Digest + Clone, IssuerProtectedClaims: CustomClaims, IssuerUnprotectedClaims: CustomClaims, Extra: CustomClaims>
+    KbtProtected<IssuerPayloadClaims, Hasher, IssuerProtectedClaims, IssuerUnprotectedClaims, Extra>
+{
+    pub fn take_kcwt_and_verified(
+        self,
+    ) -> Result<
+        (
+            KbtProtectedVerified<IssuerPayloadClaims, IssuerProtectedClaims, IssuerUnprotectedClaims, Extra>,
+            SdCwtIssuedTagged<IssuerPayloadClaims, Hasher, IssuerProtectedClaims, IssuerUnprotectedClaims>,
+        ),
+        EsdicawtSpecError,
+    > {
+        let kcwt = self.kcwt.try_into_value()?;
+        let verified = KbtProtectedVerified {
+            alg: self.alg,
+            issuer_sd_cwt: kcwt.0.clone().try_into()?,
+            claims: self.extra,
+        };
+        Ok((verified, kcwt))
+    }
 }
 
 impl<IssuerPayloadClaims: Select, Hasher: digest::Digest + Clone, IssuerProtectedClaims: CustomClaims, IssuerUnprotectedClaims: CustomClaims, Extra: CustomClaims>
