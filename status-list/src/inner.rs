@@ -75,6 +75,13 @@ pub fn max_index<S: Status>(bytes: &[u8]) -> BitIndex {
     byte_len.wrapping_mul(ratio)
 }
 
+#[inline(always)]
+pub fn byte_capacity<S: Status>(nb_statuses: usize) -> usize {
+    // multiply by S::BITS first in case nb_statuses < 8
+    // max in case 'nb_statuses * S::BITS' is < 8
+    core::cmp::max(nb_statuses * S::BITS.size() as usize / 8usize, 1)
+}
+
 /// Finds an empty entry in the StatusList
 #[cfg(feature = "rand")]
 pub fn next_vacant_bit_index<S: Status + crate::StatusUndefined>(bytes: &[u8], rng: &mut dyn rand_core::CryptoRngCore) -> Option<BitIndex> {
