@@ -9,7 +9,7 @@ impl<S: Status> LstMut<S> {
     /// Arguments:
     /// * nb_statuses: number of statuses this list should hold
     pub fn new(nb_statuses: usize) -> Self {
-        let byte_capacity = (nb_statuses / 8usize) * S::BITS.size() as usize;
+        let byte_capacity = crate::inner::byte_capacity::<S>(nb_statuses);
         Self(bytes::BytesMut::zeroed(byte_capacity), Default::default())
     }
 
