@@ -7,6 +7,7 @@ pub use esdicawt_spec as spec;
 pub use esdicawt_spec::reexports::coset;
 pub use holder::{
     Holder, SdCwtVerified,
+    accessor::ClaimSetExt,
     error::{SdCwtHolderError, SdCwtHolderResult},
     params::{CborPath, HolderParams, Presentation},
     validation::{HolderValidationParams, SdCwtHolderValidationError},

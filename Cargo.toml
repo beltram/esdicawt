@@ -80,7 +80,6 @@ derive_partial_eq_without_eq = "allow"
 significant_drop_tightening = "allow"  # Allowed due false positives
 trait_duplication_in_bounds = "allow"  # Allowed due false positives
 ## restriction
-string_to_string = "warn"
 rc_mutex = "warn"
 ## Pedantic
 needless_continue = "warn"
