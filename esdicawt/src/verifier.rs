@@ -1,6 +1,6 @@
 pub mod error;
 pub mod params;
-mod walk;
+pub mod walk;
 
 use crate::{
     ShallowVerifierParams, VerifierParams,

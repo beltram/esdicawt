@@ -14,6 +14,7 @@ use coset::{AsCborValue, TaggedCborSerializable};
 use ciborium::Value;
 use cose_key_confirmation::{KeyConfirmation, error::CoseKeyConfirmationError};
 
+pub mod accessor;
 pub mod error;
 pub mod params;
 pub mod traverse;
@@ -284,6 +285,7 @@ impl<PayloadClaims: Select, Hasher: digest::Digest + Clone, ProtectedClaims: Cus
 #[cfg(test)]
 mod tests {
     use super::{claims::CustomTokenClaims, test_utils::Ed25519Holder, *};
+    use crate::holder::accessor::ClaimSetExt;
     use crate::{CwtStdLabel, Issuer, IssuerParams, Presentation, StatusParams, TimeArg, holder::params::CborPath, issuer::test_utils::Ed25519Issuer};
     use ciborium::cbor;
     use cose_key_set::CoseKeySet;
@@ -364,9 +366,12 @@ mod tests {
 
         let disclosable_claims = sd_kbt.0.walk_disclosed_claims().unwrap().collect::<Vec<_>>();
         assert_eq!(disclosable_claims.len(), 1);
-        let is_alice = |sc: &SaltedClaim<ciborium::Value>| sc.name == ClaimName::Text("name".into()) && sc.value == cbor!("Alice Smith").unwrap();
+        let is_alice = |sc: &SaltedClaim<Value>| sc.name == ClaimName::Text("name".into()) && sc.value == cbor!("Alice Smith").unwrap();
 
         assert!(disclosable_claims.into_iter().any(|c| { matches!(c.unwrap(), Salted::Claim(sc) if is_alice(sc)) }));
+
+        let claimset = sd_kbt.0.claimset_unchecked().unwrap().unwrap();
+        assert_eq!(&claimset.name.unwrap(), "Alice Smith");
     }
 
     #[test]
