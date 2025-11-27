@@ -48,8 +48,6 @@ pub const COSE_HEADER_KCWT: i64 = 13;
 
 pub const CWT_MEDIATYPE: i64 = 16;
 pub const MEDIATYPE_SD_CWT: &str = "application/sd-cwt";
-// TODO: deprecate after a grace period
-pub const LEGACY_MEDIATYPE_SD_CWT: &str = "application/sd+cwt";
 pub const MEDIATYPE_KB_CWT: &str = "application/kb+cwt";
 
 pub type EsdicawtSpecResult<T> = Result<T, EsdicawtSpecError>;
