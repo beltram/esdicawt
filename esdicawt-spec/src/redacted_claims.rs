@@ -1,5 +1,3 @@
-//! TODO: if the RFC defines a finite subset of hash_alg, turn these into enums with stack allocated arrays of the exact size 💡
-
 use crate::{CwtAny, EsdicawtSpecResult, REDACTED_CLAIM_ELEMENT_TAG};
 use ciborium::Value;
 
