@@ -16,9 +16,7 @@ use std::borrow::Cow;
 pub trait SdCwtRead: TokenQuery {
     type PayloadClaims: CustomClaims;
 
-    fn sub(&mut self) -> EsdicawtReadResult<Option<Cow<'_, str>>> {
-        Ok(self.query(vec![CwtClaimName::Sub.to_i64().into()].into())?.as_ref().map(Value::deserialized).transpose()?)
-    }
+    fn sub(&mut self) -> EsdicawtReadResult<Option<&str>>;
 
     fn iss(&mut self) -> EsdicawtReadResult<Option<Cow<'_, str>>> {
         Ok(self.query(vec![CwtClaimName::Iss.to_i64().into()].into())?.as_ref().map(Value::deserialized).transpose()?)
@@ -61,7 +59,7 @@ impl<IssuerPayloadClaims: Select, Hasher: digest::Digest + Clone, IssuerProtecte
     type PayloadClaims = IssuerPayloadClaims;
 
     // sub is not redactable so we read it directly from the SD-CWT
-    fn sub(&mut self) -> EsdicawtReadResult<Option<Cow<'_, str>>> {
+    fn sub(&mut self) -> EsdicawtReadResult<Option<&str>> {
         SdCwtRead::sub(&mut self.0)
     }
 }
@@ -72,8 +70,8 @@ impl<IssuerPayloadClaims: Select, Hasher: digest::Digest + Clone, IssuerProtecte
     type PayloadClaims = IssuerPayloadClaims;
 
     // sub is not redactable so we read it directly from the SD-CWT
-    fn sub(&mut self) -> EsdicawtReadResult<Option<Cow<'_, str>>> {
-        Ok(self.payload.to_value()?.inner.subject.as_deref().map(Cow::Borrowed))
+    fn sub(&mut self) -> EsdicawtReadResult<Option<&str>> {
+        Ok(self.payload.to_value()?.inner.subject.as_deref())
     }
 }
 
@@ -82,7 +80,7 @@ impl<IssuerPayloadClaims: Select, Hasher: digest::Digest + Clone, IssuerProtecte
 {
     type PayloadClaims = IssuerPayloadClaims;
 
-    fn sub(&mut self) -> EsdicawtReadResult<Option<Cow<'_, str>>> {
+    fn sub(&mut self) -> EsdicawtReadResult<Option<&str>> {
         SdCwtRead::sub(&mut self.0.0)
     }
 }
@@ -98,6 +96,10 @@ impl<
 > SdCwtRead for KbtCwtTagged<IssuerPayloadClaims, Hasher, KbtPayloadClaims, IssuerProtectedClaims, IssuerUnprotectedClaims, KbtProtectedClaims, KbtUnprotectedClaims>
 {
     type PayloadClaims = IssuerPayloadClaims;
+
+    fn sub(&mut self) -> EsdicawtReadResult<Option<&str>> {
+        SdCwtRead::sub(&mut self.0)
+    }
 }
 
 impl<
@@ -111,4 +113,8 @@ impl<
 > SdCwtRead for KbtCwt<IssuerPayloadClaims, Hasher, KbtPayloadClaims, IssuerProtectedClaims, IssuerUnprotectedClaims, KbtProtectedClaims, KbtUnprotectedClaims>
 {
     type PayloadClaims = IssuerPayloadClaims;
+
+    fn sub(&mut self) -> EsdicawtReadResult<Option<&str>> {
+        Ok(self.sd_cwt_payload()?.inner.subject.as_deref())
+    }
 }
