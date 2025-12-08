@@ -4,7 +4,7 @@ use serde::ser::SerializeMap;
 
 use super::KbtProtected;
 use crate::{
-    COSE_HEADER_KCWT, CWT_CLAIM_ALG, CWT_MEDIATYPE, CustomClaims, CwtAny, MEDIATYPE_KB_CWT, Select, inlined_cbor::InlinedCbor, issuance::SdCwtIssuedTagged,
+    COSE_HEADER_KCWT, CWT_CLAIM_ALG, CWT_MEDIA_TYPE, CustomClaims, CwtAny, MEDIA_TYPE_KB_CWT, Select, inlined_cbor::InlinedCbor, issuance::SdCwtIssuedTagged,
     key_binding::KbtProtectedBuilder,
 };
 
@@ -22,7 +22,7 @@ impl<IssuerPayloadClaims: Select, Hasher: digest::Digest + Clone, IssuerProtecte
             .transpose()?;
         let extra_len = extra.as_ref().map(|extra| extra.len()).unwrap_or_default();
         let mut map = serializer.serialize_map(Some(3 + extra_len))?;
-        map.serialize_entry(&CWT_MEDIATYPE, MEDIATYPE_KB_CWT)?;
+        map.serialize_entry(&CWT_MEDIA_TYPE, &MEDIA_TYPE_KB_CWT)?;
 
         let alg = (*self.alg).clone().to_cbor_value().map_err(|e| S::Error::custom(format!("Cannot set Alg: {e}")))?;
         map.serialize_entry(&CWT_CLAIM_ALG, &alg)?;
@@ -57,15 +57,16 @@ impl<'de, IssuerPayloadClaims: Select, Hasher: digest::Digest + Clone, IssuerPro
 
             fn visit_map<A: serde::de::MapAccess<'de>>(self, mut map: A) -> Result<Self::Value, A::Error> {
                 use serde::de::Error as _;
-                let mut found_mediatype = false;
                 let mut builder = KbtProtectedBuilder::<IssuerPayloadClaims, Hasher, IssuerProtectedClaims, IssuerUnprotectedClaims, Extra>::default();
                 let mut extra = vec![];
                 while let Some((k, v)) = map.next_entry::<Value, Value>()? {
                     match k {
                         Value::Integer(label) => match label.try_into() {
-                            // Ignore, but it must be there and have the correct value
-                            Ok(CWT_MEDIATYPE) => {
-                                found_mediatype = v.into_text().map(|s| s == MEDIATYPE_KB_CWT).unwrap_or_default();
+                            Ok(CWT_MEDIA_TYPE) => {
+                                let media_type = v.into_integer().map_err(|_| A::Error::custom("SD-KBT media type MUST be a CoAP content format"))?;
+                                if media_type != MEDIA_TYPE_KB_CWT.into() {
+                                    return Err(A::Error::custom(format!("Invalid SD-KBT media-type, MUST be {MEDIA_TYPE_KB_CWT}")));
+                                }
                             }
                             Ok(CWT_CLAIM_ALG) => {
                                 builder.alg(coset::Algorithm::from_cbor_value(v).map_err(|e| A::Error::custom(format!("Cannot deserialize sd-protected.alg: {e}")))?);
@@ -85,10 +86,6 @@ impl<'de, IssuerPayloadClaims: Select, Hasher: digest::Digest + Clone, IssuerPro
                             extra.push((k, v));
                         }
                     }
-                }
-
-                if !found_mediatype {
-                    return Err(A::Error::missing_field("typ"));
                 }
 
                 if !extra.is_empty() {
@@ -141,7 +138,7 @@ impl<IssuerPayloadClaims: Select, Hasher: digest::Digest + Clone, IssuerProtecte
         }
 
         // map typ
-        let builder = builder.value(CWT_MEDIATYPE, Value::Text(MEDIATYPE_KB_CWT.to_string()));
+        let builder = builder.value(CWT_MEDIA_TYPE, Value::Integer(MEDIA_TYPE_KB_CWT.into()));
 
         // map sd_cwt_issued in kcwt
         let builder = builder.value(COSE_HEADER_KCWT, kbtp.kcwt.to_cbor_value()?);
