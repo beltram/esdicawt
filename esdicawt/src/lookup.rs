@@ -13,26 +13,65 @@ use crate::{
 };
 use ciborium::Value;
 use esdicawt_spec::{issuance::SdCwtIssuedTagged, key_binding::KbtCwtTagged, verified::KbtCwtVerified};
+use serde::ser::SerializeTuple;
 
 #[derive(Debug, Clone, Hash, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
-pub struct Query {
-    pub elements: Vec<QueryElement>,
+#[serde(transparent)]
+#[repr(transparent)]
+pub struct Query(Vec<QueryElement>);
+
+impl std::ops::Deref for Query {
+    type Target = [QueryElement];
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
 }
 
 impl From<Vec<QueryElement>> for Query {
     fn from(elements: Vec<QueryElement>) -> Self {
-        Self { elements }
+        Self(elements)
     }
 }
 
-#[derive(Debug, Clone, Hash, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Clone, Hash, PartialEq, Eq)]
 #[non_exhaustive]
 /// enum for claim queries, allowing for future ways to query the token
+// TODO: this should go away and use cbor pointer
 pub enum QueryElement {
     /// selects a claim key
     ClaimName(ClaimName),
     /// Selects an element in an array
     Index(usize),
+}
+
+impl serde::Serialize for QueryElement {
+    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        let mut tuple = serializer.serialize_tuple(2)?;
+        match self {
+            Self::ClaimName(name) => {
+                tuple.serialize_element(&0u8)?;
+                tuple.serialize_element(name)?;
+            }
+            Self::Index(idx) => {
+                tuple.serialize_element(&1u8)?;
+                tuple.serialize_element(idx)?;
+            }
+        }
+        tuple.end()
+    }
+}
+
+impl<'de> serde::Deserialize<'de> for QueryElement {
+    fn deserialize<D: serde::de::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        use serde::de::Error as _;
+        let (key, value) = <(u8, Value) as serde::Deserialize>::deserialize(deserializer)?;
+        match key {
+            0 => Ok(Self::ClaimName(value.deserialized().map_err(D::Error::custom)?)),
+            1 => Ok(Self::Index(value.deserialized().map_err(D::Error::custom)?)),
+            _ => Err(serde::de::Error::custom("Unknown QueryElement variant")),
+        }
+    }
 }
 
 impl From<&str> for QueryElement {
@@ -58,7 +97,7 @@ where
     Hasher: digest::Digest,
 {
     let query: Query = ciborium::from_reader(&mut &*query)?;
-    query_inner::<Hasher>(array, payload, &query.elements)
+    query_inner::<Hasher>(array, payload, &query)
 }
 
 fn query_inner<Hasher>(array: &mut SaltedArray, payload: &Value, query: &[QueryElement]) -> EsdicawtSpecResult<Option<Value>>
@@ -158,9 +197,7 @@ impl<PayloadClaims: Select, Hasher: digest::Digest + Clone, ProtectedClaims: Cus
 {
     fn query(&mut self, token_query: Query) -> EsdicawtSpecResult<Option<Value>> {
         let payload = self.payload.to_value()?.to_cbor_value()?;
-        self.disclosures_mut()
-            .map(|d| query_inner::<Hasher>(d, &payload, &token_query.elements))
-            .unwrap_or(Ok(None))
+        self.disclosures_mut().map(|d| query_inner::<Hasher>(d, &payload, &token_query)).unwrap_or(Ok(None))
     }
 }
 
@@ -169,11 +206,7 @@ impl<PayloadClaims: Select, Hasher: digest::Digest + Clone, ProtectedClaims: Cus
 {
     fn query(&mut self, token_query: Query) -> EsdicawtSpecResult<Option<Value>> {
         let payload = self.0.0.payload.to_value()?.to_cbor_value()?;
-        self.0
-            .0
-            .disclosures_mut()
-            .map(|d| query_inner::<Hasher>(d, &payload, &token_query.elements))
-            .unwrap_or(Ok(None))
+        self.0.0.disclosures_mut().map(|d| query_inner::<Hasher>(d, &payload, &token_query)).unwrap_or(Ok(None))
     }
 }
 
@@ -218,7 +251,7 @@ impl<
 {
     fn query(&mut self, token_query: Query) -> EsdicawtSpecResult<Option<Value>> {
         if let Some(Ok(claimset)) = self.claimset.as_mut().map(|cs| cs.to_cbor_value()) {
-            query_inner::<AnyDigest>(&mut SaltedArray::new(), &claimset, &token_query.elements)
+            query_inner::<AnyDigest>(&mut SaltedArray::new(), &claimset, &token_query)
         } else {
             Ok(None)
         }
@@ -307,6 +340,19 @@ mod tests {
 
         test(cbor!({"a" => [{"b" => "c"}, {"b" => "d", "e" => "f"}], "b" => 1234})); // unredacted
         test(cbor!({"a" => [{"b" => "c"}, {sd!("b") => "d", "e" => "f"}], "b" => 1234})); // assert redacted
+    }
+
+    #[test]
+    fn query_element_deser_should_roundtrip() {
+        let elements = [
+            QueryElement::Index(42),
+            QueryElement::ClaimName(ClaimName::Integer(42.into())),
+            QueryElement::ClaimName(ClaimName::Text("hello".into())),
+        ];
+        for e in elements {
+            let r = QueryElement::from_cbor_bytes(&e.to_cbor_bytes().unwrap()).unwrap();
+            assert_eq!(e, r);
+        }
     }
 
     fn generate<T: Select>(payload: T) -> (SdCwtIssuedTagged<T, sha2::Sha256>, ed25519_dalek::SigningKey, ed25519_dalek::VerifyingKey) {
