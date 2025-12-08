@@ -8,7 +8,7 @@ use coset::{AsCborValue as _, TaggedCborSerializable as _};
 use esdicawt_spec::reexports::coset;
 use esdicawt_spec::{
     COSE_SD_CLAIMS, CWT_CLAIM_AUDIENCE, CWT_CLAIM_CNONCE, CWT_CLAIM_CTI, CWT_CLAIM_EXPIRES_AT, CWT_CLAIM_ISSUED_AT, CWT_CLAIM_ISSUER, CWT_CLAIM_KEY_CONFIRMATION,
-    CWT_CLAIM_NOT_BEFORE, CWT_CLAIM_SD_ALG, CWT_CLAIM_SUBJECT, CWT_MEDIATYPE, CustomClaims, CwtAny, MEDIATYPE_SD_CWT, SdHashAlg, Select, issuance::SdCwtIssuedTagged,
+    CWT_CLAIM_NOT_BEFORE, CWT_CLAIM_SD_ALG, CWT_CLAIM_SUBJECT, CWT_MEDIA_TYPE, CustomClaims, CwtAny, MEDIA_TYPE_SD_CWT, SdHashAlg, Select, issuance::SdCwtIssuedTagged,
 };
 use signature::{Keypair, SignatureEncoding, Signer};
 
@@ -70,7 +70,7 @@ pub trait Issuer {
 
         let mut protected_builder = coset::HeaderBuilder::new()
             .algorithm(alg)
-            .value(CWT_MEDIATYPE, Value::Text(MEDIATYPE_SD_CWT.to_string()))
+            .value(CWT_MEDIA_TYPE, Value::Integer(MEDIA_TYPE_SD_CWT.into()))
             .value(CWT_CLAIM_SD_ALG, Value::Integer((self.hash_algorithm() as i64).into()))
             .key_id(params.key_location.as_bytes().into());
 
