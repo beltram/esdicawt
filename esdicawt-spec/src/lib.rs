@@ -47,8 +47,8 @@ pub const CWT_LABEL_REDACTED_KEYS: u8 = 59;
 pub const COSE_HEADER_KCWT: i64 = 13;
 
 pub const CWT_MEDIA_TYPE: i64 = 16;
-pub const MEDIA_TYPE_SD_CWT: u16 = 66;
-pub const MEDIA_TYPE_KB_CWT: u16 = 67;
+pub const MEDIA_TYPE_SD_CWT: u16 = 293;
+pub const MEDIA_TYPE_KB_CWT: u16 = 294;
 
 pub type EsdicawtSpecResult<T> = Result<T, EsdicawtSpecError>;
 
