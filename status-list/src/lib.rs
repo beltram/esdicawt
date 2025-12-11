@@ -12,6 +12,7 @@ use ciborium::Value;
 use serde::ser::SerializeMap;
 use std::hash::Hash;
 
+use crate::issuer::LstMut;
 pub use {
     error::{StatusListError, StatusListResult},
     lst::Lst,
@@ -112,6 +113,10 @@ impl<S: Status> StatusList<S> {
 
     pub fn lst(&self) -> &Lst<S> {
         &self.lst
+    }
+
+    pub fn lst_mut(&self) -> LstMut<S> {
+        self.lst.clone().into()
     }
 
     pub fn max_index(&self) -> BitIndex {
