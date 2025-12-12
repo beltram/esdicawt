@@ -39,7 +39,7 @@ pub struct StatusList<S: Status = u8> {
     /// Byte string (Major Type 2) that contains the status values for all the Referenced Tokens it conveys statuses for. The value MUST be the compressed byte array.
     lst: Lst<S>,
     /// Text string (Major Type 3) that contains a URI to retrieve the Status List Aggregation for this type of Referenced Token
-    aggregation_uri: Option<url::Url>,
+    pub aggregation_uri: Option<url::Url>,
 }
 
 impl<S: Status> StatusList<S> {
