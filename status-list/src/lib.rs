@@ -119,6 +119,10 @@ impl<S: Status> StatusList<S> {
         self.lst.clone().into()
     }
 
+    pub fn aggregation_uri(&self) -> Option<&url::Url> {
+        self.aggregation_uri.as_ref()
+    }
+
     pub fn max_index(&self) -> BitIndex {
         self.lst.max_index()
     }
