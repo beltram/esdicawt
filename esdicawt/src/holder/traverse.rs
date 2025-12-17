@@ -2,7 +2,7 @@ use crate::{SdCwtHolderError, SdCwtHolderResult, holder::params::CborPath};
 use ciborium::Value;
 use digest::Digest;
 use esdicawt_spec::{
-    CWT_LABEL_REDACTED_KEYS, CwtAny, REDACTED_CLAIM_ELEMENT_TAG,
+    CWT_LABEL_REDACTED_TAG, CwtAny, REDACTED_CLAIM_ELEMENT_TAG,
     blinded_claims::{Salted, SaltedClaim, SaltedElement},
 };
 use std::{borrow::Cow, collections::HashMap};
@@ -67,7 +67,7 @@ where
                     for (index, label, value) in values {
                         match (label, value) {
                             // rcks in a mapping
-                            (Some(Value::Simple(st)), Value::Array(hashes)) if *st == CWT_LABEL_REDACTED_KEYS => {
+                            (Some(Value::Simple(st)), Value::Array(hashes)) if *st == CWT_LABEL_REDACTED_TAG => {
                                 let hashes = hashes.iter().filter_map(|h| h.as_bytes()).collect::<Vec<_>>();
                                 for hash in hashes {
                                     if let Some(salted_child) = find_hash(hash) {
@@ -120,7 +120,7 @@ where
         SaltedOrValue::Value(Value::Map(values)) => {
             for (label, value) in values {
                 match (label, value) {
-                    (Value::Simple(st), Value::Array(hashes)) if *st == CWT_LABEL_REDACTED_KEYS => {
+                    (Value::Simple(st), Value::Array(hashes)) if *st == CWT_LABEL_REDACTED_TAG => {
                         let hashes = hashes.iter().filter_map(|h| h.as_bytes()).collect::<Vec<_>>();
                         for hash in hashes {
                             if let Some(salted_child) = find_hash(hash) {

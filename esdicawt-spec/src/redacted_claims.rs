@@ -45,7 +45,7 @@ impl std::ops::Deref for RedactedClaimKeyRef<'_> {
 pub struct RedactedClaimKeys(Vec<RedactedClaimKey>);
 
 impl RedactedClaimKeys {
-    pub const CWT_LABEL: u8 = crate::CWT_LABEL_REDACTED_KEYS;
+    pub const CWT_LABEL: u8 = crate::CWT_LABEL_REDACTED_TAG;
 
     pub fn with_capacity(capacity: usize) -> Self {
         Self(Vec::with_capacity(capacity))

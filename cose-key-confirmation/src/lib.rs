@@ -9,12 +9,12 @@ pub mod error;
 #[derive(Debug, Clone, PartialEq)]
 #[repr(i64)]
 pub enum KeyConfirmation {
-    CoseKey(cose_key::CoseKey) = KeyConfirmation::COSE_KEY_CLAIM,
-    EncryptedCoseKey(Box<EncryptedCoseKey>) = KeyConfirmation::ENCRYPTED_COSE_KEY_CLAIM,
-    Kid(serde_bytes::ByteBuf) = KeyConfirmation::KID_CLAIM,
+    CoseKey(cose_key::CoseKey) = Self::COSE_KEY_CLAIM,
+    EncryptedCoseKey(Box<EncryptedCoseKey>) = Self::ENCRYPTED_COSE_KEY_CLAIM,
+    Kid(serde_bytes::ByteBuf) = Self::KID_CLAIM,
     // see https://datatracker.ietf.org/doc/html/rfc9679#name-confirmation-method
     #[cfg(feature = "thumbprint")]
-    Thumbprint(cose_key_thumbprint::CoseKeyThumbprint<32>) = KeyConfirmation::THUMBPRINT_CLAIM,
+    Thumbprint(cose_key_thumbprint::CoseKeyThumbprint<32>) = Self::THUMBPRINT_CLAIM,
 }
 
 #[derive(Debug, PartialEq, Clone)]

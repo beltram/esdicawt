@@ -12,7 +12,6 @@ use ciborium::Value;
 use serde::ser::SerializeMap;
 use std::hash::Hash;
 
-use crate::issuer::LstMut;
 pub use {
     error::{StatusListError, StatusListResult},
     lst::Lst,
@@ -115,7 +114,8 @@ impl<S: Status> StatusList<S> {
         &self.lst
     }
 
-    pub fn lst_mut(&self) -> LstMut<S> {
+    #[cfg(feature = "issuer")]
+    pub fn lst_mut(&self) -> issuer::LstMut<S> {
         self.lst.clone().into()
     }
 

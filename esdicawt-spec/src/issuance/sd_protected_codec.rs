@@ -3,7 +3,7 @@ use coset::AsCborValue;
 use serde::ser::SerializeMap;
 
 use super::SdProtected;
-use crate::{CWT_CLAIM_ALG, CWT_CLAIM_SD_ALG, CWT_MEDIA_TYPE, CustomClaims, MEDIA_TYPE_SD_CWT, SdHashAlg, issuance::SdProtectedBuilder};
+use crate::{COSE_HEADER_SD_ALG, CWT_CLAIM_ALG, CWT_MEDIA_TYPE, CustomClaims, MEDIA_TYPE_SD_CWT, SdHashAlg, issuance::SdProtectedBuilder};
 
 impl<Extra: CustomClaims> serde::Serialize for SdProtected<Extra> {
     fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
@@ -25,7 +25,7 @@ impl<Extra: CustomClaims> serde::Serialize for SdProtected<Extra> {
         let alg = (*self.alg).clone().to_cbor_value().map_err(|e| S::Error::custom(format!("Cannot set Alg: {e}")))?;
         map.serialize_entry(&CWT_CLAIM_ALG, &alg)?;
 
-        map.serialize_entry(&CWT_CLAIM_SD_ALG, &self.sd_alg)?;
+        map.serialize_entry(&COSE_HEADER_SD_ALG, &self.sd_alg)?;
 
         if let Some(extra) = extra.take() {
             for (k, v) in extra {
@@ -63,7 +63,7 @@ impl<'de, Extra: CustomClaims> serde::Deserialize<'de> for SdProtected<Extra> {
                             Ok(CWT_CLAIM_ALG) => {
                                 builder.alg(coset::Algorithm::from_cbor_value(v).map_err(|e| A::Error::custom(format!("Cannot deserialize sd-protected.alg: {e}")))?);
                             }
-                            Ok(CWT_CLAIM_SD_ALG) => {
+                            Ok(COSE_HEADER_SD_ALG) => {
                                 builder.sd_alg(
                                     v.deserialized::<SdHashAlg>()
                                         .map_err(|value| A::Error::custom(format!("sd_alg is not a correct enum value: {value:?}")))?,
