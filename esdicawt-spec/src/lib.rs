@@ -15,19 +15,25 @@ pub mod reexports {
     pub use coset;
 }
 
-pub const COSE_SD_CLAIMS: i64 = 17;
-pub const COSE_SD_KBT: i64 = 18;
+pub const COSE_HEADER_KCWT: i64 = 13;
 
+pub const COSE_HEADER_SD_CLAIMS: i64 = 17;
+pub const COSE_HEADER_SD_ALG: i64 = 27;
+pub const COSE_HEADER_SD_AEAD_ENCRYPTED_CLAIMS: i64 = 28;
+pub const COSE_HEADER_SD_AEAD: i64 = 29;
+
+// Use as a SimpleType. It works thanks to an unmerged fork of ciborium
+pub const CWT_LABEL_REDACTED_TAG: u8 = 59;
 /// Used for redacted claims in an array
-/// TODO: Pending IANA registration. Later on we should get it via coset
 pub const REDACTED_CLAIM_ELEMENT_TAG: u64 = 60;
+/// Used for pointing to the Issuer the claims to redact
 pub const TO_BE_REDACTED_TAG: u64 = 58;
 
+#[allow(dead_code)]
+pub const TO_BE_DECOY_TAG: u64 = 61;
 pub const CWT_CLAIM_ALG: i64 = 1;
-pub const CWT_CLAIM_SD_ALG: i64 = 18;
-pub const CWT_CLAIM_ISSUER_SD_CWT: i64 = 11;
-pub const CWT_CLAIM_REDACTED_ELEMENT: i64 = 41;
-pub const CWT_CLAIM_VCT: i64 = 42;
+#[allow(dead_code)]
+pub const CWT_CLAIM_VCT: i64 = 11;
 pub const CWT_CLAIM_ISSUER: i64 = coset::iana::CwtClaimName::Iss as i64;
 pub const CWT_CLAIM_SUBJECT: i64 = coset::iana::CwtClaimName::Sub as i64;
 pub const CWT_CLAIM_AUDIENCE: i64 = coset::iana::CwtClaimName::Aud as i64;
@@ -37,14 +43,8 @@ pub const CWT_CLAIM_ISSUED_AT: i64 = coset::iana::CwtClaimName::Iat as i64;
 pub const CWT_CLAIM_KEY_CONFIRMATION: i64 = coset::iana::CwtClaimName::Cnf as i64;
 pub const CWT_CLAIM_STATUS: i64 = coset::iana::CwtClaimName::Status as i64;
 pub const CWT_CLAIM_CNONCE: i64 = coset::iana::CwtClaimName::CNonce as i64;
+
 pub const CWT_CLAIM_CTI: i64 = coset::iana::CwtClaimName::Cti as i64;
-
-// FIXME: this is not in the draft yet
-// Use as a SimpleType. It works thanks to an unmerged fork of ciborium
-pub const CWT_LABEL_REDACTED_KEYS: u8 = 59;
-
-// TODO: register it in coset IANA registry
-pub const COSE_HEADER_KCWT: i64 = 13;
 
 pub const CWT_MEDIA_TYPE: i64 = 16;
 pub const MEDIA_TYPE_SD_CWT: u16 = 293;
@@ -319,6 +319,7 @@ impl<'de> serde::Deserialize<'de> for NoClaims {
 #[derive(Clone, Copy, Eq, PartialEq, serde::Serialize, serde::Deserialize)]
 #[repr(transparent)]
 #[serde(transparent)]
+#[allow(clippy::use_self)]
 pub struct Salt(#[serde(with = "serde_bytes")] pub [u8; Salt::SIZE]);
 
 impl std::fmt::Debug for Salt {

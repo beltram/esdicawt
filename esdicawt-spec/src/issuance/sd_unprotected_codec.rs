@@ -1,7 +1,7 @@
 use ciborium::Value;
 use serde::ser::SerializeMap;
 
-use crate::{COSE_SD_CLAIMS, CustomClaims};
+use crate::{COSE_HEADER_SD_CLAIMS, CustomClaims};
 
 use super::SdUnprotected;
 
@@ -11,7 +11,7 @@ impl<Extra: CustomClaims> serde::Serialize for SdUnprotected<Extra> {
         let mut map = serializer.serialize_map(None)?;
 
         if let Some(sd_claims) = &self.sd_claims {
-            map.serialize_entry(&COSE_SD_CLAIMS, sd_claims)?;
+            map.serialize_entry(&COSE_HEADER_SD_CLAIMS, sd_claims)?;
         }
 
         let mut extra = self
@@ -46,7 +46,7 @@ impl<'de, Extra: CustomClaims> serde::Deserialize<'de> for SdUnprotected<Extra> 
                 let mut extra = vec![];
                 let mut sd_claims = None;
                 while let Some((k, v)) = map.next_entry::<Value, Value>()? {
-                    if matches!(k, Value::Integer(label) if label == COSE_SD_CLAIMS.into()) {
+                    if matches!(k, Value::Integer(label) if label == COSE_HEADER_SD_CLAIMS.into()) {
                         let salted_array = v.deserialized().map_err(|err| A::Error::custom(format!("Cannot deserialize sd_claims: {err}")))?;
                         sd_claims.replace(salted_array);
                     } else {
