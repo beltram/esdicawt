@@ -18,9 +18,9 @@ pub mod reexports {
 pub const COSE_HEADER_KCWT: i64 = 13;
 
 pub const COSE_HEADER_SD_CLAIMS: i64 = 17;
-pub const COSE_HEADER_SD_ALG: i64 = 27;
-pub const COSE_HEADER_SD_AEAD_ENCRYPTED_CLAIMS: i64 = 28;
-pub const COSE_HEADER_SD_AEAD: i64 = 29;
+pub const COSE_HEADER_SD_ALG: i64 = 170;
+pub const COSE_HEADER_SD_AEAD_ENCRYPTED_CLAIMS: i64 = 171;
+pub const COSE_HEADER_SD_AEAD: i64 = 172;
 
 // Use as a SimpleType. It works thanks to an unmerged fork of ciborium
 pub const CWT_LABEL_REDACTED_TAG: u8 = 59;
