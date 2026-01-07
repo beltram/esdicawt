@@ -13,15 +13,19 @@ impl<IssuerPayloadClaims: Select, Hasher: digest::Digest + Clone, IssuerProtecte
 {
     fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
         use serde::ser::Error as _;
-        let mut extra = self
+
+        let extras = self
             .extra
             .as_ref()
             .map(|extra| extra.to_cbor_value().map_err(S::Error::custom))
             .transpose()?
             .map(|v| v.into_map().map_err(|_| S::Error::custom("should have been a mapping")))
-            .transpose()?;
-        let extra_len = extra.as_ref().map(|extra| extra.len()).unwrap_or_default();
-        let mut map = serializer.serialize_map(Some(3 + extra_len))?;
+            .transpose()?
+            .unwrap_or_default();
+
+        let map_size = 3 + extras.len();
+        let mut map = serializer.serialize_map(Some(map_size))?;
+
         map.serialize_entry(&CWT_MEDIA_TYPE, &MEDIA_TYPE_KB_CWT)?;
 
         let alg = (*self.alg).clone().to_cbor_value().map_err(|e| S::Error::custom(format!("Cannot set Alg: {e}")))?;
@@ -29,10 +33,8 @@ impl<IssuerPayloadClaims: Select, Hasher: digest::Digest + Clone, IssuerProtecte
 
         map.serialize_entry(&COSE_HEADER_KCWT, &self.kcwt)?;
 
-        if let Some(extra) = extra.take() {
-            for (k, v) in extra {
-                map.serialize_entry(&k, &v)?;
-            }
+        for (k, v) in extras {
+            map.serialize_entry(&k, &v)?;
         }
 
         map.end()

@@ -8,23 +8,27 @@ use super::SdUnprotected;
 impl<Extra: CustomClaims> serde::Serialize for SdUnprotected<Extra> {
     fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
         use serde::ser::Error as _;
-        let mut map = serializer.serialize_map(None)?;
+        let extras = self
+            .extra
+            .as_ref()
+            .map(Extra::to_cbor_value)
+            .transpose()
+            .map_err(S::Error::custom)?
+            .map(Value::into_map)
+            .transpose()
+            .map_err(|e| S::Error::custom(format!("{e:?} should have been a mapping")))?
+            .unwrap_or_default();
+
+        let map_size = self.sd_claims.as_ref().map(|_| 1).unwrap_or_default() + extras.len();
+
+        let mut map = serializer.serialize_map(Some(map_size))?;
 
         if let Some(sd_claims) = &self.sd_claims {
             map.serialize_entry(&COSE_HEADER_SD_CLAIMS, sd_claims)?;
         }
 
-        let mut extra = self
-            .extra
-            .as_ref()
-            .map(|extra| extra.to_cbor_value().map_err(S::Error::custom))
-            .transpose()?
-            .map(|v| v.into_map().map_err(|_| S::Error::custom("should have been a mapping")))
-            .transpose()?;
-        if let Some(extra) = extra.take() {
-            for (k, v) in extra {
-                map.serialize_entry(&k, &v)?;
-            }
+        for (k, v) in extras {
+            map.serialize_entry(&k, &v)?;
         }
         map.end()
     }

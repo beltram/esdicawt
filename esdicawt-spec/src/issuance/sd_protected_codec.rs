@@ -9,17 +9,20 @@ impl<Extra: CustomClaims> serde::Serialize for SdProtected<Extra> {
     fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
         use serde::ser::Error as _;
 
-        let mut extra = self
+        let extras = self
             .extra
             .as_ref()
-            .map(|extra| extra.to_cbor_value().map_err(S::Error::custom))
-            .transpose()?
-            .map(|v| v.into_map().map_err(|_| S::Error::custom("should have been a mapping")))
-            .transpose()?;
+            .map(Extra::to_cbor_value)
+            .transpose()
+            .map_err(S::Error::custom)?
+            .map(Value::into_map)
+            .transpose()
+            .map_err(|e| S::Error::custom(format!("{e:?} should have been a mapping")))?
+            .unwrap_or_default();
 
-        // let mut extra: Option<AnyMap> = self.extra.clone().map(|extra| extra.into());
-        let extra_len = extra.as_ref().map(|extra| extra.len()).unwrap_or_default();
-        let mut map = serializer.serialize_map(Some(3 + extra_len))?;
+        let map_size = 3 + extras.len();
+        let mut map = serializer.serialize_map(Some(map_size))?;
+
         map.serialize_entry(&CWT_MEDIA_TYPE, &MEDIA_TYPE_SD_CWT)?;
 
         let alg = (*self.alg).clone().to_cbor_value().map_err(|e| S::Error::custom(format!("Cannot set Alg: {e}")))?;
@@ -27,10 +30,8 @@ impl<Extra: CustomClaims> serde::Serialize for SdProtected<Extra> {
 
         map.serialize_entry(&COSE_HEADER_SD_ALG, &self.sd_alg)?;
 
-        if let Some(extra) = extra.take() {
-            for (k, v) in extra {
-                map.serialize_entry(&k, &v)?;
-            }
+        for (k, v) in extras {
+            map.serialize_entry(&k, &v)?;
         }
 
         map.end()

@@ -77,7 +77,28 @@ pub struct SpiceOidcClaims {
 
 impl serde::Serialize for SpiceOidcClaims {
     fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
-        let mut map = serializer.serialize_map(None)?;
+        let map_size = self.name.as_ref().map(|_| 1).unwrap_or_default()
+            + self.given_name.as_ref().map(|_| 1).unwrap_or_default()
+            + self.family_name.as_ref().map(|_| 1).unwrap_or_default()
+            + self.middle_name.as_ref().map(|_| 1).unwrap_or_default()
+            + self.nickname.as_ref().map(|_| 1).unwrap_or_default()
+            + self.preferred_username.as_ref().map(|_| 1).unwrap_or_default()
+            + self.profile.as_ref().map(|_| 1).unwrap_or_default()
+            + self.picture.as_ref().map(|_| 1).unwrap_or_default()
+            + self.website.as_ref().map(|_| 1).unwrap_or_default()
+            + self.email.as_ref().map(|_| 1).unwrap_or_default()
+            + self.email_verified.as_ref().map(|_| 1).unwrap_or_default()
+            + self.gender.as_ref().map(|_| 1).unwrap_or_default()
+            + self.birthdate.as_ref().map(|_| 1).unwrap_or_default()
+            + self.zoneinfo.as_ref().map(|_| 1).unwrap_or_default()
+            + self.locale.as_ref().map(|_| 1).unwrap_or_default()
+            + self.phone_number.as_ref().map(|_| 1).unwrap_or_default()
+            + self.phone_number_verified.as_ref().map(|_| 1).unwrap_or_default()
+            + self.address.as_ref().map(|_| 1).unwrap_or_default()
+            + self.updated_at.as_ref().map(|_| 1).unwrap_or_default();
+
+        let mut map = serializer.serialize_map(Some(map_size))?;
+
         if let Some(name) = &self.name {
             map.serialize_entry(&CwtOidcLabel::Name, name)?;
         }
@@ -269,7 +290,15 @@ pub struct OidcAddressClaim {
 
 impl serde::Serialize for OidcAddressClaim {
     fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
-        let mut map = serializer.serialize_map(None)?;
+        let map_size = self.formatted.as_ref().map(|_| 1).unwrap_or_default()
+            + self.street_address.as_ref().map(|_| 1).unwrap_or_default()
+            + self.locality.as_ref().map(|_| 1).unwrap_or_default()
+            + self.region.as_ref().map(|_| 1).unwrap_or_default()
+            + self.postal_code.as_ref().map(|_| 1).unwrap_or_default()
+            + self.country.as_ref().map(|_| 1).unwrap_or_default();
+
+        let mut map = serializer.serialize_map(Some(map_size))?;
+
         if let Some(formatted) = &self.formatted {
             map.serialize_entry(&CwtOidcAddressLabel::Formatted, formatted)?;
         }
