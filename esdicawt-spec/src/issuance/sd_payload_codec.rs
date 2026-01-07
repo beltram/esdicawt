@@ -10,9 +10,33 @@ use serde::ser::SerializeMap;
 
 impl<Extra: CustomClaims> serde::Serialize for SdPayload<Extra> {
     fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
-        let mut map = serializer.serialize_map(None)?;
+        use serde::ser::Error as _;
 
-        serialize_sd_cwt_payload::<Extra, S>(&self.inner, &mut map)?;
+        let extras = self
+            .inner
+            .extra
+            .as_ref()
+            .map(|e| e.to_cbor_value())
+            .transpose()
+            .map_err(S::Error::custom)?
+            .map(|v| v.into_map())
+            .transpose()
+            .map_err(|_| S::Error::custom("should have been a mapping"))?
+            .unwrap_or_default();
+
+        #[allow(unused_mut)]
+        let mut map_size = 1 + // cnf
+            sd_cwt_payload_map_size(&self.inner) +
+            extras.len() +
+            self.redacted_claim_keys.as_ref().map(|_| 1).unwrap_or_default();
+
+        if cfg!(feature = "status") {
+            map_size += 1;
+        }
+
+        let mut map = serializer.serialize_map(Some(map_size))?;
+
+        serialize_sd_cwt_payload::<Extra, S>(&self.inner, extras, &mut map)?;
 
         map.serialize_entry(&CWT_CLAIM_KEY_CONFIRMATION, &self.cnf)?;
         #[cfg(feature = "status")]
@@ -86,15 +110,37 @@ impl<'de, Extra: CustomClaims> serde::Deserialize<'de> for SdPayload<Extra> {
 
 impl<Extra: CustomClaims> serde::Serialize for SdInnerPayload<Extra> {
     fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        use serde::ser::Error as _;
+
+        let extras = self
+            .extra
+            .as_ref()
+            .map(|e| e.to_cbor_value())
+            .transpose()
+            .map_err(S::Error::custom)?
+            .map(|v| v.into_map())
+            .transpose()
+            .map_err(|_| S::Error::custom("should have been a mapping"))?
+            .unwrap_or_default();
+
         let mut map = serializer.serialize_map(None)?;
-        serialize_sd_cwt_payload::<Extra, S>(self, &mut map)?;
+        serialize_sd_cwt_payload::<Extra, S>(self, extras, &mut map)?;
         map.end()
     }
 }
 
-fn serialize_sd_cwt_payload<Extra: CustomClaims, S: serde::Serializer>(p: &SdInnerPayload<Extra>, map: &mut S::SerializeMap) -> Result<(), S::Error> {
-    use serde::ser::Error as _;
+fn sd_cwt_payload_map_size<Extra: CustomClaims>(p: &SdInnerPayload<Extra>) -> usize {
+    1 + // issuer
+        p.subject.as_ref().map(|_| 1).unwrap_or_default() +
+        p.audience.as_ref().map(|_| 1).unwrap_or_default() +
+        p.expiration.map(|_| 1).unwrap_or_default() +
+        p.not_before.map(|_| 1).unwrap_or_default() +
+        p.issued_at.map(|_| 1).unwrap_or_default() +
+        p.cti.as_ref().map(|_| 1).unwrap_or_default() +
+        p.cnonce.as_ref().map(|_| 1).unwrap_or_default()
+}
 
+fn serialize_sd_cwt_payload<Extra: CustomClaims, S: serde::Serializer>(p: &SdInnerPayload<Extra>, extras: Vec<(Value, Value)>, map: &mut S::SerializeMap) -> Result<(), S::Error> {
     map.serialize_entry(&CWT_CLAIM_ISSUER, &p.issuer)?;
     if let Some(sub) = &p.subject {
         map.serialize_entry(&CWT_CLAIM_SUBJECT, sub)?;
@@ -118,16 +164,10 @@ fn serialize_sd_cwt_payload<Extra: CustomClaims, S: serde::Serializer>(p: &SdInn
         map.serialize_entry(&CWT_CLAIM_CNONCE, cnonce)?;
     }
 
-    if let Some(extra) = &p.extra {
-        for (k, v) in extra
-            .to_cbor_value()
-            .map_err(S::Error::custom)?
-            .into_map()
-            .map_err(|_| S::Error::custom("should have been a mapping"))?
-        {
-            map.serialize_entry(&k, &v)?;
-        }
+    for (k, v) in extras {
+        map.serialize_entry(&k, &v)?;
     }
+
     Ok(())
 }
 

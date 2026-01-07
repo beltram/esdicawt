@@ -8,7 +8,23 @@ impl<Extra: CustomClaims> serde::Serialize for KbtPayload<Extra> {
     fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
         use serde::ser::Error as _;
 
-        let mut map = serializer.serialize_map(None)?;
+        let extras = self
+            .extra
+            .as_ref()
+            .map(|e| e.to_cbor_value())
+            .transpose()
+            .map_err(S::Error::custom)?
+            .map(|v| v.into_map())
+            .transpose()
+            .map_err(|_| S::Error::custom("SD-KBT payload extras should have been a mapping"))?
+            .unwrap_or_default();
+
+        let map_size = 1 + // audience
+            self.expiration.map(|_| 1).unwrap_or_default() +
+            self.not_before.map(|_| 1).unwrap_or_default() +
+            1 + // iat
+            self.cnonce.as_ref().map(|_| 1).unwrap_or_default() + extras.len();
+        let mut map = serializer.serialize_map(Some(map_size))?;
 
         map.serialize_entry(&CWT_CLAIM_AUDIENCE, &self.audience)?;
 
@@ -25,15 +41,8 @@ impl<Extra: CustomClaims> serde::Serialize for KbtPayload<Extra> {
             map.serialize_entry(&CWT_CLAIM_CNONCE, cnonce)?;
         }
 
-        if let Some(extra) = &self.extra {
-            for (k, v) in extra
-                .to_cbor_value()
-                .map_err(S::Error::custom)?
-                .into_map()
-                .map_err(|_| S::Error::custom("should have been a mapping"))?
-            {
-                map.serialize_entry(&k, &v)?;
-            }
+        for (k, v) in extras {
+            map.serialize_entry(&k, &v)?;
         }
 
         map.end()
