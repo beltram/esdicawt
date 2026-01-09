@@ -1,4 +1,4 @@
-use super::{ClaimName, CwtAny, Salt};
+use super::{CwtAny, Salt, SdCwtClaim};
 use crate::{EsdicawtSpecResult, inlined_cbor::InlinedCbor};
 use ciborium::Value;
 use serde::ser::SerializeSeq;
@@ -31,7 +31,7 @@ pub struct SaltedElementRef<'a, T: CwtAny> {
 pub struct SaltedClaim<T: CwtAny> {
     pub salt: Salt,
     pub value: T,
-    pub name: ClaimName,
+    pub name: SdCwtClaim,
 }
 
 impl<T: CwtAny> std::fmt::Debug for SaltedClaim<T> {
@@ -49,7 +49,7 @@ impl<T: CwtAny> std::fmt::Debug for SaltedClaim<T> {
 pub struct SaltedClaimRef<'a, T: CwtAny> {
     pub salt: Salt,
     pub value: &'a T,
-    pub name: &'a ClaimName,
+    pub name: &'a SdCwtClaim,
 }
 
 #[derive(Debug, Clone, Copy, serde_tuple::Serialize_tuple, serde_tuple::Deserialize_tuple)]
@@ -102,7 +102,7 @@ impl<T: CwtAny> Salted<T> {
         }
     }
 
-    pub fn name(&self) -> Option<&ClaimName> {
+    pub fn name(&self) -> Option<&SdCwtClaim> {
         match self {
             Self::Claim(SaltedClaim { name, .. }) => Some(name),
             _ => None,
@@ -151,7 +151,7 @@ impl<'de, T: CwtAny> serde::Deserialize<'de> for Salted<T> {
 
                 let salt = seq.next_element::<Salt>()?.ok_or_else(|| A::Error::custom("Missing salt in salted"))?;
                 let value = seq.next_element::<T>()?;
-                let name = seq.next_element::<ClaimName>()?;
+                let name = seq.next_element::<SdCwtClaim>()?;
 
                 Ok(match (salt, value, name) {
                     (salt, None, None) => Salted::Decoy(Decoy { salt: (salt,) }),
@@ -234,6 +234,9 @@ impl<'a, T: CwtAny> From<&'a Salted<T>> for SaltedRef<'a, T> {
     }
 }
 
+pub type SaltedArrayWithDigests<'a> = HashMap<Vec<u8>, Cow<'a, Salted<Value>>>;
+pub type SaltedArrayToVerify<'a> = Vec<(Cow<'a, Salted<Value>>, Option<Vec<u8>>)>;
+
 #[derive(Default, Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct SaltedArray(pub Vec<InlinedCbor<Salted<Value>>>);
 
@@ -273,7 +276,8 @@ impl SaltedArray {
         self.0.iter_mut().map(InlinedCbor::to_value_mut)
     }
 
-    pub fn digested<Hasher: digest::Digest>(&self) -> EsdicawtSpecResult<HashMap<Vec<u8>, Cow<'_, Salted<Value>>>> {
+    /// Returns a salted with all the digests already computed to avoid doing it many times
+    pub fn digested<Hasher: digest::Digest>(&self) -> EsdicawtSpecResult<SaltedArrayWithDigests<'_>> {
         self.as_iter()
             .map(|d| match d {
                 Ok(salted) => {
@@ -284,6 +288,16 @@ impl SaltedArray {
                 Err(e) => Err(e),
             })
             .collect::<EsdicawtSpecResult<HashMap<_, _>>>()
+    }
+
+    /// Returns a salted array with room to dynamically insert the digest of each salted to cache it
+    pub fn to_verify(&self) -> EsdicawtSpecResult<SaltedArrayToVerify<'_>> {
+        self.as_iter()
+            .map(|d| match d {
+                Ok(salted) => Ok((salted, None)),
+                Err(e) => Err(e),
+            })
+            .collect::<EsdicawtSpecResult<Vec<_>>>()
     }
 
     pub fn is_empty(&self) -> bool {

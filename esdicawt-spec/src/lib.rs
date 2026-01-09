@@ -79,6 +79,8 @@ pub enum EsdicawtSpecError {
     #[error("Should have been a mapping")]
     InputError,
     #[error("{0}")]
+    LookupError(&'static str),
+    #[error("{0}")]
     ImplementationError(&'static str),
 }
 
@@ -186,29 +188,29 @@ impl TryFrom<ciborium::value::Integer> for KbtStandardClaim {
 }
 
 #[derive(Clone, Hash, PartialEq, Eq)]
-pub enum ClaimName {
-    Integer(i64),
-    Text(String),
+pub enum SdCwtClaim {
+    Int(i64),
+    Tstr(String),
     TaggedInteger(u64, i64),
     TaggedText(u64, String),
     SimpleValue(u8),
 }
 
-impl ClaimName {
+impl SdCwtClaim {
     pub fn untag(&self) -> Option<Self> {
         match self {
-            Self::TaggedText(tag, label) if *tag == TO_BE_REDACTED_TAG => Some(Self::Text(label.to_owned())),
-            Self::TaggedInteger(tag, label) if *tag == TO_BE_REDACTED_TAG => Some(Self::Integer(label.to_owned())),
+            Self::TaggedText(tag, label) if *tag == TO_BE_REDACTED_TAG => Some(Self::Tstr(label.to_owned())),
+            Self::TaggedInteger(tag, label) if *tag == TO_BE_REDACTED_TAG => Some(Self::Int(label.to_owned())),
             _ => None,
         }
     }
 }
 
-impl std::fmt::Debug for ClaimName {
+impl std::fmt::Debug for SdCwtClaim {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Self::Integer(i) => write!(f, "{i}"),
-            Self::Text(s) => write!(f, "{s}"),
+            Self::Int(i) => write!(f, "{i}"),
+            Self::Tstr(s) => write!(f, "{s}"),
             Self::TaggedInteger(t, i) => write!(f, "#6.{t}({i})"),
             Self::TaggedText(t, s) => write!(f, "#6.{t}({s})"),
             Self::SimpleValue(st) => write!(f, "simple({st})"),
@@ -216,11 +218,11 @@ impl std::fmt::Debug for ClaimName {
     }
 }
 
-impl serde::Serialize for ClaimName {
+impl serde::Serialize for SdCwtClaim {
     fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
         let value = match self {
-            Self::Integer(i) => (*i).into(),
-            Self::Text(s) => s.as_str().into(),
+            Self::Int(i) => (*i).into(),
+            Self::Tstr(s) => s.as_str().into(),
             Self::TaggedInteger(t, i) => Value::Tag(*t, Box::new((*i).into())),
             Self::TaggedText(t, s) => Value::Tag(*t, Box::new(s.as_str().into())),
             Self::SimpleValue(st) => Value::Simple(*st),
@@ -229,7 +231,7 @@ impl serde::Serialize for ClaimName {
     }
 }
 
-impl<'de> serde::Deserialize<'de> for ClaimName {
+impl<'de> serde::Deserialize<'de> for SdCwtClaim {
     fn deserialize<D: serde::de::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
         use serde::de::Error as _;
 
@@ -237,8 +239,8 @@ impl<'de> serde::Deserialize<'de> for ClaimName {
         let value = <Value as serde::Deserialize>::deserialize(deserializer)?;
         Ok(match value {
             Value::Simple(i) => Self::SimpleValue(i),
-            Value::Integer(i) => Self::Integer(i.try_into().map_err(D::Error::custom)?),
-            Value::Text(s) => Self::Text(s),
+            Value::Integer(i) => Self::Int(i.try_into().map_err(D::Error::custom)?),
+            Value::Text(s) => Self::Tstr(s),
             Value::Tag(tag, v) => match *v {
                 Value::Integer(i) => Self::TaggedInteger(tag, i.try_into().map_err(D::Error::custom)?),
                 Value::Text(s) => Self::TaggedText(tag, s),
@@ -253,15 +255,15 @@ impl<'de> serde::Deserialize<'de> for ClaimName {
     }
 }
 
-impl From<i64> for ClaimName {
+impl From<i64> for SdCwtClaim {
     fn from(value: i64) -> Self {
-        Self::Integer(value)
+        Self::Int(value)
     }
 }
 
-impl From<&str> for ClaimName {
+impl From<&str> for SdCwtClaim {
     fn from(value: &str) -> Self {
-        Self::Text(value.into())
+        Self::Tstr(value.into())
     }
 }
 
