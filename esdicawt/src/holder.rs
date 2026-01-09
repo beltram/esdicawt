@@ -290,7 +290,7 @@ mod tests {
     use ciborium::cbor;
     use cose_key_set::CoseKeySet;
     use esdicawt_spec::{
-        ClaimName, NoClaims,
+        NoClaims, SdCwtClaim,
         blinded_claims::{Salted, SaltedClaim},
     };
     use std::collections::HashMap;
@@ -366,7 +366,7 @@ mod tests {
 
         let disclosable_claims = sd_kbt.0.walk_disclosed_claims().unwrap().collect::<Vec<_>>();
         assert_eq!(disclosable_claims.len(), 1);
-        let is_alice = |sc: &SaltedClaim<Value>| sc.name == ClaimName::Text("name".into()) && sc.value == cbor!("Alice Smith").unwrap();
+        let is_alice = |sc: &SaltedClaim<Value>| sc.name == SdCwtClaim::Tstr("name".into()) && sc.value == cbor!("Alice Smith").unwrap();
 
         assert!(disclosable_claims.into_iter().any(|c| { matches!(c.unwrap(), Salted::Claim(sc) if is_alice(sc)) }));
 

@@ -198,7 +198,7 @@ mod tests {
     use crate::{
         CwtStdLabel, Issuer, IssuerParams, StatusParams, TimeArg, elapsed_since_epoch,
         spec::{
-            ClaimName, CwtAny, NoClaims, Select, SelectExt,
+            CwtAny, NoClaims, SdCwtClaim, Select, SelectExt,
             blinded_claims::{Salted, SaltedClaim, SaltedElement},
             issuance::SdCwtIssuedTagged,
             redacted_claims::RedactedClaimKeys,
@@ -238,7 +238,7 @@ mod tests {
         let Salted::Claim(SaltedClaim { name, value, .. }) = d0 else { unreachable!() };
 
         // verify content of disclosure
-        assert_eq!(name, &ClaimName::Text("name".into()));
+        assert_eq!(name, &SdCwtClaim::Tstr("name".into()));
         assert_eq!(value, &cbor!("Alice Smith").unwrap());
 
         // verify digest of disclosure in 'redacted_key_claims'
@@ -312,7 +312,7 @@ mod tests {
     #[test]
     #[wasm_bindgen_test::wasm_bindgen_test]
     fn should_issue_complex_types() {
-        let verify_issuance = |value: Value, expected: (Option<ClaimName>, Result<Value, ciborium::value::Error>)| {
+        let verify_issuance = |value: Value, expected: (Option<SdCwtClaim>, Result<Value, ciborium::value::Error>)| {
             let payload = cbor!({ "___claim" => value }).unwrap().select_all().unwrap();
             let (mut sd_cwt, _) = issue(Some(payload));
 
@@ -329,22 +329,22 @@ mod tests {
         };
 
         // simple string
-        verify_issuance(cbor!("a").unwrap(), (Some(ClaimName::Text("___claim".into())), cbor!("a")));
+        verify_issuance(cbor!("a").unwrap(), (Some(SdCwtClaim::Tstr("___claim".into())), cbor!("a")));
 
         // simple mapping
-        verify_issuance(cbor!({ "a" => "b" }).unwrap(), (Some(ClaimName::Text("a".into())), cbor!("b")));
+        verify_issuance(cbor!({ "a" => "b" }).unwrap(), (Some(SdCwtClaim::Tstr("a".into())), cbor!("b")));
 
         // simple array
         verify_issuance(cbor!([0]).unwrap(), (None, cbor!(0)));
 
         // nested mapping
-        verify_issuance(cbor!({ "a" => "b" }).unwrap(), (Some(ClaimName::Text("a".into())), cbor!("b")));
+        verify_issuance(cbor!({ "a" => "b" }).unwrap(), (Some(SdCwtClaim::Tstr("a".into())), cbor!("b")));
 
         // nested array
         verify_issuance(cbor!([[0]]).unwrap(), (None, cbor!(0)));
 
         // mapping in array
-        verify_issuance(cbor!([{ "a" => "b" }]).unwrap(), (Some(ClaimName::Text("a".into())), cbor!("b")));
+        verify_issuance(cbor!([{ "a" => "b" }]).unwrap(), (Some(SdCwtClaim::Tstr("a".into())), cbor!("b")));
 
         // array in mapping
         verify_issuance(cbor!({ "a" => [0] }).unwrap(), (None, cbor!(0)));
@@ -444,14 +444,14 @@ mod tests {
         let [d0, d1, d2] = disclosures.try_into().unwrap();
         let Salted::Claim(SaltedClaim { name, value, .. }) = &d0 else { unreachable!() };
         // verify content of disclosure
-        assert_eq!(*name, ClaimName::Text("name".into()));
+        assert_eq!(*name, SdCwtClaim::Tstr("name".into()));
         assert_eq!(value, &cbor!("Alice Smith").unwrap());
 
         let Salted::Element(SaltedElement { value, .. }) = d1 else { unreachable!() };
         assert_eq!(value, &cbor!(1).unwrap());
 
         let Salted::Claim(SaltedClaim { name, value, .. }) = &d2 else { unreachable!() };
-        assert_eq!(*name, ClaimName::Text("a".into()));
+        assert_eq!(*name, SdCwtClaim::Tstr("a".into()));
         assert_eq!(value, &cbor!("b").unwrap());
     }
 

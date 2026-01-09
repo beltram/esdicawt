@@ -1,6 +1,6 @@
 use crate::{SdCwtHolderResult, TimeVerification, holder::traverse::traverse_all_cbor_paths_in_disclosures, time::TimeArg};
 use ciborium::Value;
-use esdicawt_spec::{ClaimName, CustomClaims, NoClaims, blinded_claims::SaltedArray};
+use esdicawt_spec::{CustomClaims, NoClaims, SdCwtClaim, blinded_claims::SaltedArray};
 
 #[derive(Debug)]
 pub struct HolderParams<'a, KbtPayloadClaims: CustomClaims = NoClaims, KbtProtectedClaims: CustomClaims = NoClaims, KbtUnprotectedClaims: CustomClaims = NoClaims> {
@@ -70,14 +70,14 @@ pub enum CborPath {
     Index(u64),
 }
 
-impl From<&ClaimName> for CborPath {
-    fn from(name: &ClaimName) -> Self {
+impl From<&SdCwtClaim> for CborPath {
+    fn from(name: &SdCwtClaim) -> Self {
         match name {
-            ClaimName::Integer(i) => Self::Int(*i),
-            ClaimName::Text(s) => Self::Str(s.clone()),
-            ClaimName::TaggedInteger(tag, i) => Self::Any(Value::Tag(*tag, Box::new((*i).into()))),
-            ClaimName::TaggedText(tag, s) => Self::Any(Value::Tag(*tag, Box::new(s.as_str().into()))),
-            ClaimName::SimpleValue(i) => Self::Any(Value::Simple(*i)),
+            SdCwtClaim::Int(i) => Self::Int(*i),
+            SdCwtClaim::Tstr(s) => Self::Str(s.clone()),
+            SdCwtClaim::TaggedInteger(tag, i) => Self::Any(Value::Tag(*tag, Box::new((*i).into()))),
+            SdCwtClaim::TaggedText(tag, s) => Self::Any(Value::Tag(*tag, Box::new(s.as_str().into()))),
+            SdCwtClaim::SimpleValue(i) => Self::Any(Value::Simple(*i)),
         }
     }
 }

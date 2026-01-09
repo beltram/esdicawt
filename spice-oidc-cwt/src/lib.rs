@@ -4,7 +4,7 @@ use enum_variants_strings::EnumVariantsStrings;
 use esdicawt::{
     EsdicawtReadResult, SdCwtVerified, TokenQuery, cwt_label,
     spec::{
-        ClaimName, CustomClaims, Select, Value,
+        CustomClaims, SdCwtClaim, Select, Value,
         issuance::{SdCwtIssued, SdCwtIssuedTagged},
         key_binding::{KbtCwt, KbtCwtTagged},
     },
@@ -246,7 +246,7 @@ impl<'de> serde::Deserialize<'de> for SpiceOidcClaims {
     }
 }
 
-pub(crate) static CLAIM_MAP: LazyLock<HashMap<&'static str, ClaimName>> = LazyLock::new(|| {
+pub(crate) static CLAIM_MAP: LazyLock<HashMap<&'static str, SdCwtClaim>> = LazyLock::new(|| {
     [
         (CwtOidcLabel::Name.to_str(), CwtOidcLabel::Name.into()),
         (CwtOidcLabel::GivenName.to_str(), CwtOidcLabel::GivenName.into()),
@@ -273,7 +273,7 @@ pub(crate) static CLAIM_MAP: LazyLock<HashMap<&'static str, ClaimName>> = LazyLo
 });
 
 impl SpiceOidcClaims {
-    pub fn claim_name(name: &str) -> Option<&ClaimName> {
+    pub fn claim_name(name: &str) -> Option<&SdCwtClaim> {
         (*CLAIM_MAP).get(name)
     }
 }

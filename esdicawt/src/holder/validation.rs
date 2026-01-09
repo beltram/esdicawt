@@ -121,7 +121,7 @@ mod tests {
     use ciborium::{Value, cbor};
     use cose_key_set::CoseKeySet;
     use esdicawt_spec::{
-        ClaimName, CwtAny, NoClaims,
+        CwtAny, NoClaims, SdCwtClaim,
         blinded_claims::{Salted, SaltedElement},
         issuance::SdCwtIssuedTagged,
         sd,
@@ -234,7 +234,7 @@ mod tests {
             .disclosures_mut()
             .unwrap()
             .0
-            .retain(|d| !matches!(d.clone_value().unwrap(), c if c.name() == Some(&ClaimName::Integer(42))));
+            .retain(|d| !matches!(d.clone_value().unwrap(), c if c.name() == Some(&SdCwtClaim::Int(42))));
         assert!(matches!(
             holder.verify_sd_cwt(&sd_cwt.to_cbor_bytes().unwrap(), Default::default(), &issuer_verifying_key),
             Err(SdCwtHolderError::ValidationError(SdCwtHolderValidationError::DisclosureNotFound))
@@ -247,7 +247,7 @@ mod tests {
             .disclosures_mut()
             .unwrap()
             .0
-            .retain(|d| !matches!(d.clone_value().unwrap(), c if c.name() == Some(&ClaimName::Integer(44))));
+            .retain(|d| !matches!(d.clone_value().unwrap(), c if c.name() == Some(&SdCwtClaim::Int(44))));
         assert!(matches!(
             holder.verify_sd_cwt(&sd_cwt.to_cbor_bytes().unwrap(), Default::default(), &issuer_verifying_key),
             Err(SdCwtHolderError::ValidationError(SdCwtHolderValidationError::DisclosureNotFound))

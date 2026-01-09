@@ -1,6 +1,6 @@
 use crate::{
     CWT_CLAIM_AUDIENCE, CWT_CLAIM_CNONCE, CWT_CLAIM_CTI, CWT_CLAIM_EXPIRES_AT, CWT_CLAIM_ISSUED_AT, CWT_CLAIM_ISSUER, CWT_CLAIM_KEY_CONFIRMATION, CWT_CLAIM_NOT_BEFORE,
-    CWT_CLAIM_SUBJECT, ClaimName, CustomClaims, SdCwtStandardClaim,
+    CWT_CLAIM_SUBJECT, CustomClaims, SdCwtClaim, SdCwtStandardClaim,
     issuance::{SdInnerPayload, SdInnerPayloadBuilder, SdPayload, SdPayloadBuilder},
     redacted_claims::RedactedClaimKeys,
 };
@@ -73,9 +73,9 @@ impl<'de, Extra: CustomClaims> serde::Deserialize<'de> for SdPayload<Extra> {
                 let mut builder = SdPayloadBuilder::<Extra>::default();
 
                 while let Some((k, v)) = map.next_entry::<Value, Value>()? {
-                    let label = k.deserialized::<ClaimName>().map_err(A::Error::custom)?;
+                    let label = k.deserialized::<SdCwtClaim>().map_err(A::Error::custom)?;
                     match label {
-                        ClaimName::Integer(key) => match SdCwtStandardClaim::try_from(key) {
+                        SdCwtClaim::Int(key) => match SdCwtStandardClaim::try_from(key) {
                             Ok(SdCwtStandardClaim::KeyConfirmation) => {
                                 let kc = v
                                     .deserialized::<KeyConfirmation>()
@@ -86,7 +86,7 @@ impl<'de, Extra: CustomClaims> serde::Deserialize<'de> for SdPayload<Extra> {
                                 extra.push((k, v));
                             }
                         },
-                        ClaimName::SimpleValue(label) if label == RedactedClaimKeys::CWT_LABEL => {
+                        SdCwtClaim::SimpleValue(label) if label == RedactedClaimKeys::CWT_LABEL => {
                             let redacted_claim_keys = v
                                 .deserialized::<RedactedClaimKeys>()
                                 .map_err(|value| A::Error::custom(format!("redacted_claim_keys is not an array: {value:?}")))?;

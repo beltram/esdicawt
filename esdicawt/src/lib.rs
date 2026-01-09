@@ -85,7 +85,7 @@ macro_rules! cwt_label {
             }
         }
 
-        impl From<$label> for esdicawt::spec::ClaimName {
+        impl From<$label> for esdicawt::spec::SdCwtClaim {
             fn from(label: $label) -> Self {
                 (label as i64).into()
             }
