@@ -1,4 +1,7 @@
-use crate::{CustomClaims, EsdicawtSpecResult, Select, issuance::SdCwtIssued, key_binding::KbtCwt};
+use crate::inlined_cbor::InlinedCbor;
+use crate::issuance::SdCwtIssuedTagged;
+use crate::{COSE_HEADER_KCWT, CustomClaims, EsdicawtSpecError, EsdicawtSpecResult, Select, issuance::SdCwtIssued, key_binding::KbtCwt};
+use ciborium::Value;
 
 impl<
     IssuerPayloadClaims: Select,
@@ -13,6 +16,18 @@ impl<
     /// Get the SD-CWT wrapped by this SD-KBT
     pub fn sd_cwt(&mut self) -> EsdicawtSpecResult<&SdCwtIssued<IssuerPayloadClaims, Hasher, IssuerProtectedClaims, IssuerUnprotectedClaims>> {
         Ok(&self.protected.to_value_mut()?.kcwt.to_value()?.0)
+    }
+
+    /// Get the SD-CWT wrapped by this SD-KBT
+    pub fn generic_sd_cwt(&self) -> EsdicawtSpecResult<SdCwtIssued<Value, Hasher, IssuerProtectedClaims, IssuerUnprotectedClaims>> {
+        let sd_kbt_protected = self.protected.upcast_value()?;
+        let kcwt = sd_kbt_protected
+            .into_map()?
+            .into_iter()
+            .find_map(|(k, v)| matches!(k, Value::Integer(i) if i == COSE_HEADER_KCWT.into()).then_some(v))
+            .ok_or(EsdicawtSpecError::ImplementationError("Invalid SD-KBT, missing kcwt"))?;
+        let sd_cwt = kcwt.deserialized::<InlinedCbor<SdCwtIssuedTagged<Value, Hasher, IssuerProtectedClaims, IssuerUnprotectedClaims>>>()?;
+        Ok(sd_cwt.try_into_value()?.0)
     }
 
     /// Get the SD-CWT wrapped by this SD-KBT

@@ -388,8 +388,8 @@ pub trait SpiceOidcSdCwtRead {
     fn updated_at(&mut self) -> EsdicawtReadResult<Option<u64>>;
 }
 
-impl<PayloadClaims: Select, Hasher: digest::Digest + Clone, IssuerProtectedClaims: CustomClaims, IssuerUnprotectedClaims: CustomClaims> SpiceOidcSdCwtRead
-    for SdCwtIssued<PayloadClaims, Hasher, IssuerProtectedClaims, IssuerUnprotectedClaims>
+impl<PayloadClaims: Select, Hasher: digest::Digest + digest::FixedOutputReset + Clone + 'static, IssuerProtectedClaims: CustomClaims, IssuerUnprotectedClaims: CustomClaims>
+    SpiceOidcSdCwtRead for SdCwtIssued<PayloadClaims, Hasher, IssuerProtectedClaims, IssuerUnprotectedClaims>
 where
     for<'a> &'a PayloadClaims: Into<&'a SpiceOidcClaims>,
 {
@@ -478,8 +478,8 @@ where
     }
 }
 
-impl<PayloadClaims: Select, Hasher: digest::Digest + Clone, IssuerProtectedClaims: CustomClaims, IssuerUnprotectedClaims: CustomClaims> SpiceOidcSdCwtRead
-    for SdCwtIssuedTagged<PayloadClaims, Hasher, IssuerProtectedClaims, IssuerUnprotectedClaims>
+impl<PayloadClaims: Select, Hasher: digest::Digest + digest::FixedOutputReset + Clone + 'static, IssuerProtectedClaims: CustomClaims, IssuerUnprotectedClaims: CustomClaims>
+    SpiceOidcSdCwtRead for SdCwtIssuedTagged<PayloadClaims, Hasher, IssuerProtectedClaims, IssuerUnprotectedClaims>
 where
     for<'a> &'a PayloadClaims: Into<&'a SpiceOidcClaims>,
 {
@@ -560,8 +560,8 @@ where
     }
 }
 
-impl<PayloadClaims: Select, Hasher: digest::Digest + Clone, IssuerProtectedClaims: CustomClaims, IssuerUnprotectedClaims: CustomClaims> SpiceOidcSdCwtRead
-    for SdCwtVerified<PayloadClaims, Hasher, IssuerProtectedClaims, IssuerUnprotectedClaims>
+impl<PayloadClaims: Select, Hasher: digest::Digest + digest::FixedOutputReset + Clone + 'static, IssuerProtectedClaims: CustomClaims, IssuerUnprotectedClaims: CustomClaims>
+    SpiceOidcSdCwtRead for SdCwtVerified<PayloadClaims, Hasher, IssuerProtectedClaims, IssuerUnprotectedClaims>
 where
     for<'a> &'a PayloadClaims: Into<&'a SpiceOidcClaims>,
 {
@@ -644,7 +644,7 @@ where
 
 impl<
     IssuerPayloadClaims: Select,
-    Hasher: digest::Digest + Clone,
+    Hasher: digest::Digest + digest::FixedOutputReset + Clone + 'static,
     IssuerProtectedClaims: CustomClaims,
     IssuerUnprotectedClaims: CustomClaims,
     KbtProtectedClaims: CustomClaims,
@@ -741,7 +741,7 @@ where
 
 impl<
     IssuerPayloadClaims: Select,
-    Hasher: digest::Digest + Clone,
+    Hasher: digest::Digest + digest::FixedOutputReset + Clone + 'static,
     IssuerProtectedClaims: CustomClaims,
     IssuerUnprotectedClaims: CustomClaims,
     KbtProtectedClaims: CustomClaims,

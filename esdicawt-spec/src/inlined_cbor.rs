@@ -1,4 +1,5 @@
 use super::{CwtAny, EsdicawtSpecError, EsdicawtSpecResult};
+use ciborium::Value;
 
 #[derive(Clone, Eq, PartialEq)]
 pub enum InlinedCbor<T: CwtAny> {
@@ -42,6 +43,24 @@ impl<'de, T: CwtAny> serde::Deserialize<'de> for InlinedCbor<T> {
 }
 
 impl<T: CwtAny> InlinedCbor<T> {
+    /// Using the deserialized value could cause some issues as working with heterogeneous arrays is tricky (requires
+    /// wrapping all the Array elements) or also nested redacted claim keys could get elided.
+    /// Hence, it's better to use the raw value from the raw bytes.
+    ///
+    /// This method should only be used internally by this library when trying to do a lookup.
+    pub fn upcast_value(&self) -> EsdicawtSpecResult<Value> {
+        Ok(match self {
+            Self::Bytes(bytes, _, _) | Self::Value(_, Some(bytes), _) => Value::from_cbor_bytes(bytes)?,
+            _ => {
+                #[cfg(debug_assertions)]
+                panic!("Trying to upcast to value without the raw bytes, some elements might have been redacted in the process");
+
+                #[cfg(not(debug_assertions))]
+                v.to_cbor_value()?
+            }
+        })
+    }
+
     pub fn as_value(&self) -> EsdicawtSpecResult<std::borrow::Cow<'_, T>> {
         match self {
             Self::Value(v, ..) | Self::Bytes(_, Some(v), ..) => Ok(std::borrow::Cow::Borrowed(v)),
@@ -149,6 +168,7 @@ impl<T: CwtAny> InlinedCbor<T> {
     }
 }
 
+// to use with caution
 impl<T: CwtAny> From<T> for InlinedCbor<T> {
     fn from(v: T) -> Self {
         Self::Value(v, None, false)

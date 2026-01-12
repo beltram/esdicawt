@@ -3,18 +3,12 @@ pub mod params;
 pub mod walk;
 
 use crate::{
-    ShallowVerifierParams, VerifierParams,
-    any_digest::AnyDigest,
-    elapsed_since_epoch,
-    spec::reexports::coset,
-    time::verify_time_claims,
-    verifier::error::{SdCwtVerifierError, SdCwtVerifierResult},
+    ShallowVerifierParams, VerifierParams, any_digest::AnyDigest, elapsed_since_epoch, spec::reexports::coset, time::verify_time_claims, verifier::error::SdCwtVerifierError,
 };
 use ciborium::{Value, value::Integer};
 use cose_key_confirmation::{KeyConfirmation, error::CoseKeyConfirmationError};
 use coset::{CoseSign1, TaggedCborSerializable};
 use esdicawt_spec::{CWT_CLAIM_KEY_CONFIRMATION, CustomClaims, CwtAny, SdHashAlg, Select, issuance::SdInnerPayload, key_binding::KbtCwtTagged, verified::KbtCwtVerified};
-use std::collections::HashMap;
 
 pub trait Verifier {
     type Error: core::error::Error + Send + Sync;
@@ -30,25 +24,20 @@ pub trait Verifier {
     type KbtProtectedClaims: CustomClaims;
     type KbtUnprotectedClaims: CustomClaims;
 
-    #[cfg(not(any(feature = "ed25519", feature = "p256", feature = "p384")))]
-    fn digest(&self, sd_alg: SdHashAlg, data: &[u8]) -> Result<Vec<u8>, SdCwtVerifierError<Self::Error>>;
-
     #[cfg(any(feature = "ed25519", feature = "p256", feature = "p384"))]
-    fn digest(&self, sd_alg: SdHashAlg, data: &[u8]) -> Result<Vec<u8>, SdCwtVerifierError<Self::Error>> {
-        Ok(match sd_alg {
+    fn digest(&self, sd_alg: SdHashAlg) -> Box<dyn digest::DynDigest> {
+        use digest::DynDigest as _;
+        match sd_alg {
             #[cfg(any(feature = "ed25519", feature = "p256"))]
-            SdHashAlg::Sha256 => {
-                use digest::Digest as _;
-                sha2::Sha256::digest(data).to_vec()
-            }
+            SdHashAlg::Sha256 => sha2::Sha256::default().box_clone(),
             #[cfg(feature = "p384")]
-            SdHashAlg::Sha384 => {
-                use digest::Digest as _;
-                sha2::Sha384::digest(data).to_vec()
-            }
+            SdHashAlg::Sha384 => sha2::Sha384::default().box_clone(),
             _ => unreachable!(),
-        })
+        }
     }
+
+    #[cfg(not(any(feature = "ed25519", feature = "p256", feature = "p384")))]
+    fn digest(&self, sd_alg: SdHashAlg) -> Box<dyn digest::DynDigest>;
 
     /// Only verify the signatures and the time claims without trying to rebuild the whole ClaimSet which
     /// is expensive by requiring a lot of hashes
@@ -257,23 +246,13 @@ pub trait Verifier {
             let disclosures_size = disclosures.len();
 
             // compute the hash of all disclosures
-            let mut disclosures = disclosures
-                .iter_mut()
-                .map(|d| match d {
-                    Ok(salted) => {
-                        let bytes = salted.to_cbor_bytes()?;
-                        let digest = self.digest(sd_alg, &bytes[..])?;
-                        SdCwtVerifierResult::Ok((digest, salted))
-                    }
-                    Err(e) => Err(e.into()),
-                })
-                .collect::<Result<HashMap<_, _>, _>>()?;
+            let mut disclosures = disclosures.to_verify()?;
 
             if disclosures.len() != disclosures_size {
                 return Err(SdCwtVerifierError::DisclosureHashCollision);
             }
 
-            walk::walk_payload(&mut payload, &mut disclosures)?;
+            walk::walk_payload(self.digest(sd_alg), &mut payload, &mut disclosures)?;
         }
 
         // puncture the 'cnf' claim before deserialization
@@ -820,6 +799,7 @@ pub mod claims {
 pub mod test_utils {
     use super::*;
     use esdicawt_spec::NoClaims;
+    use std::collections::HashMap;
     use url::Url;
 
     // TODO: turn generic again

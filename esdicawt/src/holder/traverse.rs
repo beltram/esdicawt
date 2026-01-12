@@ -11,6 +11,7 @@ type PathAndSalted = Vec<(Vec<CborPath>, Salted<Value>)>;
 type PathAndSaltedAndDigest = Vec<(Vec<CborPath>, Salted<Value>, Vec<u8>)>;
 
 /// Given disclosures, this method returns all the possible paths one can build from it
+// FIXME: this does not work for orphan disclosures, not anchored at the root of the payload
 pub fn traverse_all_cbor_paths_in_disclosures<Hasher: Digest, E>(hashed_disclosures: &HashMap<Vec<u8>, Cow<Salted<Value>>>) -> SdCwtHolderResult<PathAndSalted, E>
 where
     E: core::error::Error + Send + Sync,
@@ -328,14 +329,17 @@ mod tests {
 
     #[test]
     fn array() {
-        let [array, a] = find_cbor_paths([
+        let [array, a, b] = find_cbor_paths([
             salted!(obj => "array", cbor!([
                 RequireExact::<_, 60>(salted!(digest => cbor!("a"))),
+                RequireExact::<_, 60>(salted!(digest => cbor!("b"))),
             ])),
             salted!("a"),
+            salted!("b"),
         ]);
         assert_eq!(array, vec![CborPath::Str("array".into())]);
         assert_eq!(a, vec![CborPath::Str("array".into()), CborPath::Index(0)]);
+        assert_eq!(b, vec![CborPath::Str("array".into()), CborPath::Index(1)]);
     }
 
     #[test]

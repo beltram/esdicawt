@@ -80,6 +80,8 @@ pub enum EsdicawtSpecError {
     InputError,
     #[error("{0}")]
     LookupError(&'static str),
+    #[error("Hashing failed for alg: {alg:?} because {reason}")]
+    DigestError { reason: String, alg: SdHashAlg },
     #[error("{0}")]
     ImplementationError(&'static str),
 }

@@ -195,6 +195,7 @@ pub trait Issuer {
 #[cfg(test)]
 mod tests {
     use super::{claims::CustomTokenClaims, test_utils::Ed25519Issuer};
+    use crate::lookup::TokenQuery;
     use crate::{
         CwtStdLabel, Issuer, IssuerParams, StatusParams, TimeArg, elapsed_since_epoch,
         spec::{
@@ -203,11 +204,11 @@ mod tests {
             issuance::SdCwtIssuedTagged,
             redacted_claims::RedactedClaimKeys,
             reexports::coset::{CoseSign1, TaggedCborSerializable},
-            sd,
         },
     };
     use ciborium::{Value, cbor};
     use digest::Digest as _;
+    use esdicawt_spec::Redact;
     use std::collections::HashMap;
 
     wasm_bindgen_test::wasm_bindgen_test_configure!(run_in_browser);
@@ -395,28 +396,26 @@ mod tests {
 
         impl Select for Model {
             fn select(self) -> Result<Value, ciborium::value::Error> {
-                let mut map = Vec::with_capacity(2);
-                if let Some(name) = self.name {
-                    map.push((sd!("name"), Value::Text(name)));
+                let mut values = self.to_cbor_value().unwrap().into_map().unwrap();
+                for (label, value) in &mut values {
+                    let mut label = label;
+                    match (&label, value) {
+                        (Value::Text(s), _) if s == "name" => label.redact(),
+                        (Value::Text(s), values) if s == "numbers" => {
+                            values.as_array_mut().into_iter().flatten().enumerate().for_each(|(i, mut v)| {
+                                if i == 1 {
+                                    v.redact()
+                                }
+                            });
+                        }
+                        (Value::Text(s), values) if *s == "inner" => {
+                            use std::borrow::BorrowMut;
+                            values.as_map_mut().into_iter().flatten().for_each(|(k, _)| k.borrow_mut().redact());
+                        }
+                        _ => {}
+                    };
                 }
-                if let Some(age) = self.age {
-                    map.push((Value::Text("age".into()), age.into()));
-                }
-                let numbers = self
-                    .numbers
-                    .iter()
-                    .enumerate()
-                    .map(|(i, &n)| match i {
-                        1 => sd!(n),
-                        _ => Value::Integer(n.into()),
-                    })
-                    .collect();
-                map.push((Value::Text("numbers".into()), Value::Array(numbers)));
-
-                let inner = self.inner.clone().into_iter().map(|(k, v)| (sd!(Value::from(k)), v.into())).collect();
-                map.push((Value::Text("inner".into()), Value::Map(inner)));
-
-                Ok(Value::Map(map))
+                Ok(Value::Map(values))
             }
         }
 
@@ -427,6 +426,10 @@ mod tests {
             inner: HashMap::from_iter([("a".into(), "b".into())]),
         };
         let (mut sd_cwt, _) = issue(Some(model));
+
+        assert_eq!(sd_cwt.query(vec!["name".into()].into()).unwrap().unwrap(), cbor!("Alice Smith").unwrap());
+        assert_eq!(sd_cwt.query(vec!["age".into()].into()).unwrap().unwrap(), cbor!(42).unwrap());
+        assert_eq!(sd_cwt.query(vec!["numbers".into()].into()).unwrap().unwrap(), cbor!([0, 1, 2]).unwrap());
 
         let mut payload = sd_cwt.0.payload.clone();
         let payload = payload.to_value().unwrap().clone();

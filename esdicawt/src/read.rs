@@ -11,9 +11,9 @@ use std::borrow::Cow;
 
 #[allow(dead_code)]
 pub trait SdCwtRead: TokenQuery {
-    type PayloadClaims: CustomClaims;
-
-    fn sub(&mut self) -> EsdicawtReadResult<Option<&str>>;
+    fn sub(&mut self) -> EsdicawtReadResult<Option<&str>> {
+        Ok(self.query(vec![CwtClaimName::Sub.to_i64().into()].into())?.as_ref().map(Value::deserialized).transpose()?)
+    }
 
     fn iss(&mut self) -> EsdicawtReadResult<Option<Cow<'_, str>>> {
         Ok(self.query(vec![CwtClaimName::Iss.to_i64().into()].into())?.as_ref().map(Value::deserialized).transpose()?)
@@ -50,41 +50,24 @@ pub enum EsdicawtReadError {
     CustomError(#[from] Box<dyn core::error::Error + Send + Sync>),
 }
 
-impl<IssuerPayloadClaims: Select, Hasher: digest::Digest + Clone, IssuerProtectedClaims: CustomClaims, IssuerUnprotectedClaims: CustomClaims> SdCwtRead
-    for SdCwtIssuedTagged<IssuerPayloadClaims, Hasher, IssuerProtectedClaims, IssuerUnprotectedClaims>
+impl<IssuerPayloadClaims: Select, Hasher: digest::Digest + digest::FixedOutputReset + Clone + 'static, IssuerProtectedClaims: CustomClaims, IssuerUnprotectedClaims: CustomClaims>
+    SdCwtRead for SdCwtIssuedTagged<IssuerPayloadClaims, Hasher, IssuerProtectedClaims, IssuerUnprotectedClaims>
 {
-    type PayloadClaims = IssuerPayloadClaims;
-
-    // sub is not redactable so we read it directly from the SD-CWT
-    fn sub(&mut self) -> EsdicawtReadResult<Option<&str>> {
-        SdCwtRead::sub(&mut self.0)
-    }
 }
 
-impl<IssuerPayloadClaims: Select, Hasher: digest::Digest + Clone, IssuerProtectedClaims: CustomClaims, IssuerUnprotectedClaims: CustomClaims> SdCwtRead
-    for SdCwtIssued<IssuerPayloadClaims, Hasher, IssuerProtectedClaims, IssuerUnprotectedClaims>
+impl<IssuerPayloadClaims: Select, Hasher: digest::Digest + digest::FixedOutputReset + Clone + 'static, IssuerProtectedClaims: CustomClaims, IssuerUnprotectedClaims: CustomClaims>
+    SdCwtRead for SdCwtIssued<IssuerPayloadClaims, Hasher, IssuerProtectedClaims, IssuerUnprotectedClaims>
 {
-    type PayloadClaims = IssuerPayloadClaims;
-
-    // sub is not redactable so we read it directly from the SD-CWT
-    fn sub(&mut self) -> EsdicawtReadResult<Option<&str>> {
-        Ok(self.payload.to_value()?.inner.subject.as_deref())
-    }
 }
 
-impl<IssuerPayloadClaims: Select, Hasher: digest::Digest + Clone, IssuerProtectedClaims: CustomClaims, IssuerUnprotectedClaims: CustomClaims> SdCwtRead
-    for SdCwtVerified<IssuerPayloadClaims, Hasher, IssuerProtectedClaims, IssuerUnprotectedClaims>
+impl<IssuerPayloadClaims: Select, Hasher: digest::Digest + digest::FixedOutputReset + Clone + 'static, IssuerProtectedClaims: CustomClaims, IssuerUnprotectedClaims: CustomClaims>
+    SdCwtRead for SdCwtVerified<IssuerPayloadClaims, Hasher, IssuerProtectedClaims, IssuerUnprotectedClaims>
 {
-    type PayloadClaims = IssuerPayloadClaims;
-
-    fn sub(&mut self) -> EsdicawtReadResult<Option<&str>> {
-        SdCwtRead::sub(&mut self.0.0)
-    }
 }
 
 impl<
     IssuerPayloadClaims: Select,
-    Hasher: digest::Digest + Clone,
+    Hasher: digest::Digest + digest::FixedOutputReset + Clone + 'static,
     KbtPayloadClaims: CustomClaims,
     IssuerProtectedClaims: CustomClaims,
     IssuerUnprotectedClaims: CustomClaims,
@@ -92,16 +75,11 @@ impl<
     KbtUnprotectedClaims: CustomClaims,
 > SdCwtRead for KbtCwtTagged<IssuerPayloadClaims, Hasher, KbtPayloadClaims, IssuerProtectedClaims, IssuerUnprotectedClaims, KbtProtectedClaims, KbtUnprotectedClaims>
 {
-    type PayloadClaims = IssuerPayloadClaims;
-
-    fn sub(&mut self) -> EsdicawtReadResult<Option<&str>> {
-        SdCwtRead::sub(&mut self.0)
-    }
 }
 
 impl<
     IssuerPayloadClaims: Select,
-    Hasher: digest::Digest + Clone,
+    Hasher: digest::Digest + digest::FixedOutputReset + Clone + 'static,
     KbtPayloadClaims: CustomClaims,
     IssuerProtectedClaims: CustomClaims,
     IssuerUnprotectedClaims: CustomClaims,
@@ -109,9 +87,4 @@ impl<
     KbtUnprotectedClaims: CustomClaims,
 > SdCwtRead for KbtCwt<IssuerPayloadClaims, Hasher, KbtPayloadClaims, IssuerProtectedClaims, IssuerUnprotectedClaims, KbtProtectedClaims, KbtUnprotectedClaims>
 {
-    type PayloadClaims = IssuerPayloadClaims;
-
-    fn sub(&mut self) -> EsdicawtReadResult<Option<&str>> {
-        Ok(self.sd_cwt_payload()?.inner.subject.as_deref())
-    }
 }

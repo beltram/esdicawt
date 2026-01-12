@@ -36,8 +36,6 @@ pub enum QueryElement {
     ClaimName(SdCwtClaim),
     /// Selects an element in an array
     Index(usize),
-    /// Selects all the elements within an array
-    Wildcard,
 }
 
 impl serde::Serialize for QueryElement {
@@ -51,9 +49,6 @@ impl serde::Serialize for QueryElement {
             Self::Index(idx) => {
                 tuple.serialize_element(&1u8)?;
                 tuple.serialize_element(idx)?;
-            }
-            Self::Wildcard => {
-                tuple.serialize_element(&2u8)?;
             }
         }
         tuple.end()

@@ -37,9 +37,9 @@ pub struct SaltedClaim<T: CwtAny> {
 impl<T: CwtAny> std::fmt::Debug for SaltedClaim<T> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         if let Ok(value) = self.value.to_cbor_value() {
-            write!(f, "{:?}: {value:?} ({:?})", self.name, self.salt)
+            write!(f, "{:?}: {value:?} [{:?}]", self.name, self.salt)
         } else {
-            write!(f, "{:?}: ??? ({:?})", self.name, self.salt)
+            write!(f, "{:?}: ??? [{:?}]", self.name, self.salt)
         }
     }
 }
