@@ -1,13 +1,10 @@
-use crate::SdCwtVerified;
-use crate::lookup::TokenQuery;
+use crate::{SdCwtVerified, lookup::TokenQuery};
 use ciborium::Value;
 use coset::iana::CwtClaimName;
-use esdicawt_spec::issuance::SdCwtIssued;
-use esdicawt_spec::key_binding::KbtCwt;
 use esdicawt_spec::{
     CustomClaims, Select,
-    issuance::SdCwtIssuedTagged,
-    key_binding::KbtCwtTagged,
+    issuance::{SdCwtIssued, SdCwtIssuedTagged},
+    key_binding::{KbtCwt, KbtCwtTagged},
     reexports::{coset, coset::iana::EnumI64},
 };
 use std::borrow::Cow;

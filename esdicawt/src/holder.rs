@@ -1,4 +1,3 @@
-use crate::spec::reexports::coset;
 use crate::{
     HolderParams, HolderValidationParams, SdCwtHolderError, SdCwtHolderValidationError,
     holder::validation::validate_disclosures,
@@ -7,6 +6,7 @@ use crate::{
         CustomClaims, CwtAny, NoClaims, Select,
         issuance::SdCwtIssuedTagged,
         key_binding::{KbtCwtTagged, KbtPayload, KbtProtected, KbtUnprotected},
+        reexports::coset,
     },
 };
 use coset::{AsCborValue, TaggedCborSerializable};
@@ -285,8 +285,11 @@ impl<PayloadClaims: Select, Hasher: digest::Digest + Clone, ProtectedClaims: Cus
 #[cfg(test)]
 mod tests {
     use super::{claims::CustomTokenClaims, test_utils::Ed25519Holder, *};
-    use crate::holder::accessor::ClaimSetExt;
-    use crate::{CwtStdLabel, Issuer, IssuerParams, Presentation, StatusParams, TimeArg, holder::params::CborPath, issuer::test_utils::Ed25519Issuer};
+    use crate::{
+        CwtStdLabel, Issuer, IssuerParams, Presentation, StatusParams, TimeArg,
+        holder::{accessor::ClaimSetExt, params::CborPath},
+        issuer::test_utils::Ed25519Issuer,
+    };
     use ciborium::cbor;
     use cose_key_set::CoseKeySet;
     use esdicawt_spec::{

@@ -5,10 +5,10 @@ mod redaction;
 use crate::issuer::{error::SdCwtIssuerError, params::IssuerParams, redaction::redact};
 use ciborium::Value;
 use coset::{AsCborValue as _, TaggedCborSerializable as _};
-use esdicawt_spec::reexports::coset;
 use esdicawt_spec::{
     COSE_HEADER_SD_ALG, COSE_HEADER_SD_CLAIMS, CWT_CLAIM_AUDIENCE, CWT_CLAIM_CNONCE, CWT_CLAIM_CTI, CWT_CLAIM_EXPIRES_AT, CWT_CLAIM_ISSUED_AT, CWT_CLAIM_ISSUER,
     CWT_CLAIM_KEY_CONFIRMATION, CWT_CLAIM_NOT_BEFORE, CWT_CLAIM_SUBJECT, CWT_MEDIA_TYPE, CustomClaims, CwtAny, MEDIA_TYPE_SD_CWT, SdHashAlg, Select, issuance::SdCwtIssuedTagged,
+    reexports::coset,
 };
 use signature::{Keypair, SignatureEncoding, Signer};
 

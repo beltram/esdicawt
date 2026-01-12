@@ -2,14 +2,12 @@ pub(crate) mod cose;
 mod lst_mut;
 mod params;
 
-pub use {
-    cose::{
-        StatusListIssuer,
-        model::{StatusListToken, StatusListTokenBuilder},
-    },
-    lst_mut::LstMut,
-    params::{StatusListIssuerParams, TimeArg},
+pub use cose::{
+    StatusListIssuer,
+    model::{StatusListToken, StatusListTokenBuilder},
 };
+pub use lst_mut::LstMut;
+pub use params::{StatusListIssuerParams, TimeArg};
 
 #[cfg(all(target_arch = "wasm32", target_os = "unknown"))]
 pub(crate) fn elapsed_since_epoch() -> core::time::Duration {

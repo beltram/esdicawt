@@ -85,8 +85,7 @@ impl<S: Status> std::fmt::Debug for Lst<S> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::issuer::LstMut;
-    use crate::{RawStatus, StatusBits};
+    use crate::{RawStatus, StatusBits, issuer::LstMut};
 
     wasm_bindgen_test::wasm_bindgen_test_configure!(run_in_browser);
 

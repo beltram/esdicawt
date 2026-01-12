@@ -1,7 +1,6 @@
-use crate::issuer::StatusListToken;
 use crate::{
     CborAny, Status, StatusList, StatusListResult,
-    issuer::{StatusListIssuerParams, elapsed_since_epoch},
+    issuer::{StatusListIssuerParams, StatusListToken, elapsed_since_epoch},
 };
 use ciborium::Value;
 use coset::{CborSerializable, TaggedCborSerializable, iana::CwtClaimName};
