@@ -1,7 +1,8 @@
 use crate::{SdCwtVerifierError, SdCwtVerifierResult, verifier::walk::walk_payload};
 use ciborium::{Value, value::Integer};
+use digest::DynDigest;
 use esdicawt_spec::{CWT_CLAIM_KEY_CONFIRMATION, CustomClaims, CwtAny, Select, issuance::SdInnerPayload, key_binding::KbtCwt};
-use std::{collections::HashMap, convert::Infallible};
+use std::convert::Infallible;
 
 pub trait ClaimSetExt {
     type Payload: Select;
@@ -13,7 +14,7 @@ pub trait ClaimSetExt {
 
 impl<
     IssuerPayloadClaims: Select,
-    Hasher: digest::Digest + Clone,
+    Hasher: digest::Digest + digest::FixedOutputReset + Clone + 'static,
     PayloadClaims: CustomClaims,
     IssuerProtectedClaims: CustomClaims,
     IssuerUnprotectedClaims: CustomClaims,
@@ -32,23 +33,14 @@ impl<
             let disclosures_size = disclosures.len();
 
             // compute the hash of all disclosures
-            let mut disclosures = disclosures
-                .iter_mut()
-                .map(|d| match d {
-                    Ok(salted) => {
-                        let bytes = salted.to_cbor_bytes()?;
-                        let digest = Hasher::digest(&bytes[..]).to_vec();
-                        SdCwtVerifierResult::Ok((digest, salted))
-                    }
-                    Err(e) => Err(e.into()),
-                })
-                .collect::<Result<HashMap<_, _>, _>>()?;
+            // let mut disclosures = disclosures.digested::<Hasher>()?;
+            let mut disclosures = disclosures.to_verify()?;
 
             if disclosures.len() != disclosures_size {
                 return Err(SdCwtVerifierError::DisclosureHashCollision);
             }
 
-            walk_payload(&mut payload, &mut disclosures)?;
+            walk_payload(Hasher::new().box_clone(), &mut payload, &mut disclosures)?;
         }
         // puncture the 'cnf' claim before deserialization
         if let Some(map) = payload.as_map_mut() {

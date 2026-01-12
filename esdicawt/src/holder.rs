@@ -285,6 +285,7 @@ impl<PayloadClaims: Select, Hasher: digest::Digest + Clone, ProtectedClaims: Cus
 #[cfg(test)]
 mod tests {
     use super::{claims::CustomTokenClaims, test_utils::Ed25519Holder, *};
+    use crate::lookup::TokenQuery;
     use crate::{
         CwtStdLabel, Issuer, IssuerParams, Presentation, StatusParams, TimeArg,
         holder::{accessor::ClaimSetExt, params::CborPath},
@@ -311,7 +312,7 @@ mod tests {
         let payload = CustomTokenClaims {
             name: Some("Alice Smith".into()),
             age: Some(42),
-            array: vec!["a".into()],
+            array: vec!["a".into(), "b".into()],
             map: HashMap::from_iter([("a".into(), "b".into())]),
         };
         let issue_params = IssuerParams {
@@ -335,14 +336,20 @@ mod tests {
                 uri: "https://example.com/statuslists/1".parse().unwrap(),
             },
         };
-        let sd_cwt = issuer.issue_cwt(&mut rand::thread_rng(), issue_params).unwrap().to_cbor_bytes().unwrap();
+        let mut sd_cwt = issuer.issue_cwt(&mut rand::thread_rng(), issue_params).unwrap();
+
+        assert_eq!(sd_cwt.query(vec!["name".into()].into()).unwrap().unwrap(), cbor!("Alice Smith").unwrap());
+        assert_eq!(sd_cwt.query(vec!["age".into()].into()).unwrap().unwrap(), cbor!(42).unwrap());
+        assert_eq!(sd_cwt.query(vec!["array".into()].into()).unwrap().unwrap(), cbor!(["a", "b"]).unwrap());
+
+        let sd_cwt = sd_cwt.to_cbor_bytes().unwrap();
 
         let holder = Ed25519Holder::<CustomTokenClaims, NoClaims>::new(holder_signing_key);
 
         let presentation = Presentation::Path(Box::new(|path| match path {
-            [CborPath::Str(name), ..] if name == "name" => true,
-            [CborPath::Str(age), ..] if age == "age" => false,
-            _ => false,
+            [CborPath::Str(label), ..] if label == "name" => true,
+            [CborPath::Str(label), ..] if label == "age" => false,
+            _ => true,
         }));
 
         let presentation_params = HolderParams {
@@ -363,12 +370,17 @@ mod tests {
 
         let mut sd_kbt = holder.new_presentation(sd_cwt, presentation_params).unwrap();
 
+        assert_eq!(sd_kbt.query(vec!["name".into()].into()).unwrap().unwrap(), cbor!("Alice Smith").unwrap());
+        assert!(sd_kbt.query(vec!["age".into()].into()).unwrap().is_none());
+        assert_eq!(sd_kbt.query(vec!["array".into()].into()).unwrap().unwrap(), cbor!(["a", "b"]).unwrap());
+        // assert_eq!(sd_kbt.query(vec!["array".into()].into()).unwrap().unwrap(), cbor!(["a"]).unwrap());
+
         let sd_kbt_2 = sd_kbt.to_cbor_bytes().unwrap();
         let sd_kbt_2 = KbtCwtTagged::<CustomTokenClaims, sha2::Sha256>::from_cbor_bytes(&sd_kbt_2).unwrap();
         assert_eq!(sd_kbt.to_cbor_bytes().unwrap(), sd_kbt_2.to_cbor_bytes().unwrap());
 
         let disclosable_claims = sd_kbt.0.walk_disclosed_claims().unwrap().collect::<Vec<_>>();
-        assert_eq!(disclosable_claims.len(), 1);
+        assert_eq!(disclosable_claims.len(), 3);
         let is_alice = |sc: &SaltedClaim<Value>| sc.name == SdCwtClaim::Tstr("name".into()) && sc.value == cbor!("Alice Smith").unwrap();
 
         assert!(disclosable_claims.into_iter().any(|c| { matches!(c.unwrap(), Salted::Claim(sc) if is_alice(sc)) }));
@@ -411,7 +423,7 @@ mod tests {
         let holder = Ed25519Holder::<CustomTokenClaims, NoClaims>::new(holder_signing_key);
         let presentation_params = HolderParams {
             presentation: Presentation::Full,
-            audience: "https://example.com/r/alice-bob-group",
+            audience: "https://example.com/r/ab",
             cnonce: Some(b"cnonce"),
             expiry: None,
             with_not_before: true,
@@ -429,7 +441,7 @@ mod tests {
 
         for entry in payload {
             match entry {
-                (Value::Integer(label), Value::Text(aud)) if label == CwtStdLabel::Audience => assert_eq!(&aud, "https://example.com/r/alice-bob-group"),
+                (Value::Integer(label), Value::Text(aud)) if label == CwtStdLabel::Audience => assert_eq!(&aud, "https://example.com/r/ab"),
                 (Value::Integer(label), Value::Integer(_)) if label == CwtStdLabel::ExpiresAt => {}
                 (Value::Integer(label), Value::Integer(_)) if label == CwtStdLabel::IssuedAt => {}
                 (Value::Integer(label), Value::Integer(_)) if label == CwtStdLabel::NotBefore => {}
@@ -471,7 +483,8 @@ mod tests {
 #[cfg(test)]
 pub mod claims {
     use ciborium::Value;
-    use esdicawt_spec::{Select, sd};
+    use esdicawt_spec::Redact;
+    use esdicawt_spec::{CwtAny, Select};
     use std::collections::HashMap;
 
     #[derive(Default, Debug, Clone, PartialEq, serde::Serialize)]
@@ -511,21 +524,18 @@ pub mod claims {
 
     impl Select for CustomTokenClaims {
         fn select(self) -> Result<Value, ciborium::value::Error> {
-            let mut map = Vec::with_capacity(4);
-            if let Some(name) = self.name {
-                map.push((sd!("name"), Value::Text(name)));
+            let mut values = self.to_cbor_value().unwrap().into_map().unwrap();
+            for (label, value) in &mut values {
+                let mut label = label;
+                match (&label, value) {
+                    (Value::Text(s), _) if s == "name" || s == "age" => label.redact(),
+                    (Value::Text(s), values) if s == "array" => {
+                        values.as_array_mut().into_iter().flatten().for_each(|mut v| v.redact());
+                    }
+                    _ => {}
+                };
             }
-            if let Some(age) = self.age {
-                map.push((sd!("age"), Value::Integer(age.into())));
-            }
-
-            let array = self.array.clone().into_iter().map(|e| sd!(e)).collect();
-            map.push((Value::Text("array".into()), Value::Array(array)));
-
-            let inner = self.map.clone().into_iter().map(|(k, v)| (sd!(Value::from(k)), v.into())).collect();
-            map.push((Value::Text("map".into()), Value::Map(inner)));
-
-            Ok(Value::Map(map))
+            Ok(Value::Map(values))
         }
     }
 }
