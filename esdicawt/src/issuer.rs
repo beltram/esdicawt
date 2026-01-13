@@ -196,6 +196,7 @@ pub trait Issuer {
 mod tests {
     use super::{claims::CustomTokenClaims, test_utils::Ed25519Issuer};
     use crate::lookup::TokenQuery;
+    use crate::read::SdCwtRead;
     use crate::{
         CwtStdLabel, Issuer, IssuerParams, StatusParams, TimeArg, elapsed_since_epoch,
         spec::{
@@ -427,6 +428,8 @@ mod tests {
         };
         let (mut sd_cwt, _) = issue(Some(model));
 
+        assert_eq!(sd_cwt.sub().unwrap().unwrap(), "https://example.com/alice.smith");
+        assert_eq!(sd_cwt.iss().unwrap().unwrap(), "https://example.com/i/acme.io");
         assert_eq!(sd_cwt.query(vec!["name".into()].into()).unwrap().unwrap(), cbor!("Alice Smith").unwrap());
         assert_eq!(sd_cwt.query(vec!["age".into()].into()).unwrap().unwrap(), cbor!(42).unwrap());
         assert_eq!(sd_cwt.query(vec!["numbers".into()].into()).unwrap().unwrap(), cbor!([0, 1, 2]).unwrap());

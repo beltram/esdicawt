@@ -11,7 +11,7 @@ use std::borrow::Cow;
 
 #[allow(dead_code)]
 pub trait SdCwtRead: TokenQuery {
-    fn sub(&mut self) -> EsdicawtReadResult<Option<&str>> {
+    fn sub(&mut self) -> EsdicawtReadResult<Option<Cow<'_, str>>> {
         Ok(self.query(vec![CwtClaimName::Sub.to_i64().into()].into())?.as_ref().map(Value::deserialized).transpose()?)
     }
 
