@@ -115,6 +115,17 @@ impl<
         let sd_cwt = protected.kcwt.to_value_mut()?;
         Ok(sd_cwt.0.disclosures())
     }
+
+    pub fn clear_disclosures(&mut self) -> EsdicawtSpecResult<()> {
+        let protected = self.protected.to_value_mut()?;
+        let sd_cwt = protected.kcwt.to_value_mut()?;
+        if let Some(s) = sd_cwt.0.disclosures_mut() {
+            s.0.clear()
+        }
+        protected.kcwt.update_from_value()?;
+        self.protected.update_from_value()?;
+        Ok(())
+    }
 }
 
 pub type KbtCwtTagged<

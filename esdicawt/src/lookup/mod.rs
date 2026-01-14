@@ -12,6 +12,10 @@ use ciborium::Value;
 use digest::DynDigest;
 use esdicawt_spec::{EsdicawtSpecError, blinded_claims::SaltedArrayToVerify};
 
+pub trait TokenQuery {
+    fn query(&mut self, query: Query) -> EsdicawtSpecResult<Option<Value>>;
+}
+
 /// Allows reading claims in a SD-CWT even when they are redacted
 pub fn query<Hasher>(salted_array: &mut SaltedArrayToVerify, payload: &Value, mut q: Query) -> EsdicawtSpecResult<Option<Value>>
 where
@@ -126,106 +130,88 @@ where
     }
 }
 
-pub trait TokenQuery {
-    fn query(&mut self, query: Query) -> EsdicawtSpecResult<Option<Value>>;
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::{
-        Holder, HolderParams, Issuer, IssuerParams, Presentation, StatusParams,
+        Holder, HolderParams, Issuer, IssuerParams, Presentation, StatusParams, Verifier,
         test_utils::{Ed25519Holder, Ed25519Issuer},
     };
     use ciborium::cbor;
     use cose_key_set::CoseKeySet;
-    use esdicawt_spec::{SdCwtClaim, Select, SelectExt, issuance::SdCwtIssuedTagged, key_binding::KbtCwtTagged, sd};
+    use esdicawt_spec::{CustomClaims, NoClaims, SdCwtClaim, Select, SelectExt, issuance::SdCwtIssuedTagged, key_binding::KbtCwtTagged, sd, verified::KbtCwtVerified};
 
     #[test]
     fn can_query_top_level_claim() {
-        let test = |payload: Result<Value, ciborium::value::Error>, a_redacted: bool| {
-            let payload = payload.unwrap().select_none().unwrap();
-            let (mut sd_cwt, holder_signing_key, issuer_verifying_key) = new_sd_cwt(payload);
-            let mut sd_kbt = present_sd_kbt::<Value>(&sd_cwt.to_cbor_bytes().unwrap()[..], holder_signing_key, issuer_verifying_key);
-            assert_eq!(sd_cwt.query(vec!["a".into()].into()).unwrap(), Some("b".into()));
-            assert_eq!(sd_cwt.query(vec!["c".into()].into()).unwrap(), Some("d".into()));
-            assert_eq!(sd_kbt.query(vec!["a".into()].into()).unwrap(), Some("b".into()));
-            assert_eq!(sd_kbt.query(vec!["c".into()].into()).unwrap(), Some("d".into()));
+        let (query, expected) = (vec!["a".into()], Some("b".into()));
+        test(cbor!({"a" => "b", "c" => "d"}), &query, &expected, true, false);
+        test(cbor!({sd!("a") => "b", "c" => "d"}), &query, &expected, true, true);
+        test(cbor!({"a" => "b", sd!("c") => "d"}), &query, &expected, true, false);
+        test(cbor!({sd!("a") => "b", sd!("c") => "d"}), &query, &expected, true, true);
 
-            if a_redacted {
-                let salted = sd_cwt.0.disclosures_mut().unwrap();
-                #[allow(clippy::indexing_slicing)]
-                salted
-                    .0
-                    .retain_mut(|cl| cl.to_value().unwrap().value().unwrap().as_array().map(|a| a[2] != "a".into()).unwrap_or_default());
-
-                let _ = salted;
-
-                assert_eq!(sd_cwt.query(vec!["a".into()].into()).unwrap(), None);
-            }
-        };
-
-        test(cbor!({"a" => "b", "c" => "d"}), false); // unredacted
-        test(cbor!({sd!("a") => "b", "c" => "d"}), true); // a redacted
-        test(cbor!({"a" => "b", sd!("c") => "d"}), false); // c redacted
-        test(cbor!({sd!("a") => "b", sd!("c") => "d"}), true); // all redacted
+        let (query, expected) = (vec!["c".into()], Some("d".into()));
+        test(cbor!({"a" => "b", "c" => "d"}), &query, &expected, true, false);
+        test(cbor!({sd!("a") => "b", "c" => "d"}), &query, &expected, true, false);
+        test(cbor!({"a" => "b", sd!("c") => "d"}), &query, &expected, true, true);
+        test(cbor!({sd!("a") => "b", sd!("c") => "d"}), &query, &expected, true, true);
     }
 
     #[test]
     fn can_query_lower_level_claim() {
-        let test = |payload: Result<Value, ciborium::value::Error>| {
-            let payload = payload.unwrap().select_none().unwrap();
-            let (mut sd_cwt, holder_signing_key, issuer_verifying_key) = new_sd_cwt(payload);
-            let mut sd_kbt = present_sd_kbt::<Value>(&sd_cwt.to_cbor_bytes().unwrap()[..], holder_signing_key, issuer_verifying_key);
-            assert_eq!(sd_cwt.query(vec!["a".into(), "b".into()].into()).unwrap(), Some("c".into()));
-            assert_eq!(sd_kbt.query(vec!["a".into(), "b".into()].into()).unwrap(), Some("c".into()));
-        };
+        let query = vec!["a".into(), "b".into()];
+        let expected = Some("c".into());
 
-        test(cbor!({"a" => {"b" => "c", "d" => "e"}, "b" => 1234})); // unredacted
-        test(cbor!({"a" => {sd!("b") => "c", "d" => "e"}, "b" => 1234})); // assert redacted
+        test(cbor!({"a" => {"b" => "c", "d" => "e"}, "b" => 1234}), &query, &expected, true, false);
+        test(cbor!({"a" => {sd!("b") => "c", "d" => "e"}, "b" => 1234}), &query, &expected, true, true);
     }
 
     #[test]
     fn can_query_top_level_array_index() {
-        let test = |payload: Result<Value, ciborium::value::Error>| {
-            let payload = payload.unwrap().select_none().unwrap();
-            let (mut sd_cwt, holder_signing_key, issuer_verifying_key) = new_sd_cwt(payload);
-            let mut sd_kbt = present_sd_kbt::<Value>(&sd_cwt.to_cbor_bytes().unwrap()[..], holder_signing_key, issuer_verifying_key);
-            assert_eq!(sd_cwt.query(vec!["a".into(), 2usize.into()].into()).unwrap(), Some("d".into()));
-            assert_eq!(sd_kbt.query(vec!["a".into(), 2usize.into()].into()).unwrap(), Some("d".into()));
-        };
+        let query = vec!["a".into(), 2usize.into()];
+        let expected = Some("d".into());
 
-        test(cbor!({"a" => ["b", "c", "d", "e"], "b" => 1234})); // unredacted
-        test(cbor!({"a" => ["b", "c", sd!("d"), "e"], "b" => 1234})); // assert redacted
+        test(cbor!({"a" => ["b", "c", "d", "e"], "b" => 1234}), &query, &expected, true, false);
+        test(cbor!({"a" => ["b", "c", sd!("d"), "e"], "b" => 1234}), &query, &expected, true, true);
     }
 
     #[test]
-    fn should_continue_unredacting_nested() {
-        let test = |payload: Result<Value, ciborium::value::Error>| {
-            let payload = payload.unwrap().select_none().unwrap();
-            let (mut sd_cwt, holder_signing_key, issuer_verifying_key) = new_sd_cwt(payload);
-            let mut sd_kbt = present_sd_kbt::<Value>(&sd_cwt.to_cbor_bytes().unwrap()[..], holder_signing_key, issuer_verifying_key);
+    fn should_continue_unredacted_nested() {
+        let query = vec!["a".into()];
+        let expected = Some(cbor!(["b", "c", "d", "e"]).unwrap());
 
-            assert_eq!(sd_cwt.query(vec!["a".into()].into()).unwrap(), Some(cbor!(["b", "c", "d", "e"]).unwrap()));
-            assert_eq!(sd_kbt.query(vec!["a".into()].into()).unwrap(), Some(cbor!(["b", "c", "d", "e"]).unwrap()));
-        };
-
-        test(cbor!({"a" => ["b", "c", "d", "e"], "b" => 1234})); // unredacted
-        test(cbor!({"a" => ["b", "c", sd!("d"), "e"], "b" => 1234})); // assert redacted
+        test(cbor!({"a" => ["b", "c", "d", "e"], "b" => 1234}), &query, &expected, false, false);
+        test(cbor!({"a" => ["b", "c", sd!("d"), "e"], "b" => 1234}), &query, &expected, false, true);
     }
 
     #[test]
     fn can_query_inside_array_index() {
-        let test = |payload: Result<Value, ciborium::value::Error>| {
-            let payload = payload.unwrap().select_none().unwrap();
-            let (mut sd_cwt, holder_signing_key, issuer_verifying_key) = new_sd_cwt(payload);
-            let mut sd_kbt = present_sd_kbt::<Value>(&sd_cwt.to_cbor_bytes().unwrap()[..], holder_signing_key, issuer_verifying_key);
-            assert_eq!(sd_cwt.query(vec!["a".into(), 1usize.into(), "b".into()].into()).unwrap(), Some("d".into()));
-            assert_eq!(sd_kbt.query(vec!["a".into(), 1usize.into(), "b".into()].into()).unwrap(), Some("d".into()));
-        };
+        let query = vec!["a".into(), 1usize.into(), "b".into()];
+        let expected = Some("d".into());
 
-        test(cbor!({"a" => [{"b" => "c"}, {"b" => "d", "e" => "f"}], "b" => 1234})); // unredacted
-        test(cbor!({"a" => [{"b" => "c"}, {sd!("b") => "d", "e" => "f"}], "b" => 1234})); // assert redacted
+        test(cbor!({"a" => [{"b" => "c"}, {"b" => "d", "e" => "f"}], "b" => 1234}), &query, &expected, false, false);
+        test(cbor!({"a" => [{"b" => "c"}, {sd!("b") => "d", "e" => "f"}], "b" => 1234}), &query, &expected, false, true);
+    }
+
+    /// * simple_matching: query is for a simple type (int, tstr etc...) and not an array or map
+    /// * contains_redacted: does the payload contains a redacted claim AS PART OF THE QUERY RESULT
+    fn test(payload: Result<Value, ciborium::value::Error>, query: &[QueryElement], expected: &Option<Value>, simple_matching: bool, contains_redacted: bool) {
+        let payload = payload.unwrap().select_none().unwrap();
+        let (mut sd_cwt, holder_signing_key, issuer_verifying_key) = new_sd_cwt(payload);
+        let mut sd_kbt = present_sd_kbt::<Value>(&sd_cwt.to_cbor_bytes().unwrap()[..], holder_signing_key, issuer_verifying_key);
+        let mut sd_kbt_verified = verify::<Value>(&sd_kbt.to_cbor_bytes().unwrap(), issuer_verifying_key);
+
+        assert_eq!(sd_cwt.query(query.to_vec().into()).unwrap(), expected.clone());
+        assert_eq!(sd_kbt.query(query.to_vec().into()).unwrap(), expected.clone());
+        if !contains_redacted {
+            assert_eq!(sd_kbt_verified.query(query.to_vec().into()).unwrap(), expected.clone());
+        } else if simple_matching {
+            sd_cwt.0.disclosures_mut().unwrap().0.clear();
+            assert_eq!(sd_cwt.query(query.to_vec().into()).unwrap(), None);
+
+            sd_kbt.0.clear_disclosures().unwrap();
+            dbg!(&sd_kbt.0.disclosures());
+            assert_eq!(sd_kbt.query(query.to_vec().into()).unwrap(), None);
+        }
     }
 
     #[test]
@@ -290,5 +276,34 @@ mod tests {
         };
         let sd_cwt = holder.verify_sd_cwt(sd_cwt, Default::default(), &CoseKeySet::new(&issuer_verifying_key).unwrap()).unwrap();
         holder.new_presentation(sd_cwt, holder_params).unwrap()
+    }
+
+    fn verify<T: Select>(sd_kbt: &[u8], issuer_verifying_key: ed25519_dalek::VerifyingKey) -> KbtCwtVerified<T> {
+        pub struct Ed25519Verifier<T: Select, U: CustomClaims = NoClaims> {
+            pub _marker: core::marker::PhantomData<(T, U)>,
+        }
+
+        #[allow(clippy::new_without_default)]
+        impl<T: Select, U: CustomClaims> Ed25519Verifier<T, U> {
+            pub fn new() -> Self {
+                Self { _marker: Default::default() }
+            }
+        }
+
+        impl<T: Select, U: CustomClaims> Verifier for Ed25519Verifier<T, U> {
+            type Error = std::convert::Infallible;
+            type HolderSignature = ed25519_dalek::Signature;
+            type HolderVerifier = ed25519_dalek::VerifyingKey;
+            type IssuerProtectedClaims = NoClaims;
+            type IssuerUnprotectedClaims = NoClaims;
+            type IssuerPayloadClaims = T;
+            type KbtPayloadClaims = U;
+            type KbtProtectedClaims = NoClaims;
+            type KbtUnprotectedClaims = NoClaims;
+        }
+        let verifier = Ed25519Verifier::new();
+        verifier
+            .verify_sd_kbt(sd_kbt, Default::default(), None, &CoseKeySet::new(&issuer_verifying_key).unwrap())
+            .unwrap()
     }
 }
