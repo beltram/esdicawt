@@ -61,6 +61,34 @@ impl<T: CwtAny> InlinedCbor<T> {
         })
     }
 
+    /// After the value has been updated, this applies the serialized value to the raw bytes
+    pub fn update_from_value(&mut self) -> EsdicawtSpecResult<()> {
+        match self {
+            Self::Value(v, Some(bytes), ..) | Self::Bytes(bytes, Some(v), ..) => {
+                *bytes = v.to_cbor_bytes()?;
+            }
+            _ => {}
+        }
+        Ok(())
+    }
+
+    pub fn replace_value(&mut self, value: T) -> EsdicawtSpecResult<()> {
+        let value_bytes = value.to_cbor_bytes()?;
+        match self {
+            Self::Value(v, Some(bytes), ..) | Self::Bytes(bytes, Some(v), ..) => {
+                *v = value;
+                *bytes = value_bytes;
+            }
+            Self::Value(v, ..) => {
+                *v = value;
+            }
+            Self::Bytes(bytes, ..) => {
+                *bytes = value_bytes;
+            }
+        }
+        Ok(())
+    }
+
     pub fn as_value(&self) -> EsdicawtSpecResult<std::borrow::Cow<'_, T>> {
         match self {
             Self::Value(v, ..) | Self::Bytes(_, Some(v), ..) => Ok(std::borrow::Cow::Borrowed(v)),
