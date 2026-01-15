@@ -48,7 +48,6 @@ where
                         }
                     }) {
                         let (mut found, _) = disclosures.swap_remove(pos);
-
                         match found.to_mut() {
                             Salted::Claim(SaltedClaim { name, value, .. }) => {
                                 if value.is_map() || value.is_array() {
@@ -62,6 +61,10 @@ where
                         }
                     }
                 }
+            }
+
+            for (_, v) in mapping {
+                walk_payload(hasher.clone(), v, disclosures)?;
             }
         }
         Value::Array(array) => {

@@ -181,6 +181,10 @@ pub trait Verifier {
     > {
         let mut kbt = self.shallow_verify_sd_kbt(raw_sd_kbt, params.shallow(), holder_verifier, cks)?;
 
+        // TODO: improve perf
+        let generic_sd_cwt = kbt.0.clone().generic_sd_cwt()?;
+        let mut generic_sd_cwt_payload = generic_sd_cwt.payload.upcast_value()?;
+
         let kbt_protected = kbt.0.protected.to_value_mut()?;
         let sd_cwt = kbt_protected.kcwt.to_value_mut()?;
         let sd_cwt_payload = sd_cwt.0.payload.to_value_mut()?;
@@ -238,7 +242,7 @@ pub trait Verifier {
             });
         }
 
-        let mut payload = sd_cwt_payload.to_cbor_value()?;
+        // let mut payload = sd_cwt_payload.to_cbor_value()?;
         let sd_alg = sd_cwt.0.protected.to_value_mut()?.sd_alg;
 
         // now verifying the disclosures
@@ -252,16 +256,16 @@ pub trait Verifier {
                 return Err(SdCwtVerifierError::DisclosureHashCollision);
             }
 
-            walk::walk_payload(self.digest(sd_alg), &mut payload, &mut disclosures)?;
+            walk::walk_payload(self.digest(sd_alg), &mut generic_sd_cwt_payload, &mut disclosures)?;
         }
 
         // puncture the 'cnf' claim before deserialization
-        if let Some(map) = payload.as_map_mut() {
+        if let Some(map) = generic_sd_cwt_payload.as_map_mut() {
             map.retain(|(k, _)| !matches!(k, Value::Integer(i) if *i == Integer::from(CWT_CLAIM_KEY_CONFIRMATION)));
         }
 
         // TODO: this might fail if `Self::IssuerPayloadClaims` does not support unknown claims (serde flatten etc..)
-        let sd_cwt_payload = payload.deserialized::<SdInnerPayload<Self::IssuerPayloadClaims>>()?;
+        let sd_cwt_payload = generic_sd_cwt_payload.deserialized::<SdInnerPayload<Self::IssuerPayloadClaims>>()?;
         let claimset = sd_cwt_payload.extra;
 
         let protected = kbt.0.protected.try_into_value()?.try_into()?;
@@ -354,7 +358,7 @@ pub trait VerifierWithStatus: Verifier {
 
 #[cfg(test)]
 mod tests {
-    use super::claims::CustomTokenClaims;
+    use super::claims::{CustomTokenClaims, Stuff};
     use crate::{
         HolderParams, Issuer, IssuerParams, Presentation, SdCwtVerifierError, StatusParams, TimeArg, Verifier, VerifierParams,
         holder::Holder,
@@ -371,12 +375,17 @@ mod tests {
     #[test]
     #[wasm_bindgen_test::wasm_bindgen_test]
     fn should_verify_valid_sd_cwt() {
-        let payload = CustomTokenClaims { name: Some("Alice Smith".into()) };
+        let payload = CustomTokenClaims {
+            name: Some("Alice Smith".into()),
+            stuffs: vec![Stuff { foo: "bar".into() }],
+        };
         let holder_signing_key = ed25519_dalek::SigningKey::generate(&mut rand::thread_rng());
         let issuer_params = default_issuer_params(Some(payload), &holder_signing_key);
         let verified = verify(issuer_params, default_holder_params::<NoClaims>(), &holder_signing_key);
 
-        assert_eq!(verified.claimset.as_ref().unwrap().name.as_deref(), Some("Alice Smith"));
+        let claimset = verified.claimset.clone().unwrap();
+        assert_eq!(claimset.name.as_deref(), Some("Alice Smith"));
+        assert_eq!(claimset.stuffs, vec![Stuff { foo: "bar".into() }]);
         assert_eq!(verified.sd_cwt().payload.subject, Some("https://example.com/u/alice.smith".into()));
 
         // should work without disclosures
@@ -567,7 +576,10 @@ mod tests {
             pub foo: String,
         }
         let extra_kbt = ExtraKbtClaims { foo: "bar".into() };
-        let payload = CustomTokenClaims { name: Some("Alice Smith".into()) };
+        let payload = CustomTokenClaims {
+            name: Some("Alice Smith".into()),
+            stuffs: Default::default(),
+        };
         let holder_signing_key = ed25519_dalek::SigningKey::generate(&mut rand::thread_rng());
         let issuer_params = default_issuer_params(Some(payload), &holder_signing_key);
 
@@ -777,20 +789,54 @@ mod tests {
 #[cfg(test)]
 pub mod claims {
     use ciborium::Value;
-    use esdicawt_spec::{Select, sd};
+    use esdicawt_spec::{Redact, Select};
 
-    #[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
+    #[derive(Default, Debug, Clone, PartialEq, serde::Serialize)]
     pub(super) struct CustomTokenClaims {
         pub name: Option<String>,
+        pub stuffs: Vec<Stuff>,
+        // pub stuffs_stuffs: Vec<Vec<Stuff>>,
+    }
+
+    impl<'de> serde::Deserialize<'de> for CustomTokenClaims {
+        fn deserialize<D: serde::de::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+            let mut token = Self::default();
+            let value = Value::deserialize(deserializer)?.into_map().unwrap();
+            for (k, v) in value {
+                match (&k, v) {
+                    (Value::Text(s), Value::Text(name)) if *s == "name" => {
+                        token.name.replace(name);
+                    }
+                    (Value::Text(s), Value::Array(values)) if *s == "stuffs" => {
+                        let values = values.into_iter().filter(|v| !matches!(v, Value::Tag(_, _))).collect::<Vec<_>>();
+                        token.stuffs = Value::Array(values).deserialized().unwrap();
+                    }
+                    _ => {}
+                }
+            }
+            Ok(token)
+        }
+    }
+
+    #[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
+    pub(super) struct Stuff {
+        pub foo: String,
     }
 
     impl Select for CustomTokenClaims {
         fn select(self) -> Result<Value, ciborium::value::Error> {
-            let mut map = Vec::with_capacity(1);
-            if let Some(name) = self.name {
-                map.push((sd!("name"), Value::Text(name)));
+            let mut values = Value::serialized(&self)?.into_map().unwrap();
+            for (label, value) in &mut values {
+                let mut label = label;
+                match (&label, value) {
+                    (Value::Text(s), _) if *s == "name" => label.redact(),
+                    (Value::Text(s), values) if *s == "stuffs" => {
+                        values.as_array_mut().into_iter().flatten().for_each(|mut v| v.redact());
+                    }
+                    _ => {}
+                };
             }
-            Ok(Value::Map(map))
+            Ok(Value::Map(values))
         }
     }
 }

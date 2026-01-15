@@ -209,7 +209,6 @@ mod tests {
             assert_eq!(sd_cwt.query(query.to_vec().into()).unwrap(), None);
 
             sd_kbt.0.clear_disclosures().unwrap();
-            dbg!(&sd_kbt.0.disclosures());
             assert_eq!(sd_kbt.query(query.to_vec().into()).unwrap(), None);
         }
     }
