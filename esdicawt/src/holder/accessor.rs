@@ -1,7 +1,7 @@
 use crate::{SdCwtVerifierError, SdCwtVerifierResult, verifier::walk::walk_payload};
 use ciborium::{Value, value::Integer};
 use digest::DynDigest;
-use esdicawt_spec::{CWT_CLAIM_KEY_CONFIRMATION, CustomClaims, CwtAny, Select, issuance::SdInnerPayload, key_binding::KbtCwt};
+use esdicawt_spec::{CWT_CLAIM_KEY_CONFIRMATION, CustomClaims, Select, issuance::SdInnerPayload, key_binding::KbtCwt};
 use std::convert::Infallible;
 
 pub trait ClaimSetExt {
@@ -25,15 +25,12 @@ impl<
     type Payload = IssuerPayloadClaims;
 
     fn claimset_unchecked(&mut self) -> SdCwtVerifierResult<Option<Self::Payload>, Infallible> {
-        let kbt_protected = self.protected.to_value_mut()?;
-        let sd_cwt = kbt_protected.kcwt.to_value_mut()?;
-        let sd_cwt_payload = sd_cwt.0.payload.to_value_mut()?;
-        let mut payload = sd_cwt_payload.to_cbor_value()?;
-        if let Some(disclosures) = sd_cwt.0.disclosures_mut() {
+        let mut sd_cwt = self.generic_sd_cwt()?;
+        let mut payload = sd_cwt.payload.upcast_value()?;
+        if let Some(disclosures) = sd_cwt.disclosures_mut() {
             let disclosures_size = disclosures.len();
 
             // compute the hash of all disclosures
-            // let mut disclosures = disclosures.digested::<Hasher>()?;
             let mut disclosures = disclosures.to_verify()?;
 
             if disclosures.len() != disclosures_size {
