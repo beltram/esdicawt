@@ -373,7 +373,6 @@ mod tests {
         assert_eq!(sd_kbt.query(vec!["name".into()].into()).unwrap().unwrap(), cbor!("Alice Smith").unwrap());
         assert!(sd_kbt.query(vec!["age".into()].into()).unwrap().is_none());
         assert_eq!(sd_kbt.query(vec!["array".into()].into()).unwrap().unwrap(), cbor!(["a", "b"]).unwrap());
-        // assert_eq!(sd_kbt.query(vec!["array".into()].into()).unwrap().unwrap(), cbor!(["a"]).unwrap());
 
         let sd_kbt_2 = sd_kbt.to_cbor_bytes().unwrap();
         let sd_kbt_2 = KbtCwtTagged::<CustomTokenClaims, sha2::Sha256>::from_cbor_bytes(&sd_kbt_2).unwrap();
@@ -387,6 +386,7 @@ mod tests {
 
         let claimset = sd_kbt.0.claimset_unchecked().unwrap().unwrap();
         assert_eq!(&claimset.name.unwrap(), "Alice Smith");
+        assert_eq!(&claimset.array, &["a".to_string(), "b".to_string()]);
     }
 
     #[test]
