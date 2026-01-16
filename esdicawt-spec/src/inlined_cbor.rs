@@ -51,7 +51,8 @@ impl<T: CwtAny> InlinedCbor<T> {
     pub fn upcast_value(&self) -> EsdicawtSpecResult<Value> {
         Ok(match self {
             Self::Bytes(bytes, _, _) | Self::Value(_, Some(bytes), _) => Value::from_cbor_bytes(bytes)?,
-            _ => {
+            #[allow(unused)]
+            Self::Value(v, _, _) => {
                 #[cfg(debug_assertions)]
                 panic!("Trying to upcast to value without the raw bytes, some elements might have been redacted in the process");
 
