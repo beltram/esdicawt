@@ -42,3 +42,14 @@ impl<'de> serde::Deserialize<'de> for Algorithm {
         Ok(alg.into())
     }
 }
+
+impl Eq for Algorithm {}
+
+impl PartialEq<coset::iana::Algorithm> for Algorithm {
+    fn eq(&self, other: &coset::iana::Algorithm) -> bool {
+        match self.0 {
+            coset::Algorithm::Assigned(alg) => &alg == other,
+            coset::Algorithm::PrivateUse(_) | coset::Algorithm::Text(_) => false,
+        }
+    }
+}

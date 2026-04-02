@@ -91,51 +91,60 @@ pub trait Verifier {
             }
         }
 
-        #[cfg(feature = "ed25519")]
+        const ED25519_DALEK_SIGNATURE_LENGTH: usize = 64;
+
+        if cfg!(feature = "ed25519")
+            && let KeyConfirmation::CoseKey(key) = key_confirmation
+            && key.alg() == Some(coset::iana::Algorithm::EdDSA)
+            && key.crv() == Some(coset::iana::EllipticCurve::Ed25519)
+            && sd_cwt.0.protected.as_value()?.alg == coset::iana::Algorithm::EdDSA
+            // only way to differentiate ed25519 from ed448 since we do not have crv
+            && sd_cwt.0.signature.len() == ED25519_DALEK_SIGNATURE_LENGTH
         {
-            let kbt_tbs = &kbt_cose_sign1.tbs_data(&[]);
-            let kbt_signature = ed25519_dalek::Signature::from_slice(&kbt_cose_sign1.signature)?;
+            #[cfg(feature = "ed25519")]
+            {
+                // just for the feature scoped imports
+                let kbt_tbs = &kbt_cose_sign1.tbs_data(&[]);
+                let kbt_signature = ed25519_dalek::Signature::from_slice(&kbt_cose_sign1.signature)?;
 
-            let sd_cwt_tbs = &sd_cwt_cose_sign1.tbs_data(&[]);
-            let sd_cwt_signature = ed25519_dalek::Signature::from_slice(&sd_cwt_cose_sign1.signature)?;
+                let sd_cwt_tbs = &sd_cwt_cose_sign1.tbs_data(&[]);
+                let sd_cwt_signature = ed25519_dalek::Signature::from_slice(&sd_cwt_cose_sign1.signature)?;
 
-            let alg = crate::signature_verifier::cose_sign1_alg(&sd_cwt_cose_sign1)?;
-            if alg != coset::iana::Algorithm::EdDSA {
-                return Err(SdCwtVerifierError::UnsupportedAlgorithm);
-            }
+                let alg = crate::signature_verifier::cose_sign1_alg(&sd_cwt_cose_sign1)?;
+                if alg != coset::iana::Algorithm::EdDSA {
+                    return Err(SdCwtVerifierError::UnsupportedAlgorithm);
+                }
 
-            let holder_verifying_key = holder_verifier_key.as_ref().try_into().map_err(crate::signature_verifier::SignatureVerifierError::from)?;
-            let holder_verifier_key = ed25519_dalek::VerifyingKey::from_bytes(holder_verifying_key).map_err(crate::signature_verifier::SignatureVerifierError::from)?;
+                let holder_verifying_key = holder_verifier_key.as_ref().try_into().map_err(crate::signature_verifier::SignatureVerifierError::from)?;
+                let holder_verifier_key = ed25519_dalek::VerifyingKey::from_bytes(holder_verifying_key).map_err(crate::signature_verifier::SignatureVerifierError::from)?;
 
-            let mut verified = false;
-            let mut first_err = None;
-            for key in cks.find_keys(&alg) {
-                if key.crv() == Some(coset::iana::EllipticCurve::Ed25519) {
-                    let sd_cwt_verifier = ed25519_dalek::VerifyingKey::try_from(key).map_err(crate::signature_verifier::SignatureVerifierError::from)?;
-                    let verification = ed25519_dalek::verify_batch(&[kbt_tbs, sd_cwt_tbs], &[kbt_signature, sd_cwt_signature], &[holder_verifier_key, sd_cwt_verifier]);
-                    match verification {
-                        Ok(_) => {
-                            verified = true;
-                            break;
-                        }
-                        Err(e) => {
-                            if first_err.is_none() {
-                                first_err.replace(e);
+                let mut verified = false;
+                let mut first_err = None;
+                for key in cks.find_keys(&alg) {
+                    if key.crv() == Some(coset::iana::EllipticCurve::Ed25519) {
+                        let sd_cwt_verifier = ed25519_dalek::VerifyingKey::try_from(key).map_err(crate::signature_verifier::SignatureVerifierError::from)?;
+                        let verification = ed25519_dalek::verify_batch(&[kbt_tbs, sd_cwt_tbs], &[kbt_signature, sd_cwt_signature], &[holder_verifier_key, sd_cwt_verifier]);
+                        match verification {
+                            Ok(_) => {
+                                verified = true;
+                                break;
+                            }
+                            Err(e) => {
+                                if first_err.is_none() {
+                                    first_err.replace(e);
+                                }
                             }
                         }
                     }
                 }
+                if !verified {
+                    return first_err.map_or_else(
+                        || Err(crate::signature_verifier::SignatureVerifierError::NoSigner.into()),
+                        |e| Err(SdCwtVerifierError::SignatureError(e)),
+                    );
+                }
             }
-            if !verified {
-                return first_err.map_or_else(
-                    || Err(crate::signature_verifier::SignatureVerifierError::NoSigner.into()),
-                    |e| Err(SdCwtVerifierError::SignatureError(e)),
-                );
-            }
-        }
-
-        #[cfg(not(feature = "ed25519"))]
-        {
+        } else {
             use signature::Verifier as _;
             kbt_cose_sign1.verify_signature(&[], |signature, raw_data| {
                 let signature = Self::HolderSignature::try_from(signature).map_err(|_| SdCwtVerifierError::SignatureEncodingError)?;
