@@ -30,8 +30,6 @@ pub enum SdCwtVerifierError<CustomError: Send + Sync> {
     SpecError(#[from] esdicawt_spec::EsdicawtSpecError),
     #[error("Invalid SD-CWT")]
     InvalidSdCwt,
-    #[error("This algorithm is not supported")]
-    UnsupportedAlgorithm,
     #[error(transparent)]
     KeyConfirmationError(#[from] cose_key_confirmation::error::CoseKeyConfirmationError),
     #[error(transparent)]

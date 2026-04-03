@@ -110,17 +110,12 @@ pub trait Verifier {
                 let sd_cwt_tbs = &sd_cwt_cose_sign1.tbs_data(&[]);
                 let sd_cwt_signature = ed25519_dalek::Signature::from_slice(&sd_cwt_cose_sign1.signature)?;
 
-                let alg = crate::signature_verifier::cose_sign1_alg(&sd_cwt_cose_sign1)?;
-                if alg != coset::iana::Algorithm::EdDSA {
-                    return Err(SdCwtVerifierError::UnsupportedAlgorithm);
-                }
-
                 let holder_verifying_key = holder_verifier_key.as_ref().try_into().map_err(crate::signature_verifier::SignatureVerifierError::from)?;
                 let holder_verifier_key = ed25519_dalek::VerifyingKey::from_bytes(holder_verifying_key).map_err(crate::signature_verifier::SignatureVerifierError::from)?;
 
                 let mut verified = false;
                 let mut first_err = None;
-                for key in cks.find_keys(&alg) {
+                for key in cks.find_keys(&coset::iana::Algorithm::EdDSA) {
                     if key.crv() == Some(coset::iana::EllipticCurve::Ed25519) {
                         let sd_cwt_verifier = ed25519_dalek::VerifyingKey::try_from(key).map_err(crate::signature_verifier::SignatureVerifierError::from)?;
                         let verification = ed25519_dalek::verify_batch(&[kbt_tbs, sd_cwt_tbs], &[kbt_signature, sd_cwt_signature], &[holder_verifier_key, sd_cwt_verifier]);
