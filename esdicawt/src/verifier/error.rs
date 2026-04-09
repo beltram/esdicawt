@@ -36,6 +36,8 @@ pub enum SdCwtVerifierError<CustomError: Send + Sync> {
     IssuerSignatureValidationError(#[from] SignatureVerifierError),
     #[error(transparent)]
     TimeError(#[from] CwtTimeError),
+    #[error(transparent)]
+    Infallible(#[from] std::convert::Infallible),
     #[error("The type of Key Confirmation in the SD-CWT is not supported")]
     UnsupportedKeyConfirmation,
     #[error("The Key Confirmation in the SD-KBT is not the expected one")]
