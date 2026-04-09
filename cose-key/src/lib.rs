@@ -1,6 +1,10 @@
 mod codec;
 mod error;
 
+pub mod reexports {
+    pub use coset;
+}
+
 use ciborium::Value;
 use coset::{Algorithm, KeyOperation, KeyType, Label, iana, iana::EnumI64};
 pub use error::CoseKeyError;
