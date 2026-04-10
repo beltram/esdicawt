@@ -3,6 +3,7 @@ mod error;
 
 pub mod reexports {
     pub use coset;
+    pub use ciborium;
 }
 
 use ciborium::Value;
