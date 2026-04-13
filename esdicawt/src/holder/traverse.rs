@@ -62,7 +62,7 @@ where
                     let values = match value {
                         Value::Array(values) => values.iter().enumerate().map(|(i, v)| (i, None, v)).collect::<Vec<_>>(),
                         Value::Map(values) => values.iter().enumerate().map(|(i, (k, v))| (i, Some(k), v)).collect::<Vec<_>>(),
-                        _ => unreachable!(),
+                        _ => return Err(SdCwtHolderError::ImplementationError("Traverse impl error. Should be either Map or Array")),
                     };
 
                     for (index, label, value) in values {

@@ -79,7 +79,9 @@ where
                     };
 
                     let (mut found, _) = salted_array.swap_remove(pos);
-                    let Salted::Claim(sc) = found.to_mut() else { unreachable!() };
+                    let Salted::Claim(sc) = found.to_mut() else {
+                        return Err(EsdicawtSpecError::ImplementationError("Query inner impl error. Should be SaltedClaim"));
+                    };
                     sc.value.clone()
                 }
             }
@@ -110,7 +112,9 @@ where
                     };
 
                     let found = salted_array.swap_remove(pos);
-                    let Salted::Element(sc) = found.0.as_ref() else { unreachable!() };
+                    let Salted::Element(sc) = found.0.as_ref() else {
+                        return Err(EsdicawtSpecError::ImplementationError("Query inner impl error. Should be SaltedElement"));
+                    };
 
                     sc.value.clone()
                 }

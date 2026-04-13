@@ -69,7 +69,7 @@ impl<'de, S: Status> serde::Deserialize<'de> for StatusListToken<S> {
 
         let value = <Value as serde::Deserialize>::deserialize(deserializer)?;
         let Value::Tag(<coset::CoseSign1 as TaggedCborSerializable>::TAG, value) = value else {
-            unreachable!()
+            return Err(D::Error::custom("Invalid CoseSign1, should be tagged"));
         };
         let sign1 = coset::CoseSign1::from_cbor_value(*value).map_err(D::Error::custom)?;
 
