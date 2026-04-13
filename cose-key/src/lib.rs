@@ -2,8 +2,8 @@ mod codec;
 mod error;
 
 pub mod reexports {
-    pub use coset;
     pub use ciborium;
+    pub use coset;
 }
 
 use ciborium::Value;
