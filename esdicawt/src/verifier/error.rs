@@ -31,7 +31,7 @@ pub enum SdCwtVerifierError<CustomError: Send + Sync> {
     #[error("Invalid SD-CWT")]
     InvalidSdCwt,
     #[error(transparent)]
-    KeyConfirmationError(#[from] cose_key_confirmation::error::CoseKeyConfirmationError),
+    KeyConfirmationError(#[from] cose_key::confirmation::CoseKeyConfirmationError),
     #[error(transparent)]
     IssuerSignatureValidationError(#[from] SignatureVerifierError),
     #[error(transparent)]

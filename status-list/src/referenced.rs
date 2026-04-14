@@ -30,7 +30,7 @@ pub struct StatusListClaim {
 
 #[cfg(test)]
 mod tests {
-    use crate::{CborAny as _, issuer::cose::tests::rfc_signer, referenced::StatusClaim};
+    use crate::{CborExt as _, issuer::cose::tests::rfc_signer, referenced::StatusClaim};
     use coset::{CborSerializable, TaggedCborSerializable, iana::CwtClaimName};
     use signature::Signer;
 

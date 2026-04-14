@@ -7,7 +7,7 @@ use crate::{
     verifier::error::SdCwtVerifierError,
 };
 use ciborium::{Value, value::Integer};
-use cose_key_confirmation::{KeyConfirmation, error::CoseKeyConfirmationError};
+use cose_key::confirmation::{CoseKeyConfirmationError, KeyConfirmation};
 use coset::{CoseSign1, TaggedCborSerializable};
 use esdicawt_spec::{CWT_CLAIM_KEY_CONFIRMATION, CustomClaims, CwtAny, SdHashAlg, Select, issuance::SdInnerPayload, key_binding::KbtCwtTagged, verified::KbtCwtVerified};
 
@@ -49,7 +49,7 @@ pub trait Verifier {
         params: ShallowVerifierParams,
         // not mandatory in case the verifier does not have access to it
         holder_verifier: Option<&Self::HolderVerifier>,
-        cks: &cose_key_set::CoseKeySet,
+        cks: &cose_key::keyset::CoseKeySet,
     ) -> Result<
         KbtCwtTagged<
             Self::IssuerPayloadClaims,
@@ -73,7 +73,7 @@ pub trait Verifier {
         params: VerifierParams,
         // not mandatory in case the verifier does not have access to it
         holder_verifier: Option<&Self::HolderVerifier>,
-        cks: &cose_key_set::CoseKeySet,
+        cks: &cose_key::keyset::CoseKeySet,
     ) -> Result<
         KbtCwtVerified<
             Self::IssuerPayloadClaims,
@@ -361,9 +361,9 @@ pub trait VerifierWithStatus: Verifier {
         status_list_params: crate::verifier::params::StatusListVerifierParams,
         // not mandatory in case the verifier does not have access to it
         holder_verifier: Option<&Self::HolderVerifier>,
-        cks: &cose_key_set::CoseKeySet,
+        cks: &cose_key::keyset::CoseKeySet,
         // in case the issuer of the StatusList is different from the SD-CWT issuer
-        status_list_cks: &cose_key_set::CoseKeySet,
+        status_list_cks: &cose_key::keyset::CoseKeySet,
     ) -> Result<
         KbtCwtVerified<
             Self::IssuerPayloadClaims,
@@ -436,7 +436,7 @@ mod tests {
         verifier::{VerifierWithStatus, error::SdCwtStatusVerifierError, params::StatusListVerifierParams, test_utils::HybridVerifier},
     };
     use ciborium::{Value, cbor};
-    use cose_key_set::CoseKeySet;
+    use cose_key::keyset::CoseKeySet;
     use esdicawt_spec::{CustomClaims, CwtAny, NoClaims, Select, verified::KbtCwtVerified};
     use status_list::{OauthStatus, StatusList, issuer::StatusListIssuerParams};
 
@@ -485,7 +485,7 @@ mod tests {
                 &sd_kbt,
                 Default::default(),
                 Some(&holder_signing_key.verifying_key()),
-                &CoseKeySet::new(&issuer_verifying_key_bis).unwrap()
+                &CoseKeySet::builder().with(&issuer_verifying_key_bis).unwrap().build()
             ),
             Err(SdCwtVerifierError::SignatureError(_))
         ));
@@ -763,7 +763,7 @@ mod tests {
 
         // 6. should fail if status_token not signed by expected issuer
         let fake_status_token_signer = ed25519_dalek::SigningKey::generate(&mut rand::thread_rng());
-        let fake_status_list_cks = CoseKeySet::new(&fake_status_token_signer.verifying_key()).unwrap();
+        let fake_status_list_cks = CoseKeySet::builder().with(&fake_status_token_signer.verifying_key()).unwrap().build();
         let err = verifier
             .verify_sd_kbt_with_status::<OauthStatus>(&sd_kbt, verifier_params, status_list_verifier_params, None, &cks, &fake_status_list_cks)
             .await
@@ -791,7 +791,7 @@ mod tests {
 
         let sd_cwt = issuer.issue_cwt(&mut rand::thread_rng(), issuer_params).unwrap().to_cbor_bytes().unwrap();
         let holder = Ed25519Holder::<Value, U>::new(holder_signing_key.clone());
-        let cks = CoseKeySet::new(&issuer_signing_key).unwrap();
+        let cks = CoseKeySet::builder().with_signing_key(&issuer_signing_key).unwrap().build();
         let sd_cwt = holder.verify_sd_cwt(&sd_cwt, Default::default(), &cks).unwrap();
         let sd_kbt = holder.new_presentation(sd_cwt, holder_params).unwrap();
         (cks, sd_kbt.to_cbor_bytes().unwrap(), issuer_signing_key)

@@ -5,7 +5,7 @@ use crate::{
     redacted_claims::RedactedClaimKeys,
 };
 use ciborium::Value;
-use cose_key_confirmation::KeyConfirmation;
+use cose_key::confirmation::KeyConfirmation;
 use serde::ser::SerializeMap;
 
 impl<Extra: CustomClaims> serde::Serialize for SdPayload<Extra> {

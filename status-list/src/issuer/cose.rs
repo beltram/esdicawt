@@ -1,5 +1,5 @@
 use crate::{
-    CborAny, Status, StatusList, StatusListResult,
+    CborExt, Status, StatusList, StatusListResult,
     issuer::{StatusListIssuerParams, StatusListToken, elapsed_since_epoch},
 };
 use ciborium::Value;

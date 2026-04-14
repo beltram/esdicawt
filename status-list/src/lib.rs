@@ -236,7 +236,7 @@ impl StatusBits {
     }
 }
 
-pub(crate) trait CborAny: serde::Serialize + for<'de> serde::Deserialize<'de> + Clone {
+pub(crate) trait CborExt: serde::Serialize + for<'de> serde::Deserialize<'de> + Clone {
     #[allow(dead_code)]
     fn to_cbor_bytes(&self) -> StatusListResult<Vec<u8>> {
         let mut buf = vec![];
@@ -257,7 +257,12 @@ pub(crate) trait CborAny: serde::Serialize + for<'de> serde::Deserialize<'de> + 
     where
         Self: Sized,
     {
-        Ok(ciborium::from_reader(bytes)?)
+        Ok(ciborium::from_reader(bytes).map_err(|err| match err {
+            ciborium::de::Error::Io(io) => ciborium::de::Error::Io(format!("{io:?}")),
+            ciborium::de::Error::Syntax(s) => ciborium::de::Error::Syntax(s),
+            ciborium::de::Error::Semantic(a, b) => ciborium::de::Error::Semantic(a, b),
+            ciborium::de::Error::RecursionLimitExceeded => ciborium::de::Error::RecursionLimitExceeded,
+        })?)
     }
 
     #[allow(dead_code)]
@@ -271,7 +276,7 @@ pub(crate) trait CborAny: serde::Serialize + for<'de> serde::Deserialize<'de> + 
     }
 }
 
-impl<T> CborAny for T where T: serde::Serialize + for<'de> serde::Deserialize<'de> + Clone {}
+impl<T> CborExt for T where T: serde::Serialize + for<'de> serde::Deserialize<'de> + Clone {}
 
 #[cfg(test)]
 mod tests {

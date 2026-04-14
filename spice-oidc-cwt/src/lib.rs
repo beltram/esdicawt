@@ -835,7 +835,7 @@ mod tests {
     use super::{ed25519::*, *};
     use esdicawt::{
         CborPath, Holder, Issuer, Presentation, StatusParams, TimeArg,
-        cose_key_set::CoseKeySet,
+        cose_key::keyset::CoseKeySet,
         spec::{CwtAny, issuance::SdCwtIssuedTagged},
     };
 
@@ -847,7 +847,7 @@ mod tests {
     fn can_issue_and_present_oidc_claim_token() {
         let issuer_signing_key = ed25519_dalek::SigningKey::generate(&mut rand::thread_rng());
         let issuer = Ed25519Issuer::new(issuer_signing_key.clone());
-        let cks = CoseKeySet::new(&issuer_signing_key).unwrap();
+        let cks = CoseKeySet::builder().with_signing_key(&issuer_signing_key).unwrap().build();
 
         let holder_signing_key = ed25519_dalek::SigningKey::generate(&mut rand::thread_rng());
         let alice_holder = Ed25519Holder::new(holder_signing_key);

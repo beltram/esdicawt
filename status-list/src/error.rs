@@ -3,9 +3,11 @@ pub type StatusListResult<T> = Result<T, StatusListError>;
 #[derive(Debug, thiserror::Error)]
 pub enum StatusListError {
     #[error(transparent)]
-    CborDeserializationError(#[from] ciborium::de::Error<std::io::Error>),
+    CborDeserializationError(#[from] ciborium::de::Error<String>),
     #[error(transparent)]
-    CborSerializationError(#[from] ciborium::ser::Error<std::io::Error>),
+    CborSerializationError(#[from] ciborium::ser::Error<core::convert::Infallible>),
+    #[error(transparent)]
+    CborIoSerializationError(#[from] ciborium::ser::Error<std::io::Error>),
     #[error(transparent)]
     CborValueError(#[from] ciborium::value::Error),
     #[error(transparent)]

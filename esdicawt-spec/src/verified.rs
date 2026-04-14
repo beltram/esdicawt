@@ -66,7 +66,7 @@ pub struct SdIssuedVerified<PayloadClaims: CustomClaims, ProtectedClaims: Custom
     pub protected: SdProtected<ProtectedClaims>,
     pub sd_unprotected: SdUnprotectedVerified<UnprotectedClaims>,
     pub payload: SdInnerPayload<PayloadClaims>,
-    pub cnf: cose_key_confirmation::KeyConfirmation,
+    pub cnf: cose_key::confirmation::KeyConfirmation,
 }
 
 impl<PayloadClaims: Select, Hasher: digest::Digest + Clone, ProtectedClaims: CustomClaims, UnprotectedClaims: CustomClaims>

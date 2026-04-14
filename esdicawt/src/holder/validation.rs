@@ -119,7 +119,7 @@ mod tests {
         test_utils::{Ed25519Holder, Ed25519Issuer},
     };
     use ciborium::{Value, cbor};
-    use cose_key_set::CoseKeySet;
+    use cose_key::keyset::CoseKeySet;
     use esdicawt_spec::{
         CwtAny, NoClaims, SdCwtClaim,
         blinded_claims::{Salted, SaltedElement},
@@ -208,7 +208,7 @@ mod tests {
     #[test]
     fn should_fail_when_disclosures_invalid() {
         let issuer_signing_key = ed25519_dalek::SigningKey::generate(&mut rand::thread_rng());
-        let issuer_verifying_key = CoseKeySet::new(&issuer_signing_key).unwrap();
+        let issuer_verifying_key = CoseKeySet::builder().with_signing_key(&issuer_signing_key).unwrap().build();
         let issuer = Ed25519Issuer::<Value>::new(issuer_signing_key);
 
         let holder_signing_key = ed25519_dalek::SigningKey::generate(&mut rand::thread_rng());
@@ -342,7 +342,11 @@ mod tests {
         let issuer_signing_key_bis = ed25519_dalek::SigningKey::generate(&mut rand::thread_rng());
 
         assert!(matches!(
-            holder.verify_sd_cwt(&sd_cwt, Default::default(), &CoseKeySet::new(&issuer_signing_key_bis).unwrap()),
+            holder.verify_sd_cwt(
+                &sd_cwt,
+                Default::default(),
+                &CoseKeySet::builder().with_signing_key(&issuer_signing_key_bis).unwrap().build()
+            ),
             Err(SdCwtHolderError::IssuerSignatureValidationError(SignatureVerifierError::SignatureError(_)))
         ));
     }
