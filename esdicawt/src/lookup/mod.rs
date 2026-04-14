@@ -142,7 +142,7 @@ mod tests {
         test_utils::{Ed25519Holder, Ed25519Issuer},
     };
     use ciborium::cbor;
-    use cose_key_set::CoseKeySet;
+    use cose_key::keyset::CoseKeySet;
     use esdicawt_spec::{CustomClaims, NoClaims, SdCwtClaim, Select, SelectExt, issuance::SdCwtIssuedTagged, key_binding::KbtCwtTagged, sd, verified::KbtCwtVerified};
 
     #[test]
@@ -277,7 +277,9 @@ mod tests {
             extra_kbt_unprotected: None,
             extra_kbt_payload: None,
         };
-        let sd_cwt = holder.verify_sd_cwt(sd_cwt, Default::default(), &CoseKeySet::new(&issuer_verifying_key).unwrap()).unwrap();
+        let sd_cwt = holder
+            .verify_sd_cwt(sd_cwt, Default::default(), &CoseKeySet::builder().with(&issuer_verifying_key).unwrap().build())
+            .unwrap();
         holder.new_presentation(sd_cwt, holder_params).unwrap()
     }
 
@@ -306,7 +308,7 @@ mod tests {
         }
         let verifier = Ed25519Verifier::new();
         verifier
-            .verify_sd_kbt(sd_kbt, Default::default(), None, &CoseKeySet::new(&issuer_verifying_key).unwrap())
+            .verify_sd_kbt(sd_kbt, Default::default(), None, &CoseKeySet::builder().with(&issuer_verifying_key).unwrap().build())
             .unwrap()
     }
 }

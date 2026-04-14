@@ -12,7 +12,7 @@ use crate::{
 use coset::{AsCborValue, TaggedCborSerializable};
 
 use ciborium::Value;
-use cose_key_confirmation::{KeyConfirmation, error::CoseKeyConfirmationError};
+use cose_key::confirmation::{CoseKeyConfirmationError, KeyConfirmation};
 
 pub mod accessor;
 pub mod error;
@@ -81,7 +81,7 @@ pub trait Holder {
         &self,
         sd_cwt: &[u8],
         params: HolderValidationParams,
-        keyset: &cose_key_set::CoseKeySet,
+        keyset: &cose_key::keyset::CoseKeySet,
     ) -> Result<SdCwtVerified<Self::IssuerPayloadClaims, Self::Hasher, Self::IssuerProtectedClaims, Self::IssuerUnprotectedClaims>, SdCwtHolderError<Self::Error>> {
         let cose_sign1_sd_cwt = coset::CoseSign1::from_tagged_slice(sd_cwt)?;
 
@@ -292,7 +292,7 @@ mod tests {
         issuer::test_utils::Ed25519Issuer,
     };
     use ciborium::cbor;
-    use cose_key_set::CoseKeySet;
+    use cose_key::keyset::CoseKeySet;
     use esdicawt_spec::{
         NoClaims, SdCwtClaim,
         blinded_claims::{Salted, SaltedClaim},
@@ -366,7 +366,9 @@ mod tests {
             leeway: Default::default(),
         };
 
-        let sd_cwt = holder.verify_sd_cwt(&sd_cwt, Default::default(), &CoseKeySet::new(&issuer_signing_key).unwrap()).unwrap();
+        let sd_cwt = holder
+            .verify_sd_cwt(&sd_cwt, Default::default(), &CoseKeySet::builder().with_signing_key(&issuer_signing_key).unwrap().build())
+            .unwrap();
 
         let mut sd_kbt = holder.new_presentation(sd_cwt, presentation_params).unwrap();
 
@@ -434,7 +436,9 @@ mod tests {
             time_verification: Default::default(),
             leeway: Default::default(),
         };
-        let sd_cwt = holder.verify_sd_cwt(&sd_cwt, Default::default(), &CoseKeySet::new(&issuer_signing_key).unwrap()).unwrap();
+        let sd_cwt = holder
+            .verify_sd_cwt(&sd_cwt, Default::default(), &CoseKeySet::builder().with_signing_key(&issuer_signing_key).unwrap().build())
+            .unwrap();
         let sd_kbt_bytes = holder.new_presentation(sd_cwt, presentation_params).unwrap().to_cbor_bytes().unwrap();
         let raw_sd_kbt = coset::CoseSign1::from_tagged_slice(&sd_kbt_bytes).unwrap();
         let payload = Value::from_cbor_bytes(&raw_sd_kbt.payload.unwrap()).unwrap().into_map().unwrap();

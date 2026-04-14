@@ -1,7 +1,7 @@
 #![allow(clippy::borrow_interior_mutable_const, clippy::declare_interior_mutable_const, dead_code)]
 
 use ciborium::{Value, value::Integer};
-use cose_key_set::CoseKeySet;
+use cose_key::keyset::CoseKeySet;
 use esdicawt::{Holder, HolderParams, Issuer, IssuerParams, StatusParams, TimeArg, cwt_label};
 use esdicawt_spec::{
     CwtAny, EsdicawtSpecError, NoClaims, SdHashAlg, Select,
@@ -552,7 +552,7 @@ fn issuer_signing_key() -> p384::ecdsa::SigningKey {
 }
 
 fn issuer_verifying_key() -> CoseKeySet {
-    CoseKeySet::new(issuer_signing_key().as_ref()).unwrap()
+    CoseKeySet::builder().with_signing_key(&issuer_signing_key()).unwrap().build()
 }
 
 struct TestVectorRng;

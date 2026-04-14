@@ -1,5 +1,5 @@
 use crate::time::TimeArg;
-use cose_key_confirmation::KeyConfirmation;
+use cose_key::confirmation::KeyConfirmation;
 use esdicawt_spec::{CustomClaims, NoClaims, Select};
 
 #[derive(Debug, Clone)]

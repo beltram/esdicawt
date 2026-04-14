@@ -27,7 +27,7 @@ pub enum SdCwtHolderError<CustomError: Send + Sync> {
     #[error(transparent)]
     TimeError(#[from] crate::time::CwtTimeError),
     #[error(transparent)]
-    KeyConfirmationError(#[from] cose_key_confirmation::error::CoseKeyConfirmationError),
+    KeyConfirmationError(#[from] cose_key::confirmation::CoseKeyConfirmationError),
     #[error(transparent)]
     ValidationError(#[from] SdCwtHolderValidationError<CustomError>),
     #[error("The issuer is not using an algorithm IANA registered")]

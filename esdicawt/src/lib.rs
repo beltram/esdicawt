@@ -1,32 +1,32 @@
 #![doc = include_str!("../../README.md")]
 
-pub use cose_key;
-pub use cose_key_confirmation;
-pub use cose_key_set;
-pub use esdicawt_spec as spec;
-pub use esdicawt_spec::reexports::coset;
-pub use holder::{
-    Holder, SdCwtVerified,
-    accessor::ClaimSetExt,
-    error::{SdCwtHolderError, SdCwtHolderResult},
-    params::{CborPath, HolderParams, Presentation},
-    validation::{HolderValidationParams, SdCwtHolderValidationError},
-};
 #[cfg(feature = "status")]
 pub use issuer::params::StatusParams;
-pub use issuer::{
-    Issuer,
-    error::{SdCwtIssuerError, SdCwtIssuerResult},
-    params::IssuerParams,
-};
-pub use lookup::*;
-pub use read::{EsdicawtReadError, EsdicawtReadResult, SdCwtRead};
-pub use signature::Keypair;
-pub use time::{CwtTimeError, TimeArg, TimeVerification};
-pub use verifier::{
-    Verifier,
-    error::{SdCwtVerifierError, SdCwtVerifierResult},
-    params::{ShallowVerifierParams, VerifierParams},
+
+pub use {
+    cose_key, esdicawt_spec as spec,
+    esdicawt_spec::reexports::coset,
+    holder::{
+        Holder, SdCwtVerified,
+        accessor::ClaimSetExt,
+        error::{SdCwtHolderError, SdCwtHolderResult},
+        params::{CborPath, HolderParams, Presentation},
+        validation::{HolderValidationParams, SdCwtHolderValidationError},
+    },
+    issuer::{
+        Issuer,
+        error::{SdCwtIssuerError, SdCwtIssuerResult},
+        params::IssuerParams,
+    },
+    lookup::*,
+    read::{EsdicawtReadError, EsdicawtReadResult, SdCwtRead},
+    signature::Keypair,
+    time::{CwtTimeError, TimeArg, TimeVerification},
+    verifier::{
+        Verifier,
+        error::{SdCwtVerifierError, SdCwtVerifierResult},
+        params::{ShallowVerifierParams, VerifierParams},
+    },
 };
 
 pub(crate) mod any_digest;

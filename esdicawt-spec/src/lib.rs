@@ -69,13 +69,15 @@ pub enum EsdicawtSpecError {
     #[error(transparent)]
     KbtProtectedBuilderError(#[from] key_binding::KbtProtectedBuilderError),
     #[error(transparent)]
-    CborDeserializationError(#[from] ciborium::de::Error<std::io::Error>),
+    CborDeserializationError(#[from] ciborium::de::Error<String>),
     #[error(transparent)]
-    CborSerializationError(#[from] ciborium::ser::Error<std::io::Error>),
+    CborSerializationError(#[from] ciborium::ser::Error<core::convert::Infallible>),
+    #[error(transparent)]
+    CborIoSerializationError(#[from] ciborium::ser::Error<std::io::Error>),
     #[error(transparent)]
     CborValueError(#[from] ciborium::value::Error),
     #[error(transparent)]
-    CoseKeyConfirmationError(#[from] cose_key_confirmation::error::CoseKeyConfirmationError),
+    CoseKeyConfirmationError(#[from] cose_key::confirmation::CoseKeyConfirmationError),
     #[error("Should have been a mapping")]
     InputError,
     #[error("{0}")]
@@ -287,7 +289,12 @@ pub trait CwtAny: serde::Serialize + for<'de> serde::Deserialize<'de> + Clone {
     where
         Self: Sized,
     {
-        Ok(ciborium::from_reader(bytes)?)
+        Ok(ciborium::from_reader(bytes).map_err(|err| match err {
+            ciborium::de::Error::Io(io) => ciborium::de::Error::Io(format!("{io:?}")),
+            ciborium::de::Error::Syntax(s) => ciborium::de::Error::Syntax(s),
+            ciborium::de::Error::Semantic(a, b) => ciborium::de::Error::Semantic(a, b),
+            ciborium::de::Error::RecursionLimitExceeded => ciborium::de::Error::RecursionLimitExceeded,
+        })?)
     }
 
     fn to_cbor_value(&self) -> EsdicawtSpecResult<Value> {

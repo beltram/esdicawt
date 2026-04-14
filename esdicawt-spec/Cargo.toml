@@ -10,17 +10,18 @@ default = []
 status = ["dep:status-list"]
 
 [dependencies]
-serde = { workspace = true, features = ["derive"] }
-serde_repr.workspace = true
-derive_builder.workspace = true
-serde_tuple.workspace = true
-serde_bytes.workspace = true
 coset = { workspace = true, features = ["std"] }
+cose-key = { workspace = true, features = ["confirmation"] }
 ciborium.workspace = true
-thiserror.workspace = true
-cose-key-confirmation.workspace = true
 digest.workspace = true
 status-list = { workspace = true, optional = true }
+
+derive_builder.workspace = true
+serde = { workspace = true, features = ["derive"] }
+serde_repr.workspace = true
+serde_tuple.workspace = true
+serde_bytes.workspace = true
+thiserror.workspace = true
 hex.workspace = true
 
 [lints]

@@ -33,7 +33,7 @@ pub enum SdCwtVerifierError<CustomError: Send + Sync> {
     #[error("This algorithm is not supported")]
     UnsupportedAlgorithm,
     #[error(transparent)]
-    KeyConfirmationError(#[from] cose_key_confirmation::error::CoseKeyConfirmationError),
+    KeyConfirmationError(#[from] cose_key::confirmation::CoseKeyConfirmationError),
     #[error(transparent)]
     IssuerSignatureValidationError(#[from] SignatureVerifierError),
     #[error(transparent)]

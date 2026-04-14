@@ -1,5 +1,5 @@
 use crate::{
-    CborAny, Status, StatusList,
+    CborExt, Status, StatusList,
     issuer::{
         StatusListToken, StatusListTokenBuilder,
         cose::{LABEL_TYPE, MEDIATYPE_STATUS_LIST_CWT},

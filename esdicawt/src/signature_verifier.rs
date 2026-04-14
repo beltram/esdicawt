@@ -9,7 +9,7 @@ pub fn cose_sign1_alg(sign1: &CoseSign1) -> Result<iana::Algorithm, SignatureVer
     })
 }
 
-pub fn validate_cose_sign1_signature(sign1: &CoseSign1, cks: &cose_key_set::CoseKeySet) -> Result<(), SignatureVerifierError> {
+pub fn validate_cose_sign1_signature(sign1: &CoseSign1, cks: &cose_key::keyset::CoseKeySet) -> Result<(), SignatureVerifierError> {
     let alg = cose_sign1_alg(sign1)?;
     sign1.verify_signature(&[], |#[allow(unused_variables)] signature, #[allow(unused_variables)] raw_data| {
         for key in cks.find_keys(&alg) {
