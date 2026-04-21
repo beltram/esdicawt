@@ -214,7 +214,7 @@ fn __shallow_verify_sd_kbt<
     params: ShallowVerifierParams,
     // not mandatory in case the verifier does not have access to it
     holder_verifier: Option<&HolderVerifier>,
-    cks: &cose_key_set::CoseKeySet,
+    cks: &cose_key::keyset::CoseKeySet,
 ) -> Result<
     (
         KbtCwtTagged<IssuerPayloadClaims, AnyDigest, KbtPayloadClaims, IssuerProtectedClaims, IssuerUnprotectedClaims, KbtProtectedClaims, KbtUnprotectedClaims>,
