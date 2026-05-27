@@ -64,6 +64,10 @@ git = "https://github.com/beltram/ciborium"
 branch = "simple-value+cde"
 default-features = false
 
+# enable when generating flamegraph out of benches
+[profile.bench]
+debug = true
+
 [workspace.lints.clippy]
 # Enforced Groups
 style = { level = "warn", priority = -1 }
