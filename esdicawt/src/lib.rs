@@ -1,4 +1,4 @@
-#![doc = include_str!("../../README.md")]
+// #![doc = include_str!("../../README.md")] // FIXME: including this currently fails when this crate is transitively used by another crate built with Bazel
 
 #[cfg(feature = "status")]
 pub use issuer::params::StatusParams;
