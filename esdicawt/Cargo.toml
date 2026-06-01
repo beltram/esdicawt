@@ -4,6 +4,7 @@ edition.workspace = true
 version.workspace = true
 description = "SD-CWT"
 authors.workspace = true
+include = ["/src", "README.md"]
 
 [features]
 default = []
