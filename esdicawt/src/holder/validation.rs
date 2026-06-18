@@ -71,7 +71,8 @@ where
                     (Value::Simple(RedactedClaimKeys::CWT_LABEL), rcks) => {
                         let rcks = rcks.deserialized::<RedactedClaimKeys>()?;
                         for rck in rcks.iter() {
-                            let Some(d) = disclosures.get(rck.as_ref()) else {
+                            let k: &[u8] = rck.as_ref();
+                            let Some(d) = disclosures.get(k) else {
                                 return Err(SdCwtHolderValidationError::DisclosureNotFound);
                             };
                             if let Some(v) = d.as_ref().value().filter(|v| v.is_map() || v.is_array()) {

@@ -178,6 +178,9 @@ pub trait Issuer {
             })?
             .build();
 
+        dbg!(hex::encode(&sign1.clone().to_cbor_value()?.ciborium_to_cbor_bytes().unwrap()));
+        dbg!(hex::encode(&sign1.clone().to_cbor_value()?.seabored_to_cbor_bytes().unwrap()));
+        
         Ok(Value::Tag(coset::CoseSign1::TAG, Box::new(sign1.to_cbor_value()?)).to_cbor_cde_bytes()?)
     }
 

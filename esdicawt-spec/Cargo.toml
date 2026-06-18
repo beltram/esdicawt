@@ -13,6 +13,7 @@ status = ["dep:status-list"]
 coset = { workspace = true, features = ["std"] }
 cose-key = { workspace = true, features = ["confirmation"] }
 ciborium.workspace = true
+seabored = { workspace = true, features = ["serde"] }
 digest.workspace = true
 status-list = { workspace = true, optional = true }
 

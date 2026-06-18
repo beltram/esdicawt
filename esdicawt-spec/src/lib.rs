@@ -75,6 +75,8 @@ pub enum EsdicawtSpecError {
     #[error(transparent)]
     CborIoSerializationError(#[from] ciborium::ser::Error<std::io::Error>),
     #[error(transparent)]
+    SeaboredSerError(#[from] seabored::error::SeaboredSerError),
+    #[error(transparent)]
     CborValueError(#[from] ciborium::value::Error),
     #[error(transparent)]
     CoseKeyConfirmationError(#[from] cose_key::confirmation::CoseKeyConfirmationError),
@@ -273,9 +275,24 @@ impl From<&str> for SdCwtClaim {
 
 pub trait CwtAny: serde::Serialize + for<'de> serde::Deserialize<'de> + Clone {
     fn to_cbor_bytes(&self) -> EsdicawtSpecResult<Vec<u8>> {
-        let mut buf = vec![];
-        ciborium::into_writer(self, &mut buf)?;
-        Ok(buf)
+        let seabored_out = self.seabored_to_cbor_bytes()?;
+        let mut ciborium_out = self.ciborium_to_cbor_bytes()?;
+        if seabored_out != ciborium_out {
+            let e = "";
+        }
+        // debug_assert_eq!(&seabored_out, &ciborium_out, "===\n{}\n===\n{}\n===", hex::encode(&seabored_out), hex::encode(&ciborium_out));
+        // Ok(seabored_out)
+        Ok(ciborium_out)
+    }
+
+    fn ciborium_to_cbor_bytes(&self) -> EsdicawtSpecResult<Vec<u8>> {
+        let mut ciborium_out = vec![];
+        ciborium::into_writer(self, &mut ciborium_out)?;
+        Ok(ciborium_out)
+    }
+
+    fn seabored_to_cbor_bytes(&self) -> EsdicawtSpecResult<Vec<u8>> {
+        Ok(seabored::serde::to_vec(self)?)
     }
 
     /// Uses CBOR Canonical encoding (CDE)
@@ -289,12 +306,29 @@ pub trait CwtAny: serde::Serialize + for<'de> serde::Deserialize<'de> + Clone {
     where
         Self: Sized,
     {
+        let ciborium_in = Self::from_ciborium_cbor_bytes(bytes)?;
+        let seabored_in = Self::from_seabored_cbor_bytes(bytes)?;
+        Ok(ciborium_in)
+        // Ok(seabored_in)
+    }
+
+    fn from_ciborium_cbor_bytes(bytes: &[u8]) -> EsdicawtSpecResult<Self>
+    where
+        Self: Sized,
+    {
         Ok(ciborium::from_reader(bytes).map_err(|err| match err {
             ciborium::de::Error::Io(io) => ciborium::de::Error::Io(format!("{io:?}")),
             ciborium::de::Error::Syntax(s) => ciborium::de::Error::Syntax(s),
             ciborium::de::Error::Semantic(a, b) => ciborium::de::Error::Semantic(a, b),
             ciborium::de::Error::RecursionLimitExceeded => ciborium::de::Error::RecursionLimitExceeded,
         })?)
+    }
+
+    fn from_seabored_cbor_bytes(bytes: &[u8]) -> EsdicawtSpecResult<Self>
+    where
+        Self: Sized,
+    {
+        Ok(seabored::serde::from_slice(bytes).expect("seabored deser issue"))
     }
 
     fn to_cbor_value(&self) -> EsdicawtSpecResult<Value> {
