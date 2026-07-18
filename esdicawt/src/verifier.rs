@@ -958,6 +958,7 @@ pub mod test_utils {
         type KbtUnprotectedClaims = NoClaims;
     }
 
+    #[cfg(feature = "status")]
     impl<T: Select, U: CustomClaims> VerifierWithStatus for HybridVerifier<T, U> {
         async fn get_status(&mut self, status_url: &Url) -> Result<Option<&[u8]>, Self::Error> {
             Ok(self.status_cache.get(status_url).map(Vec::as_slice))

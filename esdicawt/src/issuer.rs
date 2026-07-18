@@ -586,7 +586,6 @@ pub mod claims {
 pub mod test_utils {
     use super::*;
     use esdicawt_spec::{EsdicawtSpecError, NoClaims, Select};
-    use status_list::issuer::StatusListIssuer;
 
     pub struct Ed25519Issuer<T: Select> {
         pub signer: ed25519_dalek::SigningKey,
@@ -623,7 +622,8 @@ pub mod test_utils {
         }
     }
 
-    impl<T: Select> StatusListIssuer for Ed25519Issuer<T> {
+    #[cfg(feature = "status")]
+    impl<T: Select> status_list::issuer::StatusListIssuer for Ed25519Issuer<T> {
         type StatusListIssuerError = EsdicawtSpecError;
         type StatusListIssuerSigner = ed25519_dalek::SigningKey;
         type StatusListIssuerHasher = sha2::Sha256;
