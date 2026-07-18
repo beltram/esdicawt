@@ -1,6 +1,9 @@
-use crate::inlined_cbor::InlinedCbor;
-use crate::issuance::SdCwtIssuedTagged;
-use crate::{COSE_HEADER_KCWT, CustomClaims, EsdicawtSpecError, EsdicawtSpecResult, Select, issuance::SdCwtIssued, key_binding::KbtCwt};
+use crate::{
+    COSE_HEADER_KCWT, CustomClaims, EsdicawtSpecError, EsdicawtSpecResult, Select,
+    inlined_cbor::InlinedCbor,
+    issuance::{SdCwtIssued, SdCwtIssuedTagged},
+    key_binding::KbtCwt,
+};
 use ciborium::Value;
 
 impl<

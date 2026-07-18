@@ -6,8 +6,10 @@ mod model;
 pub use model::{Query, QueryElement};
 use std::ops::Deref;
 
-use crate::spec::{CwtAny, EsdicawtSpecResult, REDACTED_CLAIM_ELEMENT_TAG, blinded_claims::Salted, redacted_claims::RedactedClaimKeys};
-use crate::verifier::walk::walk_payload;
+use crate::{
+    spec::{CwtAny, EsdicawtSpecResult, REDACTED_CLAIM_ELEMENT_TAG, blinded_claims::Salted, redacted_claims::RedactedClaimKeys},
+    verifier::walk::walk_payload,
+};
 use ciborium::Value;
 use digest::DynDigest;
 use esdicawt_spec::{EsdicawtSpecError, blinded_claims::SaltedArrayToVerify};

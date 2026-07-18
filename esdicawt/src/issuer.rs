@@ -195,10 +195,10 @@ pub trait Issuer {
 #[cfg(test)]
 mod tests {
     use super::{claims::CustomTokenClaims, test_utils::Ed25519Issuer};
-    use crate::lookup::TokenQuery;
-    use crate::read::SdCwtRead;
     use crate::{
         CwtStdLabel, Issuer, IssuerParams, StatusParams, TimeArg, elapsed_since_epoch,
+        lookup::TokenQuery,
+        read::SdCwtRead,
         spec::{
             CwtAny, NoClaims, SdCwtClaim, Select, SelectExt,
             blinded_claims::{Salted, SaltedClaim, SaltedElement},
