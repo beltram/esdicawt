@@ -1,12 +1,12 @@
 use ed25519_dalek::pkcs8::{DecodePrivateKey, EncodePublicKey};
-use esdicawt::spec::{CwtAny, cbor};
+use esdicawt::cose_key::confirmation::KeyConfirmation;
+use esdicawt::spec::{cbor, CwtAny};
 use esdicawt::{
-    Issuer, IssuerParams, coset,
-    spec::{EsdicawtSpecError, NoClaims, SdHashAlg, Value},
+    coset, spec::{EsdicawtSpecError, NoClaims, SdHashAlg, Value}, Issuer,
+    IssuerParams,
 };
 use std::io::Read;
 use std::{io::Write, path::PathBuf, time::Duration};
-use esdicawt::cose_key::confirmation::KeyConfirmation;
 
 pub fn issue(issuer_priv: PathBuf, _nonces: Option<PathBuf>, time: Option<u64>) -> eyre::Result<()> {
     let mut cbor_value = vec![];
@@ -70,17 +70,19 @@ impl Issuer for Ed25519Issuer {
 }
 
 #[test]
-fn sample() {
-    use ed25519_dalek::pkcs8::{EncodePrivateKey, spki::der::pem::LineEnding};
+fn generate_inputs() {
+    use ed25519_dalek::pkcs8::{spki::der::pem::LineEnding, EncodePrivateKey};
 
-    let key = ed25519_dalek::SigningKey::generate(&mut rand::thread_rng());
-    std::fs::write("./in/holder-priv.pem", key.to_pkcs8_pem(LineEnding::LF).unwrap().as_str()).unwrap();
-    std::fs::write("./in/holder-pub.pem", key.verifying_key().to_public_key_pem(LineEnding::LF).unwrap().as_str()).unwrap();
-    let cnf: KeyConfirmation = (&key).try_into().unwrap();
-    std::fs::write("./in/holder-cnf.txt", hex::encode(cnf.to_cbor_bytes().unwrap())).unwrap();
+    for label in ["issuer", "holder"] {
+        let key = ed25519_dalek::SigningKey::generate(&mut rand::thread_rng());
+        std::fs::write(format!("./in/{label}-priv.pem"), key.to_pkcs8_pem(LineEnding::LF).unwrap().as_str()).unwrap();
+        std::fs::write(format!("./in/{label}-pub.pem"), key.verifying_key().to_public_key_pem(LineEnding::LF).unwrap().as_str()).unwrap();
+        let cnf: KeyConfirmation = (&key).try_into().unwrap();
+        std::fs::write(format!("./in/{label}-cnf.txt"), hex::encode(cnf.to_cbor_bytes().unwrap())).unwrap();
+    }
+    sample_cbor();
 }
 
-#[test]
 fn sample_cbor() {
     let value = cbor!({
         "code" => 415,
