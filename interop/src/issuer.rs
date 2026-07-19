@@ -77,13 +77,9 @@ fn generate_inputs() {
         let key = ed25519_dalek::SigningKey::generate(&mut rand::thread_rng());
         std::fs::write(format!("./in/{label}-priv.pem"), key.to_pkcs8_pem(LineEnding::LF).unwrap().as_str()).unwrap();
         std::fs::write(format!("./in/{label}-pub.pem"), key.verifying_key().to_public_key_pem(LineEnding::LF).unwrap().as_str()).unwrap();
-        let cnf: KeyConfirmation = (&key).try_into().unwrap();
+        let cnf: KeyConfirmation = (&key.verifying_key()).try_into().unwrap();
         std::fs::write(format!("./in/{label}-cnf.txt"), hex::encode(cnf.to_cbor_bytes().unwrap())).unwrap();
     }
-    sample_cbor();
-}
-
-fn sample_cbor() {
     let value = cbor!({
         "code" => 415,
         "message" => null,

@@ -1,5 +1,5 @@
-use clap::{Parser, Subcommand};
-use std::path::PathBuf;
+use clap::{CommandFactory, Parser, Subcommand};
+use std::path::{Path, PathBuf};
 use std::process::Termination;
 
 mod holder;
@@ -7,7 +7,7 @@ mod issuer;
 mod verify;
 
 #[derive(Parser)]
-#[command(version, about, long_about = None)]
+#[command(version, about, long_about = None, multicall = true)]
 struct Cli {
     #[command(subcommand)]
     command: Commands,
@@ -56,7 +56,10 @@ pub enum KeyFetch {
 }
 
 fn main() -> std::process::ExitCode {
-    let cli = Cli::parse();
+    let argv0 = std::env::args().next().and_then(|p| Path::new(&p).file_name().map(|f| f.to_owned())).unwrap_or_default();
+    let args: Vec<String> = std::iter::once((argv0.to_string_lossy().into_owned())).chain(std::env::args().skip(1)).collect();
+    let cli = Cli::parse_from(args);
+
     let r = match cli.command {
         Commands::Issue { issuer_priv, nonces, time } => issuer::issue(issuer_priv, nonces, time),
         Commands::Present {
