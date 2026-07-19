@@ -6,6 +6,7 @@ use esdicawt::{
 };
 use std::io::Read;
 use std::{io::Write, path::PathBuf, time::Duration};
+use esdicawt::cose_key::confirmation::KeyConfirmation;
 
 pub fn issue(issuer_priv: PathBuf, _nonces: Option<PathBuf>, time: Option<u64>) -> eyre::Result<()> {
     let mut cbor_value = vec![];
@@ -75,6 +76,8 @@ fn sample() {
     let key = ed25519_dalek::SigningKey::generate(&mut rand::thread_rng());
     std::fs::write("./in/holder-priv.pem", key.to_pkcs8_pem(LineEnding::LF).unwrap().as_str()).unwrap();
     std::fs::write("./in/holder-pub.pem", key.verifying_key().to_public_key_pem(LineEnding::LF).unwrap().as_str()).unwrap();
+    let cnf: KeyConfirmation = (&key).try_into().unwrap();
+    std::fs::write("./in/holder-cnf.txt", hex::encode(cnf.to_cbor_bytes().unwrap())).unwrap();
 }
 
 #[test]
