@@ -7,7 +7,7 @@ use esdicawt::{
 };
 use std::{io::Read, path::PathBuf};
 
-pub fn verify(issuer_pub: PathBuf, _issuer_key: KeyFetch, _audience: Option<String>, time: Option<u64>) -> eyre::Result<()> {
+pub fn verify(issuer_pub: PathBuf, _issuer_key: KeyFetch, _audience: Option<String>, _time: Option<u64>) -> eyre::Result<()> {
     let mut sd_kbt = vec![];
     std::io::stdin().read_to_end(&mut sd_kbt)?;
 

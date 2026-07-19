@@ -1,6 +1,8 @@
-use clap::{CommandFactory, Parser, Subcommand};
-use std::path::{Path, PathBuf};
-use std::process::Termination;
+use clap::{Parser, Subcommand};
+use std::{
+    path::{Path, PathBuf},
+    process::Termination,
+};
 
 mod holder;
 mod issuer;
@@ -57,7 +59,7 @@ pub enum KeyFetch {
 
 fn main() -> std::process::ExitCode {
     let argv0 = std::env::args().next().and_then(|p| Path::new(&p).file_name().map(|f| f.to_owned())).unwrap_or_default();
-    let args: Vec<String> = std::iter::once((argv0.to_string_lossy().into_owned())).chain(std::env::args().skip(1)).collect();
+    let args: Vec<String> = std::iter::once(argv0.to_string_lossy().into_owned()).chain(std::env::args().skip(1)).collect();
     let cli = Cli::parse_from(args);
 
     let r = match cli.command {

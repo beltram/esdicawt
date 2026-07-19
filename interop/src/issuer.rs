@@ -1,9 +1,9 @@
 use ed25519_dalek::pkcs8::{DecodePrivateKey, EncodePublicKey};
 use esdicawt::cose_key::confirmation::KeyConfirmation;
-use esdicawt::spec::{cbor, CwtAny};
+use esdicawt::spec::{CwtAny, cbor};
 use esdicawt::{
-    coset, spec::{EsdicawtSpecError, NoClaims, SdHashAlg, Value}, Issuer,
-    IssuerParams,
+    Issuer, IssuerParams, coset,
+    spec::{EsdicawtSpecError, NoClaims, SdHashAlg, Value},
 };
 use std::io::Read;
 use std::{io::Write, path::PathBuf, time::Duration};
@@ -71,7 +71,7 @@ impl Issuer for Ed25519Issuer {
 
 #[test]
 fn generate_inputs() {
-    use ed25519_dalek::pkcs8::{spki::der::pem::LineEnding, EncodePrivateKey};
+    use ed25519_dalek::pkcs8::{EncodePrivateKey, spki::der::pem::LineEnding};
 
     for label in ["issuer", "holder"] {
         let key = ed25519_dalek::SigningKey::generate(&mut rand::thread_rng());
