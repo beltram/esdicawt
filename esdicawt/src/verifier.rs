@@ -175,6 +175,9 @@ pub trait Verifier {
             }
 
             walk::walk_payload(self.digest(sd_alg), &mut generic_sd_cwt_payload, &mut disclosures)?;
+            if !disclosures.is_empty() {
+                return Err(SdCwtVerifierError::OrphanDisclosure);
+            }
         }
 
         // puncture the 'cnf' claim before deserialization
@@ -769,6 +772,44 @@ mod tests {
             .await
             .unwrap_err();
         assert!(matches!(err, SdCwtVerifierError::StatusError(SdCwtStatusVerifierError::InvalidStatusTokenSignature(_))));
+    }
+
+    #[test]
+    #[wasm_bindgen_test::wasm_bindgen_test]
+    fn should_reject_orphan_disclosure() {
+        use crate::spec::{
+            Salt,
+            blinded_claims::{Salted, SaltedElement},
+        };
+
+        let payload = CustomTokenClaims {
+            name: Some("Alice Smith".into()),
+            stuffs: vec![Stuff { foo: "bar".into() }],
+        };
+        let holder_signing_key = ed25519_dalek::SigningKey::generate(&mut rand::thread_rng());
+        let issuer_signing_key = ed25519_dalek::SigningKey::generate(&mut rand::thread_rng());
+        let issuer = Ed25519Issuer::new(issuer_signing_key.clone());
+        let issuer_params = default_issuer_params(Some(payload), &holder_signing_key);
+
+        let sd_cwt = issuer.issue_cwt(&mut rand::thread_rng(), issuer_params.clone()).unwrap().to_cbor_bytes().unwrap();
+        let holder = Ed25519Holder::<Value, NoClaims>::new(holder_signing_key.clone());
+        let cks = CoseKeySet::builder().with_signing_key(&issuer_signing_key).unwrap().build();
+        let mut sd_cwt = holder.verify_sd_cwt(&sd_cwt, Default::default(), &cks).unwrap();
+
+        let orphan = Salted::Element(SaltedElement {
+            salt: Salt::empty(),
+            value: Stuff { foo: "baz".into() }.to_cbor_value().unwrap(),
+        });
+        sd_cwt.0.0.sd_unprotected.sd_claims.as_mut().unwrap().0.push(orphan.into());
+
+        let holder_params = default_holder_params::<NoClaims>();
+        let sd_kbt = holder.new_presentation(sd_cwt, holder_params).unwrap().to_cbor_bytes().unwrap();
+
+        let verifier = HybridVerifier::<CustomTokenClaims, NoClaims>::default();
+        let err = verifier
+            .verify_sd_kbt(&sd_kbt, Default::default(), Some(&holder_signing_key.verifying_key()), &cks)
+            .unwrap_err();
+        std::assert_matches!(err, SdCwtVerifierError::OrphanDisclosure);
     }
 
     fn verify<T: Select, U: CustomClaims>(issuer_params: IssuerParams<T>, holder_params: HolderParams<U>, holder_signing_key: &ed25519_dalek::SigningKey) -> KbtCwtVerified<T, U> {
