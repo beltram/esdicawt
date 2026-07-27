@@ -178,15 +178,12 @@ pub trait Holder {
         params: HolderParams<Self::KbtPayloadClaims, Self::KbtProtectedClaims, Self::KbtUnprotectedClaims>,
     ) -> Result<Vec<u8>, SdCwtHolderError<Self::Error>> {
         // verify again the time claims of the SD-CWT as time could have gone by between the last 'verify_sd_cwt'
-        #[cfg(not(feature = "test-vectors"))] // FIXME: draft samples are expired
-        {
-            let payload = sd_cwt.0.0.payload.to_value()?;
-            let now = params.artificial_time.unwrap_or_else(crate::elapsed_since_epoch);
-            let iat = payload.inner.issued_at;
-            let exp = payload.inner.expiration;
-            let nbf = payload.inner.not_before;
-            crate::time::verify_time_claims(now.as_secs(), params.leeway, iat, exp, nbf, params.time_verification)?;
-        }
+        let payload = sd_cwt.0.0.payload.to_value()?;
+        let now = params.artificial_time.unwrap_or_else(crate::elapsed_since_epoch);
+        let iat = payload.inner.issued_at;
+        let exp = payload.inner.expiration;
+        let nbf = payload.inner.not_before;
+        crate::time::verify_time_claims(now.as_secs(), params.leeway, iat, exp, nbf, params.time_verification)?;
 
         // --- building the kbt ---
         // --- unprotected ---
