@@ -263,6 +263,10 @@ fn __shallow_verify_sd_kbt<
         }
     }
 
+    // verify time claims of the SD-CWT
+    let validation_time = params.artificial_time.map_or_else(|| elapsed_since_epoch().as_secs(), |t| t as u64);
+    verify_time_claims(validation_time, params.sd_cwt_leeway, iat, exp, nbf, params.sd_cwt_time_verification)?;
+
     let key_confirmation = &key_confirmation
         .ok_or(SdCwtVerifierError::<Error>::MalformedSdCwt("Missing KeyConfirmation"))?
         .deserialized::<KeyConfirmation>()?;
@@ -347,9 +351,6 @@ fn __shallow_verify_sd_kbt<
     let (iat, exp, nbf) = (Some(kbt_payload.issued_at), kbt_payload.expiration, kbt_payload.not_before);
     verify_time_claims(validation_time, params.sd_kbt_leeway, iat, exp, nbf, params.sd_kbt_time_verification)?;
 
-    // verify time claims of the SD-CWT
-    verify_time_claims(validation_time, params.sd_cwt_leeway, iat, exp, nbf, params.sd_cwt_time_verification)?;
-
     Ok((kbt, generic_sd_cwt_payload))
 }
 
@@ -433,7 +434,7 @@ pub trait VerifierWithStatus: Verifier {
 mod tests {
     use super::claims::{CustomTokenClaims, Stuff};
     use crate::{
-        HolderParams, Issuer, IssuerParams, Presentation, SdCwtVerifierError, StatusParams, TimeArg, Verifier, VerifierParams,
+        CwtTimeError, HolderParams, Issuer, IssuerParams, Presentation, SdCwtVerifierError, StatusParams, TimeArg, Verifier, VerifierParams, elapsed_since_epoch,
         holder::Holder,
         test_utils::{Ed25519Holder, Ed25519Issuer},
         verifier::{VerifierWithStatus, error::SdCwtStatusVerifierError, params::StatusListVerifierParams, test_utils::HybridVerifier},
@@ -810,6 +811,111 @@ mod tests {
             .verify_sd_kbt(&sd_kbt, Default::default(), Some(&holder_signing_key.verifying_key()), &cks)
             .unwrap_err();
         std::assert_matches!(err, SdCwtVerifierError::OrphanDisclosure);
+    }
+
+    mod time {
+        use super::*;
+
+        #[test]
+        #[wasm_bindgen_test::wasm_bindgen_test]
+        fn verify_sd_cwt_expiry() {
+            let holder_signing_key = ed25519_dalek::SigningKey::generate(&mut rand::thread_rng());
+
+            // Issuer issues an SD-CWT valid for only 5 seconds
+            let mut issuer_params = default_issuer_params(None::<Value>, &holder_signing_key);
+            issuer_params.expiry = Some(TimeArg::Relative(core::time::Duration::from_secs(5)));
+
+            let (cks, sd_kbt, ..) = generate_sd_kbt(issuer_params, default_holder_params::<NoClaims>(), &holder_signing_key);
+            let verifier = HybridVerifier::<Value, NoClaims>::default();
+            let later = (elapsed_since_epoch().as_secs() + 20) as i64;
+            let params = VerifierParams {
+                artificial_time: Some(later),
+                ..Default::default()
+            };
+            let err = verifier.verify_sd_kbt(&sd_kbt, params, Some(&holder_signing_key.verifying_key()), &cks).unwrap_err();
+            std::assert_matches!(err, SdCwtVerifierError::TimeError(CwtTimeError::Expired));
+        }
+
+        #[test]
+        #[wasm_bindgen_test::wasm_bindgen_test]
+        fn verify_sd_cwt_iat() {
+            let holder_signing_key = ed25519_dalek::SigningKey::generate(&mut rand::thread_rng());
+            let mut issuer_params = default_issuer_params(None::<Value>, &holder_signing_key);
+            issuer_params.with_issued_at = true;
+            issuer_params.with_not_before = false;
+
+            let (cks, sd_kbt, ..) = generate_sd_kbt(issuer_params, default_holder_params::<NoClaims>(), &holder_signing_key);
+            let verifier = HybridVerifier::<Value, NoClaims>::default();
+            let past = (elapsed_since_epoch().as_secs() - 20) as i64;
+            let params = VerifierParams {
+                artificial_time: Some(past),
+                ..Default::default()
+            };
+            let err = verifier.verify_sd_kbt(&sd_kbt, params, Some(&holder_signing_key.verifying_key()), &cks).unwrap_err();
+            std::assert_matches!(err, SdCwtVerifierError::TimeError(CwtTimeError::ClockDrift));
+        }
+
+        #[test]
+        #[wasm_bindgen_test::wasm_bindgen_test]
+        fn verify_sd_cwt_nbf() {
+            let holder_signing_key = ed25519_dalek::SigningKey::generate(&mut rand::thread_rng());
+            let mut issuer_params = default_issuer_params(None::<Value>, &holder_signing_key);
+            issuer_params.with_not_before = true;
+            issuer_params.with_issued_at = false;
+
+            let (cks, sd_kbt, ..) = generate_sd_kbt(issuer_params, default_holder_params::<NoClaims>(), &holder_signing_key);
+            let verifier = HybridVerifier::<Value, NoClaims>::default();
+            let past = (elapsed_since_epoch().as_secs() - 20) as i64;
+            let params = VerifierParams {
+                artificial_time: Some(past),
+                ..Default::default()
+            };
+            let err = verifier.verify_sd_kbt(&sd_kbt, params, Some(&holder_signing_key.verifying_key()), &cks).unwrap_err();
+            std::assert_matches!(err, SdCwtVerifierError::TimeError(CwtTimeError::NotValidYet));
+        }
+
+        #[test]
+        #[wasm_bindgen_test::wasm_bindgen_test]
+        fn verify_sd_kbt_expiry() {
+            let holder_signing_key = ed25519_dalek::SigningKey::generate(&mut rand::thread_rng());
+
+            let issuer_params = default_issuer_params(None::<Value>, &holder_signing_key);
+
+            // SD-KBT valid for only 5 seconds
+            let mut params = default_holder_params::<NoClaims>();
+            params.expiry = Some(TimeArg::Relative(core::time::Duration::from_secs(5)));
+            let (cks, sd_kbt, ..) = generate_sd_kbt(issuer_params, params, &holder_signing_key);
+            let verifier = HybridVerifier::<Value, NoClaims>::default();
+            let later = (elapsed_since_epoch().as_secs() + 20) as i64;
+            let params = VerifierParams {
+                artificial_time: Some(later),
+                ..Default::default()
+            };
+            let err = verifier.verify_sd_kbt(&sd_kbt, params, Some(&holder_signing_key.verifying_key()), &cks).unwrap_err();
+            std::assert_matches!(err, SdCwtVerifierError::TimeError(CwtTimeError::Expired));
+        }
+
+        #[test]
+        #[wasm_bindgen_test::wasm_bindgen_test]
+        fn verify_sd_kbt_nbf() {
+            let holder_signing_key = ed25519_dalek::SigningKey::generate(&mut rand::thread_rng());
+            let mut issuer_params = default_issuer_params(None::<Value>, &holder_signing_key);
+            issuer_params.expiry = None;
+            issuer_params.with_issued_at = false;
+            issuer_params.with_not_before = false;
+
+            let mut params = default_holder_params::<NoClaims>();
+            params.with_not_before = true;
+            let (cks, sd_kbt, ..) = generate_sd_kbt(issuer_params, params, &holder_signing_key);
+            let verifier = HybridVerifier::<Value, NoClaims>::default();
+            let past = (elapsed_since_epoch().as_secs() - 20) as i64;
+            let params = VerifierParams {
+                artificial_time: Some(past),
+                ..Default::default()
+            };
+            let err = verifier.verify_sd_kbt(&sd_kbt, params, Some(&holder_signing_key.verifying_key()), &cks).unwrap_err();
+            std::assert_matches!(err, SdCwtVerifierError::TimeError(CwtTimeError::NotValidYet));
+        }
     }
 
     fn verify<T: Select, U: CustomClaims>(issuer_params: IssuerParams<T>, holder_params: HolderParams<U>, holder_signing_key: &ed25519_dalek::SigningKey) -> KbtCwtVerified<T, U> {
