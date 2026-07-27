@@ -49,6 +49,8 @@ pub enum SdCwtVerifierError<CustomError: Send + Sync> {
     #[cfg(feature = "status")]
     #[error(transparent)]
     StatusError(#[from] SdCwtStatusVerifierError),
+    #[error("SD-CWT MUST NOT contain duplicate map keys")]
+    DuplicateMapKeys,
     #[error("Malformed SD-CWT because {0}")]
     MalformedSdCwt(&'static str),
     #[error(transparent)]
