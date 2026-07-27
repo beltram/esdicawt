@@ -44,6 +44,8 @@ pub enum SdCwtVerifierError<CustomError: Send + Sync> {
     UnexpectedKeyConfirmation,
     #[error("Disclosure hash collision")]
     DisclosureHashCollision,
+    #[error("OrphanDisclosure")]
+    OrphanDisclosure,
     #[cfg(feature = "status")]
     #[error(transparent)]
     StatusError(#[from] SdCwtStatusVerifierError),
