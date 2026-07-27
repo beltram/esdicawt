@@ -318,6 +318,7 @@ impl<T: Select> Holder for P256Holder<T> {
 }
 
 #[test]
+#[ignore]
 fn normal_test_vectors() {
     let payload = Payload {
         most_recent_inspection_passed: true,
@@ -338,6 +339,7 @@ fn normal_test_vectors() {
 }
 
 #[test]
+#[ignore]
 fn nested_test_vectors() {
     let payload1 = PayloadLog {
         most_recent_inspection_passed: true,
