@@ -441,8 +441,9 @@ mod tests {
     };
     use ciborium::{Value, cbor};
     use cose_key::keyset::CoseKeySet;
-    use esdicawt_spec::{CustomClaims, CwtAny, NoClaims, Select, verified::KbtCwtVerified};
+    use esdicawt_spec::{CustomClaims, CwtAny, NoClaims, Select, sd, verified::KbtCwtVerified};
     use status_list::{OauthStatus, StatusList, issuer::StatusListIssuerParams};
+    use std::convert::Infallible;
 
     wasm_bindgen_test::wasm_bindgen_test_configure!(run_in_browser);
 
@@ -455,7 +456,7 @@ mod tests {
         };
         let holder_signing_key = ed25519_dalek::SigningKey::generate(&mut rand::thread_rng());
         let issuer_params = default_issuer_params(Some(payload), &holder_signing_key);
-        let verified = verify(issuer_params, default_holder_params::<NoClaims>(), &holder_signing_key);
+        let verified = verify(issuer_params, default_holder_params::<NoClaims>(), &holder_signing_key).unwrap();
 
         let claimset = verified.claimset.clone().unwrap();
         assert_eq!(claimset.name.as_deref(), Some("Alice Smith"));
@@ -464,7 +465,7 @@ mod tests {
 
         // should work without disclosures
         let issuer_params = default_issuer_params(None::<Value>, &holder_signing_key);
-        verify(issuer_params, default_holder_params::<NoClaims>(), &holder_signing_key);
+        verify(issuer_params, default_holder_params::<NoClaims>(), &holder_signing_key).unwrap();
     }
 
     #[test]
@@ -616,7 +617,7 @@ mod tests {
             let holder_signing_key = ed25519_dalek::SigningKey::generate(&mut rand::thread_rng());
             let issuer_params = default_issuer_params(Some(payload), &holder_signing_key);
             let holder_params = default_holder_params::<NoClaims>();
-            let verified = verify(issuer_params, holder_params, &holder_signing_key);
+            let verified = verify(issuer_params, holder_params, &holder_signing_key).unwrap();
 
             let claimset = verified.claimset.unwrap().into_map().unwrap();
             let (_, claim) = claimset.iter().find(|(k, _)| matches!(k, Value::Text(t) if t == "___claim")).unwrap();
@@ -660,7 +661,7 @@ mod tests {
         let mut holder_params = default_holder_params::<ExtraKbtClaims>();
         holder_params.extra_kbt_payload.replace(extra_kbt);
 
-        let verified = verify(issuer_params, holder_params, &holder_signing_key);
+        let verified = verify(issuer_params, holder_params, &holder_signing_key).unwrap();
 
         assert_eq!(verified.payload.extra.unwrap().foo, "bar".to_string());
     }
@@ -813,6 +814,17 @@ mod tests {
         std::assert_matches!(err, SdCwtVerifierError::OrphanDisclosure);
     }
 
+    #[test]
+    #[wasm_bindgen_test::wasm_bindgen_test]
+    fn should_reject_duplicate_claim_name() {
+        let payload = cbor!({sd!("dup") => "a", sd!("dup") => "b"}).unwrap();
+
+        let holder_signing_key = ed25519_dalek::SigningKey::generate(&mut rand::thread_rng());
+        let issuer_params = default_issuer_params(Some(payload), &holder_signing_key);
+        let err = verify(issuer_params, default_holder_params::<NoClaims>(), &holder_signing_key).unwrap_err();
+        std::assert_matches!(err, SdCwtVerifierError::DuplicateMapKeys);
+    }
+
     mod time {
         use super::*;
 
@@ -918,12 +930,14 @@ mod tests {
         }
     }
 
-    fn verify<T: Select, U: CustomClaims>(issuer_params: IssuerParams<T>, holder_params: HolderParams<U>, holder_signing_key: &ed25519_dalek::SigningKey) -> KbtCwtVerified<T, U> {
+    fn verify<T: Select, U: CustomClaims>(
+        issuer_params: IssuerParams<T>,
+        holder_params: HolderParams<U>,
+        holder_signing_key: &ed25519_dalek::SigningKey,
+    ) -> Result<KbtCwtVerified<T, U>, SdCwtVerifierError<Infallible>> {
         let (cks, sd_kbt, ..) = generate_sd_kbt(issuer_params.clone(), holder_params, holder_signing_key);
         let verifier = HybridVerifier::<T, U>::default();
-        verifier
-            .verify_sd_kbt(&sd_kbt, Default::default(), Some(&holder_signing_key.verifying_key()), &cks)
-            .unwrap()
+        verifier.verify_sd_kbt(&sd_kbt, Default::default(), Some(&holder_signing_key.verifying_key()), &cks)
     }
 
     #[allow(clippy::type_complexity)]

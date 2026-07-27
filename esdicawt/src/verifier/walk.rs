@@ -53,8 +53,11 @@ where
                                 if value.is_map() || value.is_array() {
                                     walk_payload(hasher.clone(), value, disclosures)?;
                                 }
-                                // TODO: verify the key ('name') is not already present in the mapping
-                                mapping.push((name.to_cbor_value()?, value.clone()))
+                                let key = name.to_cbor_value()?;
+                                if mapping.iter().any(|(k, _)| k == &key) {
+                                    return Err(SdCwtVerifierError::DuplicateMapKeys);
+                                }
+                                mapping.push((key, value.clone()))
                             }
                             Salted::Decoy(_) => {} // nothing to do, validity of hash already checked
                             Salted::Element(_) => return Err(SdCwtVerifierError::MalformedSdCwt("'redacted_claim_keys' must not contain redacted elements")),
