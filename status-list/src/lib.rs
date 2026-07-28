@@ -217,12 +217,12 @@ impl StatusBits {
 
     #[inline(always)]
     pub const fn mask(&self) -> u8 {
-        // Given status bits:
-        // - 1 -> 0b0000_0001
-        // - 2 -> 0b0000_0011
-        // - 4 -> 0b0000_1111
-        // - 8 -> 0b1111_1111
-        !(u8::MAX.wrapping_shl(self.size() as u32))
+        match self {
+            Self::One => 0b0000_0001,
+            Self::Two => 0b0000_0011,
+            Self::Four => 0b0000_1111,
+            Self::Eight => 0b1111_1111,
+        }
     }
 
     #[inline(always)]
@@ -301,5 +301,20 @@ mod tests {
         let ser = input.to_cbor_bytes().unwrap();
         let output = StatusList::from_cbor_bytes(&ser).unwrap();
         assert_eq!(input, output);
+    }
+
+    #[test]
+    fn mask() {
+        assert_eq!(StatusBits::One.mask(), 0b0000_0001);
+        assert_eq!(StatusBits::Two.mask(), 0b0000_0011);
+        assert_eq!(StatusBits::Four.mask(), 0b0000_1111);
+        assert_eq!(StatusBits::Eight.mask(), 0b1111_1111);
+    }
+
+    #[test]
+    fn _8bit_status_mask_overflow() {
+        let status_list = StatusList::<RawStatus<8>>::from_slice(&[0xFF], None);
+        let read = status_list.get(0).unwrap();
+        assert!(!read.is_valid());
     }
 }
