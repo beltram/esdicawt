@@ -252,7 +252,7 @@ pub(crate) static CLAIM_MAP: LazyLock<HashMap<&'static str, SdCwtClaim>> = LazyL
         (CwtOidcLabel::GivenName.to_str(), CwtOidcLabel::GivenName.into()),
         (CwtOidcLabel::FamilyName.to_str(), CwtOidcLabel::FamilyName.into()),
         (CwtOidcLabel::MiddleName.to_str(), CwtOidcLabel::MiddleName.into()),
-        (CwtOidcLabel::Name.to_str(), CwtOidcLabel::Nickname.into()),
+        (CwtOidcLabel::Nickname.to_str(), CwtOidcLabel::Nickname.into()),
         (CwtOidcLabel::PreferredUsername.to_str(), CwtOidcLabel::PreferredUsername.into()),
         (CwtOidcLabel::Profile.to_str(), CwtOidcLabel::Profile.into()),
         (CwtOidcLabel::Picture.to_str(), CwtOidcLabel::Picture.into()),
