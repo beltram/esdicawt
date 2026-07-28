@@ -80,6 +80,8 @@ pub enum EsdicawtSpecError {
     CoseKeyConfirmationError(#[from] cose_key::confirmation::CoseKeyConfirmationError),
     #[error("Should have been a mapping")]
     InputError,
+    #[error("A disclosure has been duplicated")]
+    DuplicateDisclosure,
     #[error("{0}")]
     LookupError(&'static str),
     #[error("Hashing failed for alg: {alg:?} because {reason}")]

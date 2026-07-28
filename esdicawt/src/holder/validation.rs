@@ -121,7 +121,7 @@ mod tests {
     use ciborium::{Value, cbor};
     use cose_key::keyset::CoseKeySet;
     use esdicawt_spec::{
-        CwtAny, NoClaims, SdCwtClaim,
+        CwtAny, EsdicawtSpecError, NoClaims, SdCwtClaim,
         blinded_claims::{Salted, SaltedElement},
         issuance::SdCwtIssuedTagged,
         sd,
@@ -326,6 +326,34 @@ mod tests {
             holder.verify_sd_cwt(&sd_cwt.to_cbor_bytes().unwrap(), Default::default(), &issuer_verifying_key),
             Err(SdCwtHolderError::ValidationError(SdCwtHolderValidationError::DisclosureNotFound))
         ));
+    }
+
+    #[test]
+    fn duplicate_disclosure() {
+        let issuer_signing_key = ed25519_dalek::SigningKey::generate(&mut rand::thread_rng());
+        let issuer_verifying_key = CoseKeySet::builder().with_signing_key(&issuer_signing_key).unwrap().build();
+        let issuer = Ed25519Issuer::<Value>::new(issuer_signing_key);
+
+        let holder_signing_key = ed25519_dalek::SigningKey::generate(&mut rand::thread_rng());
+        let holder = Ed25519Holder::<Value, NoClaims>::new(holder_signing_key.clone());
+
+        let payload = cbor!({sd!(42) => "a"}).unwrap();
+
+        let issuer_params = default_issuer_params(&holder_signing_key, Some(payload));
+        let sd_cwt = issuer.issue_cwt(&mut rand::thread_rng(), issuer_params).unwrap().to_cbor_bytes().unwrap();
+
+        let mut sd_cwt_tagged = SdCwtIssuedTagged::<Value, sha2::Sha256>::from_cbor_bytes(&sd_cwt).unwrap();
+
+        // duplicate a disclosure
+        let disclosures = sd_cwt_tagged.0.disclosures_mut().unwrap();
+        #[allow(clippy::indexing_slicing)]
+        let duplicate = disclosures.0[0].clone();
+        disclosures.0.push(duplicate);
+
+        let err = holder
+            .verify_sd_cwt(&sd_cwt_tagged.to_cbor_bytes().unwrap(), Default::default(), &issuer_verifying_key)
+            .unwrap_err();
+        std::assert_matches!(err, SdCwtHolderError::SpecError(EsdicawtSpecError::DuplicateDisclosure))
     }
 
     #[test]

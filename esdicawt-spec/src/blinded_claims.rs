@@ -1,4 +1,4 @@
-use super::{CwtAny, Salt, SdCwtClaim};
+use super::{CwtAny, EsdicawtSpecError, Salt, SdCwtClaim};
 use crate::{EsdicawtSpecResult, inlined_cbor::InlinedCbor};
 use ciborium::Value;
 use serde::ser::SerializeSeq;
@@ -278,7 +278,9 @@ impl SaltedArray {
 
     /// Returns a salted with all the digests already computed to avoid doing it many times
     pub fn digested<Hasher: digest::Digest>(&self) -> EsdicawtSpecResult<SaltedArrayWithDigests<'_>> {
-        self.as_iter()
+        let size = self.0.len();
+        let digested = self
+            .as_iter()
             .map(|d| match d {
                 Ok(salted) => {
                     let bytes = salted.to_cbor_bytes()?;
@@ -287,7 +289,11 @@ impl SaltedArray {
                 }
                 Err(e) => Err(e),
             })
-            .collect::<EsdicawtSpecResult<HashMap<_, _>>>()
+            .collect::<EsdicawtSpecResult<HashMap<_, _>>>()?;
+        if size != digested.len() {
+            return Err(EsdicawtSpecError::DuplicateDisclosure);
+        }
+        Ok(digested)
     }
 
     /// Returns a salted array with room to dynamically insert the digest of each salted to cache it
