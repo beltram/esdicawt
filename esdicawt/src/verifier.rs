@@ -111,33 +111,42 @@ pub trait Verifier {
         let kbt_payload = kbt.0.payload.try_into_value()?;
 
         // verify SD-KBT audience
-        if let Some((expected, actual)) = params.expected_kbt_audience.zip(Some(&kbt_payload.audience))
-            && actual != expected
-        {
-            return Err(SdCwtVerifierError::KbtAudienceMismatch {
-                actual: actual.to_owned(),
-                expected: expected.to_owned(),
-            });
+        if let Some(expected) = params.expected_kbt_audience {
+            let actual = &kbt_payload.audience;
+            if actual != expected {
+                return Err(SdCwtVerifierError::KbtAudienceMismatch {
+                    actual: actual.to_owned(),
+                    expected: expected.to_owned(),
+                });
+            }
         }
 
         // verify SD-KBT cnonce
-        if let Some((expected, actual)) = params.expected_cnonce.zip(kbt_payload.cnonce.as_deref())
-            && actual != expected
-        {
-            return Err(SdCwtVerifierError::CnonceMismatch {
-                actual: actual.to_owned(),
-                expected: expected.to_owned(),
-            });
+        if let Some(expected) = params.expected_cnonce {
+            let actual = kbt_payload.cnonce.as_ref().map(|bb| bb.to_vec()).unwrap_or_default();
+            if actual != expected {
+                return Err(SdCwtVerifierError::CnonceMismatch {
+                    actual,
+                    expected: expected.to_owned(),
+                });
+            }
         }
 
         // verify SD-CWT subject
-        if let Some((actual, expected)) = sub.zip(params.expected_subject)
-            && actual != expected
-        {
-            return Err(SdCwtVerifierError::SubMismatch {
-                actual: actual.to_owned(),
-                expected: expected.to_owned(),
-            });
+        if let Some(expected) = params.expected_subject {
+            if let Some(actual) = sub {
+                if actual != expected {
+                    return Err(SdCwtVerifierError::SubMismatch {
+                        actual: actual.to_owned(),
+                        expected: expected.to_owned(),
+                    });
+                }
+            } else {
+                return Err(SdCwtVerifierError::SubMismatch {
+                    actual: Default::default(),
+                    expected: expected.to_owned(),
+                });
+            }
         }
 
         // verify SD-CWT issuer
@@ -152,13 +161,20 @@ pub trait Verifier {
         }
 
         // verify SD-CWT audience
-        if let Some((actual, expected)) = aud.zip(params.expected_audience)
-            && actual != expected
-        {
-            return Err(SdCwtVerifierError::AudienceMismatch {
-                actual: actual.to_owned(),
-                expected: expected.to_owned(),
-            });
+        if let Some(expected) = params.expected_audience {
+            if let Some(actual) = aud {
+                if actual != expected {
+                    return Err(SdCwtVerifierError::AudienceMismatch {
+                        actual: actual.to_owned(),
+                        expected: expected.to_owned(),
+                    });
+                }
+            } else {
+                return Err(SdCwtVerifierError::AudienceMismatch {
+                    actual: Default::default(),
+                    expected: expected.to_owned(),
+                });
+            }
         }
 
         let sd_alg = sd_cwt.0.protected.to_value_mut()?.sd_alg;
@@ -823,6 +839,162 @@ mod tests {
         let issuer_params = default_issuer_params(Some(payload), &holder_signing_key);
         let err = verify(issuer_params, default_holder_params::<NoClaims>(), &holder_signing_key).unwrap_err();
         std::assert_matches!(err, SdCwtVerifierError::DuplicateMapKeys);
+    }
+
+    mod expected_claims {
+        use super::*;
+
+        #[test]
+        #[wasm_bindgen_test::wasm_bindgen_test]
+        fn kbt_cnonce() {
+            let holder_signing_key = ed25519_dalek::SigningKey::generate(&mut rand::thread_rng());
+            let issuer_params = default_issuer_params(None::<Value>, &holder_signing_key);
+
+            // Holder builds a presentation without a cnonce
+            let mut holder_params = default_holder_params::<NoClaims>();
+            holder_params.cnonce = Some(b"aaa");
+
+            let (cks, sd_kbt, ..) = generate_sd_kbt(issuer_params, holder_params, &holder_signing_key);
+            let verifier = HybridVerifier::<Value, NoClaims>::default();
+
+            let params = VerifierParams {
+                expected_cnonce: Some(b"bbb"),
+                ..Default::default()
+            };
+            let err = verifier.verify_sd_kbt(&sd_kbt, params, Some(&holder_signing_key.verifying_key()), &cks).unwrap_err();
+            std::assert_matches!(err, SdCwtVerifierError::CnonceMismatch { actual, expected } if expected == b"bbb" && actual == b"aaa");
+        }
+
+        #[test]
+        #[wasm_bindgen_test::wasm_bindgen_test]
+        fn missing_kbt_cnonce() {
+            let holder_signing_key = ed25519_dalek::SigningKey::generate(&mut rand::thread_rng());
+            let issuer_params = default_issuer_params(None::<Value>, &holder_signing_key);
+
+            // Holder builds a presentation without a cnonce
+            let mut holder_params = default_holder_params::<NoClaims>();
+            holder_params.cnonce = None;
+
+            let (cks, sd_kbt, ..) = generate_sd_kbt(issuer_params, holder_params, &holder_signing_key);
+            let verifier = HybridVerifier::<Value, NoClaims>::default();
+
+            let params = VerifierParams {
+                expected_cnonce: Some(b"cnonce"),
+                ..Default::default()
+            };
+            let err = verifier.verify_sd_kbt(&sd_kbt, params, Some(&holder_signing_key.verifying_key()), &cks).unwrap_err();
+            std::assert_matches!(err, SdCwtVerifierError::CnonceMismatch { actual, expected } if expected == b"cnonce" && actual.is_empty());
+        }
+
+        #[test]
+        #[wasm_bindgen_test::wasm_bindgen_test]
+        fn sub() {
+            let holder_signing_key = ed25519_dalek::SigningKey::generate(&mut rand::thread_rng());
+            let mut issuer_params = default_issuer_params(None::<Value>, &holder_signing_key);
+            issuer_params.subject = Some("aaa");
+
+            let (cks, sd_kbt, ..) = generate_sd_kbt(issuer_params, default_holder_params::<NoClaims>(), &holder_signing_key);
+            let verifier = HybridVerifier::<Value, NoClaims>::default();
+
+            let params = VerifierParams {
+                expected_subject: Some("bbb"),
+                ..Default::default()
+            };
+            let err = verifier.verify_sd_kbt(&sd_kbt, params, Some(&holder_signing_key.verifying_key()), &cks).unwrap_err();
+            std::assert_matches!(err, SdCwtVerifierError::SubMismatch { actual, expected } if &expected == "bbb" && &actual == "aaa");
+        }
+
+        #[test]
+        #[wasm_bindgen_test::wasm_bindgen_test]
+        fn missing_sub() {
+            let holder_signing_key = ed25519_dalek::SigningKey::generate(&mut rand::thread_rng());
+            let mut issuer_params = default_issuer_params(None::<Value>, &holder_signing_key);
+            issuer_params.subject = None;
+
+            let (cks, sd_kbt, ..) = generate_sd_kbt(issuer_params, default_holder_params::<NoClaims>(), &holder_signing_key);
+            let verifier = HybridVerifier::<Value, NoClaims>::default();
+
+            let params = VerifierParams {
+                expected_subject: Some("bbb"),
+                ..Default::default()
+            };
+            let err = verifier.verify_sd_kbt(&sd_kbt, params, Some(&holder_signing_key.verifying_key()), &cks).unwrap_err();
+            std::assert_matches!(err, SdCwtVerifierError::SubMismatch { actual, expected } if &expected == "bbb" && actual.is_empty());
+        }
+
+        #[test]
+        #[wasm_bindgen_test::wasm_bindgen_test]
+        fn audience() {
+            let holder_signing_key = ed25519_dalek::SigningKey::generate(&mut rand::thread_rng());
+            let mut issuer_params = default_issuer_params(None::<Value>, &holder_signing_key);
+            issuer_params.audience = Some("aaa");
+
+            let (cks, sd_kbt, ..) = generate_sd_kbt(issuer_params, default_holder_params::<NoClaims>(), &holder_signing_key);
+            let verifier = HybridVerifier::<Value, NoClaims>::default();
+
+            let params = VerifierParams {
+                expected_audience: Some("bbb"),
+                ..Default::default()
+            };
+            let err = verifier.verify_sd_kbt(&sd_kbt, params, Some(&holder_signing_key.verifying_key()), &cks).unwrap_err();
+            std::assert_matches!(err, SdCwtVerifierError::AudienceMismatch { actual, expected } if &expected == "bbb" && &actual == "aaa");
+        }
+
+        #[test]
+        #[wasm_bindgen_test::wasm_bindgen_test]
+        fn missing_aud() {
+            let holder_signing_key = ed25519_dalek::SigningKey::generate(&mut rand::thread_rng());
+            let mut issuer_params = default_issuer_params(None::<Value>, &holder_signing_key);
+            issuer_params.audience = None;
+
+            let (cks, sd_kbt, ..) = generate_sd_kbt(issuer_params, default_holder_params::<NoClaims>(), &holder_signing_key);
+            let verifier = HybridVerifier::<Value, NoClaims>::default();
+
+            let params = VerifierParams {
+                expected_audience: Some("bbb"),
+                ..Default::default()
+            };
+            let err = verifier.verify_sd_kbt(&sd_kbt, params, Some(&holder_signing_key.verifying_key()), &cks).unwrap_err();
+            std::assert_matches!(err, SdCwtVerifierError::AudienceMismatch { actual, expected } if &expected == "bbb" && actual.is_empty());
+        }
+
+        #[test]
+        #[wasm_bindgen_test::wasm_bindgen_test]
+        fn kbt_audience() {
+            let holder_signing_key = ed25519_dalek::SigningKey::generate(&mut rand::thread_rng());
+            let issuer_params = default_issuer_params(None::<Value>, &holder_signing_key);
+
+            let mut holder_params = default_holder_params::<NoClaims>();
+            holder_params.audience = "aaa";
+
+            let (cks, sd_kbt, ..) = generate_sd_kbt(issuer_params, holder_params, &holder_signing_key);
+            let verifier = HybridVerifier::<Value, NoClaims>::default();
+
+            let params = VerifierParams {
+                expected_kbt_audience: Some("bbb"),
+                ..Default::default()
+            };
+            let err = verifier.verify_sd_kbt(&sd_kbt, params, Some(&holder_signing_key.verifying_key()), &cks).unwrap_err();
+            std::assert_matches!(err, SdCwtVerifierError::KbtAudienceMismatch { actual, expected } if &expected == "bbb" && &actual == "aaa");
+        }
+
+        #[test]
+        #[wasm_bindgen_test::wasm_bindgen_test]
+        fn issuer() {
+            let holder_signing_key = ed25519_dalek::SigningKey::generate(&mut rand::thread_rng());
+            let mut issuer_params = default_issuer_params(None::<Value>, &holder_signing_key);
+            issuer_params.issuer = "aaa";
+
+            let (cks, sd_kbt, ..) = generate_sd_kbt(issuer_params, default_holder_params::<NoClaims>(), &holder_signing_key);
+            let verifier = HybridVerifier::<Value, NoClaims>::default();
+
+            let params = VerifierParams {
+                expected_issuer: Some("bbb"),
+                ..Default::default()
+            };
+            let err = verifier.verify_sd_kbt(&sd_kbt, params, Some(&holder_signing_key.verifying_key()), &cks).unwrap_err();
+            std::assert_matches!(err, SdCwtVerifierError::IssuerMismatch { actual, expected } if &expected == "bbb" && &actual == "aaa");
+        }
     }
 
     mod time {

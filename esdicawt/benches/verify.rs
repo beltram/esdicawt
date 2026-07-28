@@ -89,20 +89,20 @@ fn verifier_bench(c: &mut Criterion) {
                 BatchSize::LargeInput,
             )
         });
-        group.bench_with_input(BenchmarkId::new("SHA-384", i), &i, |b, i| {
+        /*group.bench_with_input(BenchmarkId::new("SHA-384", i), &i, |b, i| {
             b.iter_batched(
                 || verifier::<sha2::Sha384>(i),
                 |(verifier, sd_kbt, params, cks, ..)| black_box(verifier.verify_sd_kbt(&sd_kbt, params, None, &cks).unwrap()),
                 BatchSize::LargeInput,
             )
-        });
-        group.bench_with_input(BenchmarkId::new("SHA-512", i), &i, |b, i| {
+        });*/
+        /*group.bench_with_input(BenchmarkId::new("SHA-512", i), &i, |b, i| {
             b.iter_batched(
                 || verifier::<sha2::Sha512>(i),
                 |(verifier, sd_kbt, params, cks, ..)| black_box(verifier.verify_sd_kbt(&sd_kbt, params, None, &cks).unwrap()),
                 BatchSize::LargeInput,
             )
-        });
+        });*/
         /*group.bench_with_input(BenchmarkId::new("Blake3", i), &i, |b, i| {
             b.iter_batched(
                 || verifier::<blake3::Hasher>(i),
