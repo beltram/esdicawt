@@ -57,7 +57,7 @@ where
                                 if mapping.iter().any(|(k, _)| k == &key) {
                                     return Err(SdCwtVerifierError::DuplicateMapKeys);
                                 }
-                                mapping.push((key, value.clone()))
+                                mapping.push((key, core::mem::replace(value, Value::Null)))
                             }
                             Salted::Decoy(_) => {} // nothing to do, validity of hash already checked
                             Salted::Element(_) => return Err(SdCwtVerifierError::MalformedSdCwt("'redacted_claim_keys' must not contain redacted elements")),
@@ -101,7 +101,7 @@ where
                             if value.is_map() || value.is_array() {
                                 walk_payload(hasher.clone(), value, disclosures)?;
                             }
-                            *element = value.clone()
+                            *element = core::mem::replace(value, Value::Null);
                         }
                         Salted::Decoy(_) => {} // nothing to do, validity of hash already checked
                         Salted::Claim(_) => return Err(SdCwtVerifierError::MalformedSdCwt("a array must not contain a redacted claim key")),
