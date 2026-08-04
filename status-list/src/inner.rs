@@ -9,11 +9,9 @@ pub fn status_list_compressed(status_list: &[u8]) -> StatusListResult<Vec<u8>> {
     Ok(encoder.finish()?)
 }
 
-// TODO: optimize by having the len in the token
 #[inline(always)]
 pub fn from_compressed(bytes: &[u8]) -> StatusListResult<Vec<u8>> {
-    // let mut buf = Vec::with_capacity(len);
-    let mut buf = vec![];
+    let mut buf = Vec::with_capacity(bytes.len() * 8);
 
     // TODO: speed up
     // let decoder = flate2::read::ZlibDecoder::new_with_buf(bytes, Vec::<u8>::with_capacity(len));
