@@ -1,7 +1,10 @@
 // #![doc = include_str!("../../README.md")] // FIXME: including this currently fails when this crate is transitively used by another crate built with Bazel
 
 #[cfg(feature = "status")]
-pub use issuer::params::StatusParams;
+pub use {
+    issuer::params::StatusParams,
+    verifier::{VerifiedStatusListToken, VerifierWithStatus},
+};
 
 pub use {
     cose_key, esdicawt_spec as spec,
