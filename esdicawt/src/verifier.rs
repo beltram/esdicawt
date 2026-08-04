@@ -10,6 +10,7 @@ use ciborium::{Value, value::Integer};
 use cose_key::confirmation::{CoseKeyConfirmationError, KeyConfirmation};
 use coset::{CoseSign1, TaggedCborSerializable};
 use esdicawt_spec::{CWT_CLAIM_KEY_CONFIRMATION, CustomClaims, CwtAny, SdHashAlg, Select, issuance::SdInnerPayload, key_binding::KbtCwtTagged, verified::KbtCwtVerified};
+use std::sync::Arc;
 
 pub trait Verifier {
     type Error: core::error::Error + Send + Sync;
@@ -373,9 +374,11 @@ fn __shallow_verify_sd_kbt<
 #[cfg(feature = "status")]
 #[allow(dead_code)]
 pub trait VerifierWithStatus: Verifier {
+    type Status: status_list::Status;
+
     #[allow(clippy::type_complexity, async_fn_in_trait)]
-    async fn verify_sd_kbt_with_status<S: status_list::Status>(
-        &mut self,
+    async fn verify_sd_kbt_with_status(
+        &self,
         raw_sd_kbt: &[u8],
         params: VerifierParams<'_>,
         status_list_params: crate::verifier::params::StatusListVerifierParams,
@@ -411,43 +414,46 @@ pub trait VerifierWithStatus: Verifier {
         // - get it from a local in-memory cache
         // - get it from a database in case it was already set by another thread
         // - last, fetch it from Status issuer in case it's nowhere to be found
-        let Some(status_token) = self.get_status_token::<S>(status_url, status_list_cks).await? else {
+        if let Some(status_token) = self.get_status_token(status_url.as_str(), status_list_cks).await? {
+            // verify time claims of the StatusListToken
+            let validation_time = status_list_params.artificial_time.map_or_else(|| elapsed_since_epoch().as_secs(), |t| t as u64);
+            let (iat, exp, nbf) = (Some(status_token.iat), status_token.exp, None);
+            verify_time_claims(validation_time, status_list_params.leeway, iat, exp, nbf, status_list_params.time_verification)?;
+
+            // now let's verify the status of the SD-KBT in the StatusList
+            if idx > status_token.status_list.max_index() {
+                return Err(SdCwtStatusVerifierError::IndexOutOfBounds(status_url.clone()).into());
+            }
+
+            let Some(status) = status_token.status_list.lst().get(idx) else {
+                return Err(SdCwtStatusVerifierError::StatusIndexNotFound(idx, status_url.clone()).into());
+            };
+
+            use status_list::Status as _;
+            if !status.is_valid() {
+                return Err(SdCwtStatusVerifierError::StatusInvalid(status_url.clone()).into());
+            }
+        } else if status_list_params.ignore_status_list_not_found {
+            // do nothing, just continue
+        } else {
             return Err(SdCwtStatusVerifierError::StatusNotFound(status_url.clone()).into());
         };
-
-        // verify time claims of the SD-CWT
-        let validation_time = status_list_params.artificial_time.map_or_else(|| elapsed_since_epoch().as_secs(), |t| t as u64);
-        let (iat, exp, nbf) = (Some(status_token.iat), status_token.exp, None);
-        verify_time_claims(validation_time, status_list_params.leeway, iat, exp, nbf, status_list_params.time_verification)?;
-
-        // now let's verify the status of the SD-KBT in the StatusList
-
-        if idx > status_token.status_list.max_index() {
-            return Err(SdCwtStatusVerifierError::IndexOutOfBounds(status_url.clone()).into());
-        }
-
-        let Some(status) = status_token.status_list.lst().get(idx) else {
-            return Err(SdCwtStatusVerifierError::StatusIndexNotFound(idx, status_url.clone()).into());
-        };
-
-        if !status.is_valid() {
-            return Err(SdCwtStatusVerifierError::StatusInvalid(status_url.clone()).into());
-        }
 
         self.verify_sd_kbt(raw_sd_kbt, params, holder_verifier, cks)
     }
 
-    fn get_status_token<S: status_list::Status>(
-        &mut self,
-        status_url: &url::Url,
+    #[allow(clippy::type_complexity)]
+    fn get_status_token(
+        &self,
+        status_url: &str,
         status_list_cks: &cose_key::keyset::CoseKeySet,
-    ) -> impl Future<Output = Result<Option<VerifiedStatusListToken<S>>, SdCwtVerifierError<Self::Error>>>;
+    ) -> impl Future<Output = Result<Option<Arc<VerifiedStatusListToken<Self::Status>>>, SdCwtVerifierError<Self::Error>>> + Send;
 
-    fn verify_status_token<S: status_list::Status>(
+    fn verify_status_token(
         &self,
         raw_status_token: &[u8],
         status_list_cks: &cose_key::keyset::CoseKeySet,
-    ) -> Result<VerifiedStatusListToken<S>, SdCwtVerifierError<Self::Error>> {
+    ) -> Result<VerifiedStatusListToken<Self::Status>, SdCwtVerifierError<Self::Error>> {
         let status_token = status_list::issuer::StatusListToken::from_cbor_bytes(raw_status_token)?;
         let status_token_sign1 = CoseSign1::from_tagged_slice(raw_status_token)?;
 
@@ -478,7 +484,7 @@ mod tests {
         CwtTimeError, HolderParams, Issuer, IssuerParams, Presentation, SdCwtVerifierError, StatusParams, TimeArg, Verifier, VerifierParams, elapsed_since_epoch,
         holder::Holder,
         test_utils::{Ed25519Holder, Ed25519Issuer},
-        verifier::{VerifierWithStatus, error::SdCwtStatusVerifierError, params::StatusListVerifierParams, test_utils::HybridVerifier},
+        verifier::{VerifierWithStatus, error::SdCwtStatusVerifierError, test_utils::HybridVerifier},
     };
     use ciborium::{Value, cbor};
     use cose_key::keyset::CoseKeySet;
@@ -739,13 +745,9 @@ mod tests {
         let status_token = status_issuer.issue_status_list_token(&status_list, status_list_issuer_params.clone()).unwrap();
 
         // 1. nominal case, status_token is found, status at index is valid
-        verifier.insert_status_in_cache(&status_uri, status_token.to_cbor_bytes().unwrap());
+        verifier.insert_status_in_cache(&status_uri, status_token.to_cbor_bytes().unwrap(), &cks);
 
-        let status_list_verifier_params = StatusListVerifierParams {
-            leeway: Default::default(),
-            time_verification: Default::default(),
-            artificial_time: None,
-        };
+        let status_list_verifier_params = Default::default();
         let verifier_params = VerifierParams {
             expected_subject: None,
             expected_issuer: None,
@@ -759,24 +761,24 @@ mod tests {
             artificial_time: None,
         };
         verifier
-            .verify_sd_kbt_with_status::<OauthStatus>(&sd_kbt, verifier_params, status_list_verifier_params, None, &cks, status_list_cks)
+            .verify_sd_kbt_with_status(&sd_kbt, verifier_params, status_list_verifier_params, None, &cks, status_list_cks)
             .await
             .unwrap();
 
         // 2. cache is empty, status_token not found
         verifier.clear_cache();
         let err = verifier
-            .verify_sd_kbt_with_status::<OauthStatus>(&sd_kbt, verifier_params, status_list_verifier_params, None, &cks, status_list_cks)
+            .verify_sd_kbt_with_status(&sd_kbt, verifier_params, status_list_verifier_params, None, &cks, status_list_cks)
             .await
             .unwrap_err();
         assert!(matches!(err, SdCwtVerifierError::StatusError(SdCwtStatusVerifierError::StatusNotFound(uri)) if uri == status_uri));
 
         // 3. status at index is not valid
         status_list.set(64, OauthStatus::Invalid);
-        let status_token = status_issuer.issue_status_list_token(&status_list, status_list_issuer_params.clone()).unwrap();
-        verifier.insert_status_in_cache(&status_uri, status_token.to_cbor_bytes().unwrap());
+        let status_token_invalid_index = status_issuer.issue_status_list_token(&status_list, status_list_issuer_params.clone()).unwrap();
+        verifier.insert_status_in_cache(&status_uri, status_token_invalid_index.to_cbor_bytes().unwrap(), &cks);
         let err = verifier
-            .verify_sd_kbt_with_status::<OauthStatus>(&sd_kbt, verifier_params, status_list_verifier_params, None, &cks, status_list_cks)
+            .verify_sd_kbt_with_status(&sd_kbt, verifier_params, status_list_verifier_params, None, &cks, status_list_cks)
             .await
             .unwrap_err();
         assert!(matches!(err, SdCwtVerifierError::StatusError(SdCwtStatusVerifierError::StatusInvalid(uri)) if uri == status_uri));
@@ -784,9 +786,9 @@ mod tests {
         // 4. index is out of bounds
         let short_status_list = StatusList::<OauthStatus>::with_capacity(1 << 6, None);
         let short_status_token = status_issuer.issue_status_list_token(&short_status_list, status_list_issuer_params.clone()).unwrap();
-        verifier.insert_status_in_cache(&status_uri, short_status_token.to_cbor_bytes().unwrap());
+        verifier.insert_status_in_cache(&status_uri, short_status_token.to_cbor_bytes().unwrap(), &cks);
         let err = verifier
-            .verify_sd_kbt_with_status::<OauthStatus>(&sd_kbt, verifier_params, status_list_verifier_params, None, &cks, status_list_cks)
+            .verify_sd_kbt_with_status(&sd_kbt, verifier_params, status_list_verifier_params, None, &cks, status_list_cks)
             .await
             .unwrap_err();
         assert!(matches!(err, SdCwtVerifierError::StatusError(SdCwtStatusVerifierError::IndexOutOfBounds(uri)) if uri == status_uri));
@@ -800,20 +802,17 @@ mod tests {
             _marker: Default::default(),
         };
         let status_token = status_issuer.issue_status_list_token(&status_list, status_list_issuer_params.clone()).unwrap();
-        verifier.insert_status_in_cache(&status_uri, status_token.to_cbor_bytes().unwrap());
+        verifier.insert_status_in_cache(&status_uri, status_token.to_cbor_bytes().unwrap(), &cks);
 
         verifier
-            .verify_sd_kbt_with_status::<OauthStatus>(&sd_kbt, verifier_params, status_list_verifier_params, None, &cks, status_list_cks)
+            .verify_sd_kbt_with_status(&sd_kbt, verifier_params, status_list_verifier_params, None, &cks, status_list_cks)
             .await
             .unwrap();
 
         // 6. should fail if status_token not signed by expected issuer
         let fake_status_token_signer = ed25519_dalek::SigningKey::generate(&mut rand::thread_rng());
         let fake_status_list_cks = CoseKeySet::builder().with(&fake_status_token_signer.verifying_key()).unwrap().build();
-        let err = verifier
-            .verify_sd_kbt_with_status::<OauthStatus>(&sd_kbt, verifier_params, status_list_verifier_params, None, &cks, &fake_status_list_cks)
-            .await
-            .unwrap_err();
+        let err = verifier.verify_status_token(&status_token.to_cbor_bytes().unwrap(), &fake_status_list_cks).unwrap_err();
         assert!(matches!(err, SdCwtVerifierError::StatusError(SdCwtStatusVerifierError::InvalidStatusTokenSignature(_))));
     }
 
@@ -1273,6 +1272,7 @@ pub mod claims {
 pub mod test_utils {
     use super::*;
     use esdicawt_spec::NoClaims;
+    use status_list::OauthStatus;
     use std::collections::HashMap;
     use url::Url;
 
@@ -1280,7 +1280,7 @@ pub mod test_utils {
     #[allow(dead_code)]
     #[derive(Debug, Clone)]
     pub struct HybridVerifier<DisclosedClaims: CustomClaims, KbtClaims: CustomClaims> {
-        pub status_cache: HashMap<url::Url, Vec<u8>>,
+        pub status_cache: HashMap<String, Arc<VerifiedStatusListToken<OauthStatus>>>,
         pub _marker: core::marker::PhantomData<(DisclosedClaims, KbtClaims)>,
     }
 
@@ -1299,8 +1299,9 @@ pub mod test_utils {
             self.status_cache.clear();
         }
 
-        pub(crate) fn insert_status_in_cache(&mut self, status_url: &Url, status_token: Vec<u8>) {
-            self.status_cache.entry(status_url.clone()).insert_entry(status_token);
+        pub(crate) fn insert_status_in_cache(&mut self, status_url: &Url, status_token: Vec<u8>, status_list_cks: &cose_key::keyset::CoseKeySet) {
+            let status_token = self.verify_status_token(&status_token, status_list_cks).unwrap();
+            self.status_cache.entry(status_url.to_string()).insert_entry(status_token.into());
         }
     }
 
@@ -1317,16 +1318,14 @@ pub mod test_utils {
     }
 
     impl<T: Select, U: CustomClaims> VerifierWithStatus for HybridVerifier<T, U> {
-        async fn get_status_token<S: status_list::Status>(
-            &mut self,
-            status_url: &Url,
-            status_list_cks: &cose_key::keyset::CoseKeySet,
-        ) -> Result<Option<VerifiedStatusListToken<S>>, SdCwtVerifierError<Self::Error>> {
-            let Some(raw_status_token) = self.status_cache.get(status_url).map(Vec::as_slice) else {
-                return Ok(None);
-            };
-            let verified_status_token = self.verify_status_token(raw_status_token, status_list_cks)?;
-            Ok(Some(verified_status_token))
+        type Status = OauthStatus;
+
+        fn get_status_token(
+            &self,
+            status_url: &str,
+            _status_list_cks: &cose_key::keyset::CoseKeySet,
+        ) -> impl Future<Output = Result<Option<Arc<VerifiedStatusListToken<Self::Status>>>, SdCwtVerifierError<Self::Error>>> + Send {
+            std::future::ready(self.status_cache.get(status_url).cloned().map(Ok).transpose())
         }
     }
 }

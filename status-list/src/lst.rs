@@ -1,4 +1,4 @@
-use crate::{BitIndex, Status, StatusListResult, StatusUndefined};
+use crate::{BitIndex, Status, StatusListResult};
 
 #[derive(Clone, Eq, PartialEq, Hash)]
 #[repr(transparent)]
@@ -59,7 +59,7 @@ impl<S: Status> Lst<S> {
     }
 }
 
-impl<S: Status + StatusUndefined> Lst<S> {
+impl<S: Status> Lst<S> {
     /// Finds an empty entry in the StatusList
     #[cfg(feature = "rand")]
     pub fn next_vacant_bit_index(&self, rng: &mut dyn rand_core::CryptoRngCore) -> Option<BitIndex> {
@@ -158,8 +158,6 @@ mod tests {
             fn is_valid(&self) -> bool {
                 matches!(self, Self::Valid)
             }
-        }
-        impl StatusUndefined for Status {
             fn is_undefined(&self) -> bool {
                 self == &Self::Undefined
             }
