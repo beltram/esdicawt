@@ -373,7 +373,7 @@ fn __shallow_verify_sd_kbt<
 #[cfg(feature = "status")]
 #[allow(dead_code)]
 pub trait VerifierWithStatus: Verifier {
-    #[allow(clippy::type_complexity)]
+    #[allow(clippy::type_complexity, async_fn_in_trait)]
     async fn verify_sd_kbt_with_status<S: status_list::Status>(
         &mut self,
         raw_sd_kbt: &[u8],
@@ -411,15 +411,9 @@ pub trait VerifierWithStatus: Verifier {
         // - get it from a local in-memory cache
         // - get it from a database in case it was already set by another thread
         // - last, fetch it from Status issuer in case it's nowhere to be found
-        let Some(raw_status_token) = self.get_status(status_url).await.map_err(SdCwtVerifierError::CustomError)? else {
+        let Some(status_token) = self.get_status_token::<S>(status_url, status_list_cks).await? else {
             return Err(SdCwtStatusVerifierError::StatusNotFound(status_url.clone()).into());
         };
-
-        let status_token = status_list::issuer::StatusListToken::<S>::from_cbor_bytes(raw_status_token)?;
-        let status_token_sign1 = CoseSign1::from_tagged_slice(raw_status_token)?;
-
-        // We validate the signature of the StatusListToken
-        crate::signature_verifier::validate_cose_sign1_signature(&status_token_sign1, status_list_cks).map_err(SdCwtStatusVerifierError::InvalidStatusTokenSignature)?;
 
         // verify time claims of the SD-CWT
         let validation_time = status_list_params.artificial_time.map_or_else(|| elapsed_since_epoch().as_secs(), |t| t as u64);
@@ -443,7 +437,38 @@ pub trait VerifierWithStatus: Verifier {
         self.verify_sd_kbt(raw_sd_kbt, params, holder_verifier, cks)
     }
 
-    fn get_status(&mut self, status_url: &url::Url) -> impl Future<Output = Result<Option<&[u8]>, Self::Error>>;
+    fn get_status_token<S: status_list::Status>(
+        &mut self,
+        status_url: &url::Url,
+        status_list_cks: &cose_key::keyset::CoseKeySet,
+    ) -> impl Future<Output = Result<Option<VerifiedStatusListToken<S>>, SdCwtVerifierError<Self::Error>>>;
+
+    fn verify_status_token<S: status_list::Status>(
+        &self,
+        raw_status_token: &[u8],
+        status_list_cks: &cose_key::keyset::CoseKeySet,
+    ) -> Result<VerifiedStatusListToken<S>, SdCwtVerifierError<Self::Error>> {
+        let status_token = status_list::issuer::StatusListToken::from_cbor_bytes(raw_status_token)?;
+        let status_token_sign1 = CoseSign1::from_tagged_slice(raw_status_token)?;
+
+        // We validate the signature of the StatusListToken
+        crate::signature_verifier::validate_cose_sign1_signature(&status_token_sign1, status_list_cks)
+            .map_err(crate::verifier::error::SdCwtStatusVerifierError::InvalidStatusTokenSignature)?;
+        Ok(VerifiedStatusListToken(status_token))
+    }
+}
+
+#[cfg(feature = "status")]
+#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
+pub struct VerifiedStatusListToken<S: status_list::Status>(status_list::issuer::StatusListToken<S>);
+
+#[cfg(feature = "status")]
+impl<S: status_list::Status> std::ops::Deref for VerifiedStatusListToken<S> {
+    type Target = status_list::issuer::StatusListToken<S>;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
 }
 
 #[cfg(test)]
@@ -1292,8 +1317,16 @@ pub mod test_utils {
     }
 
     impl<T: Select, U: CustomClaims> VerifierWithStatus for HybridVerifier<T, U> {
-        async fn get_status(&mut self, status_url: &Url) -> Result<Option<&[u8]>, Self::Error> {
-            Ok(self.status_cache.get(status_url).map(Vec::as_slice))
+        async fn get_status_token<S: status_list::Status>(
+            &mut self,
+            status_url: &Url,
+            status_list_cks: &cose_key::keyset::CoseKeySet,
+        ) -> Result<Option<VerifiedStatusListToken<S>>, SdCwtVerifierError<Self::Error>> {
+            let Some(raw_status_token) = self.status_cache.get(status_url).map(Vec::as_slice) else {
+                return Ok(None);
+            };
+            let verified_status_token = self.verify_status_token(raw_status_token, status_list_cks)?;
+            Ok(Some(verified_status_token))
         }
     }
 }
