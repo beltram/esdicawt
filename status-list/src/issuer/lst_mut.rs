@@ -1,4 +1,4 @@
-use crate::{BitIndex, Lst, Status, StatusListResult, StatusUndefined};
+use crate::{BitIndex, Lst, Status, StatusListResult};
 
 #[derive(Clone, Eq, PartialEq, Hash, serde::Serialize, serde::Deserialize)]
 #[repr(transparent)]
@@ -90,7 +90,7 @@ impl<S: Status> LstMut<S> {
     }
 }
 
-impl<S: Status + StatusUndefined> LstMut<S> {
+impl<S: Status> LstMut<S> {
     /// Finds an empty entry in the StatusList
     #[cfg(feature = "rand")]
     pub fn next_vacant_bit_index(&self, rng: &mut dyn rand_core::CryptoRngCore) -> Option<BitIndex> {

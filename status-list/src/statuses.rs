@@ -1,4 +1,4 @@
-use crate::{Status, StatusBits, StatusUndefined};
+use crate::{Status, StatusBits};
 
 /// Just an u8 with the right bounds for representing a Status
 #[derive(Debug, Copy, Clone, Eq, PartialEq, Hash)]
@@ -37,12 +37,6 @@ impl Status for OauthStatus {
 
     fn is_valid(&self) -> bool {
         matches!(self, Self::Valid)
-    }
-}
-
-impl StatusUndefined for OauthStatus {
-    fn is_undefined(&self) -> bool {
-        false
     }
 }
 

@@ -55,4 +55,8 @@ pub struct StatusListVerifierParams {
     pub time_verification: TimeVerification,
     /// when verifying a delayed message or testing
     pub artificial_time: Option<i64>,
+    /// Relaxed mode. If the StatusList is not found, the verification will continue and ignore this.
+    /// This lets a Resource server fallback in degraded mode in case the IdentityProvider is down.
+    /// Use with CAUTION !!!
+    pub ignore_status_list_not_found: bool,
 }

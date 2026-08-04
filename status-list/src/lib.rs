@@ -19,15 +19,15 @@ pub use statuses::{OauthStatus, RawStatus};
 
 pub type BitIndex = u64;
 
-pub trait Status: From<u8> + Into<u8> + Clone + Eq + PartialEq + Hash {
+pub trait Status: From<u8> + Into<u8> + std::fmt::Debug + Clone + Eq + PartialEq + Hash {
     const BITS: StatusBits;
 
     fn is_valid(&self) -> bool;
-}
 
-/// Marker for statuses with a state representing that they have not yet been assigned a value
-pub trait StatusUndefined {
-    fn is_undefined(&self) -> bool;
+    /// State representing that they have not yet been assigned a value
+    fn is_undefined(&self) -> bool {
+        false
+    }
 }
 
 /// see https://datatracker.ietf.org/doc/html/draft-ietf-oauth-status-list-11#section-4.3

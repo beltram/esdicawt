@@ -3,7 +3,7 @@
 #[cfg(feature = "status")]
 pub use {
     issuer::params::StatusParams,
-    verifier::{VerifiedStatusListToken, VerifierWithStatus},
+    verifier::{VerifiedStatusListToken, VerifierWithStatus, params::StatusListVerifierParams},
 };
 
 pub use {
