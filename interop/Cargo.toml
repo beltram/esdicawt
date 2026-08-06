@@ -1,0 +1,18 @@
+[package]
+name = "interop"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+
+[dependencies]
+esdicawt = { workspace = true, features = ["test-vectors"] }
+clap = { version = "4", features = ["derive"] }
+ed25519-dalek = { workspace = true, features = ["pem", "rand_core"] }
+sha2.workspace = true
+rand.workspace = true
+serde.workspace = true
+eyre = "0.6"
+hex.workspace = true
+
+[lints]
+workspace = true

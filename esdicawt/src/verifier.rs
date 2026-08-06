@@ -1316,6 +1316,7 @@ pub mod test_utils {
         type KbtUnprotectedClaims = NoClaims;
     }
 
+    #[cfg(feature = "status")]
     impl<T: Select, U: CustomClaims> VerifierWithStatus for HybridVerifier<T, U> {
         async fn get_status_token<S: status_list::Status>(
             &mut self,

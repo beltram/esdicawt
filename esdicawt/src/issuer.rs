@@ -195,10 +195,10 @@ pub trait Issuer {
 #[cfg(test)]
 mod tests {
     use super::{claims::CustomTokenClaims, test_utils::Ed25519Issuer};
-    use crate::lookup::TokenQuery;
-    use crate::read::SdCwtRead;
     use crate::{
         CwtStdLabel, Issuer, IssuerParams, StatusParams, TimeArg, elapsed_since_epoch,
+        lookup::TokenQuery,
+        read::SdCwtRead,
         spec::{
             CwtAny, NoClaims, SdCwtClaim, Select, SelectExt,
             blinded_claims::{Salted, SaltedClaim, SaltedElement},
@@ -586,7 +586,6 @@ pub mod claims {
 pub mod test_utils {
     use super::*;
     use esdicawt_spec::{EsdicawtSpecError, NoClaims, Select};
-    use status_list::issuer::StatusListIssuer;
 
     pub struct Ed25519Issuer<T: Select> {
         pub signer: ed25519_dalek::SigningKey,
@@ -623,7 +622,8 @@ pub mod test_utils {
         }
     }
 
-    impl<T: Select> StatusListIssuer for Ed25519Issuer<T> {
+    #[cfg(feature = "status")]
+    impl<T: Select> status_list::issuer::StatusListIssuer for Ed25519Issuer<T> {
         type StatusListIssuerError = EsdicawtSpecError;
         type StatusListIssuerSigner = ed25519_dalek::SigningKey;
         type StatusListIssuerHasher = sha2::Sha256;

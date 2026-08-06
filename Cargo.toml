@@ -1,5 +1,5 @@
 [workspace]
-members = ["esdicawt", "esdicawt-spec", "spice-oidc-cwt", "status-list"]
+members = ["esdicawt", "esdicawt-spec", "spice-oidc-cwt", "status-list", "interop"]
 resolver = "2"
 
 [workspace.package]

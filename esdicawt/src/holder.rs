@@ -282,11 +282,11 @@ impl<PayloadClaims: Select, Hasher: digest::Digest + Clone, ProtectedClaims: Cus
 #[cfg(test)]
 mod tests {
     use super::{claims::CustomTokenClaims, test_utils::Ed25519Holder, *};
-    use crate::lookup::TokenQuery;
     use crate::{
         CwtStdLabel, Issuer, IssuerParams, Presentation, StatusParams, TimeArg,
         holder::{accessor::ClaimSetExt, params::CborPath},
         issuer::test_utils::Ed25519Issuer,
+        lookup::TokenQuery,
     };
     use ciborium::cbor;
     use cose_key::keyset::CoseKeySet;
@@ -484,8 +484,7 @@ mod tests {
 #[cfg(test)]
 pub mod claims {
     use ciborium::Value;
-    use esdicawt_spec::Redact;
-    use esdicawt_spec::{CwtAny, Select};
+    use esdicawt_spec::{CwtAny, Redact, Select};
     use std::collections::HashMap;
 
     #[derive(Default, Debug, Clone, PartialEq, serde::Serialize)]
