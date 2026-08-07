@@ -1,8 +1,8 @@
 use crate::{SdCwtVerifierError, SdCwtVerifierResult, verifier::walk::walk_payload};
 use ciborium::{Value, value::Integer};
-use digest::DynDigest;
 use esdicawt_spec::{CWT_CLAIM_KEY_CONFIRMATION, CustomClaims, Select, issuance::SdInnerPayload, key_binding::KbtCwt};
 use std::convert::Infallible;
+use std::sync::Arc;
 
 pub trait ClaimSetExt {
     type Payload: Select;
@@ -37,7 +37,7 @@ impl<
                 return Err(SdCwtVerifierError::DisclosureHashCollision);
             }
 
-            walk_payload(Hasher::new().box_clone(), &mut payload, &mut disclosures)?;
+            walk_payload(Arc::new(Hasher::new()), &mut payload, &mut disclosures)?;
         }
         // puncture the 'cnf' claim before deserialization
         if let Some(map) = payload.as_map_mut() {
