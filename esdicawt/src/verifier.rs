@@ -27,19 +27,18 @@ pub trait Verifier {
     type KbtUnprotectedClaims: CustomClaims;
 
     #[cfg(any(feature = "ed25519", feature = "p256", feature = "p384"))]
-    fn digest(&self, sd_alg: SdHashAlg) -> Box<dyn digest::DynDigest> {
-        use digest::DynDigest as _;
+    fn digest(&self, sd_alg: SdHashAlg) -> Arc<dyn digest::DynDigest> {
         match sd_alg {
             #[cfg(any(feature = "ed25519", feature = "p256"))]
-            SdHashAlg::Sha256 => sha2::Sha256::default().box_clone(),
+            SdHashAlg::Sha256 => Arc::new(sha2::Sha256::default()),
             #[cfg(feature = "p384")]
-            SdHashAlg::Sha384 => sha2::Sha384::default().box_clone(),
+            SdHashAlg::Sha384 => Arc::new(sha2::Sha384::default()),
             _ => unreachable!(),
         }
     }
 
     #[cfg(not(any(feature = "ed25519", feature = "p256", feature = "p384")))]
-    fn digest(&self, sd_alg: SdHashAlg) -> Box<dyn digest::DynDigest>;
+    fn digest(&self, sd_alg: SdHashAlg) -> Arc<dyn digest::DynDigest>;
 
     /// Only verify the signatures and the time claims without trying to rebuild the whole ClaimSet which
     /// is expensive by requiring a lot of hashes

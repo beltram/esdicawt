@@ -3,14 +3,13 @@
 mod blanket;
 mod model;
 
-pub use model::{Query, QueryElement};
-use std::ops::Deref;
-
 use crate::spec::{CwtAny, EsdicawtSpecResult, REDACTED_CLAIM_ELEMENT_TAG, blinded_claims::Salted, redacted_claims::RedactedClaimKeys};
 use crate::verifier::walk::walk_payload;
 use ciborium::Value;
-use digest::DynDigest;
 use esdicawt_spec::{EsdicawtSpecError, blinded_claims::SaltedArrayToVerify};
+pub use model::{Query, QueryElement};
+use std::ops::Deref;
+use std::sync::Arc;
 
 pub trait TokenQuery {
     fn query(&mut self, query: Query) -> EsdicawtSpecResult<Option<Value>>;
@@ -127,7 +126,7 @@ where
 
     match &query[..] {
         [] => {
-            walk_payload::<EsdicawtSpecError>(Hasher::new().box_clone(), &mut value, salted_array).unwrap();
+            walk_payload::<EsdicawtSpecError>(Arc::new(Hasher::new()), &mut value, salted_array).unwrap();
             Ok(Some(value))
         }
         _ => query_inner::<Hasher>(salted_array, &mut value, query),

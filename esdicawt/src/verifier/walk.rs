@@ -5,9 +5,10 @@ use esdicawt_spec::{
     blinded_claims::{Salted, SaltedArrayToVerify, SaltedClaim, SaltedElement},
     redacted_claims::{RedactedClaimElement, RedactedClaimKeys},
 };
+use std::sync::Arc;
 
 // wrapping "_walk" is required for fallible recursion
-pub fn walk_payload<E>(hasher: Box<dyn digest::DynDigest>, payload: &mut Value, disclosures: &mut SaltedArrayToVerify) -> SdCwtVerifierResult<(), E>
+pub fn walk_payload<E>(hasher: Arc<dyn digest::DynDigest>, payload: &mut Value, disclosures: &mut SaltedArrayToVerify) -> SdCwtVerifierResult<(), E>
 where
     E: core::error::Error + Send + Sync,
 {
@@ -15,7 +16,7 @@ where
 }
 
 #[tailcall::tailcall]
-fn _walk<E>(hasher: Box<dyn digest::DynDigest>, payload: &mut Value, disclosures: &mut SaltedArrayToVerify) -> SdCwtVerifierResult<(), E>
+fn _walk<E>(hasher: Arc<dyn digest::DynDigest>, payload: &mut Value, disclosures: &mut SaltedArrayToVerify) -> SdCwtVerifierResult<(), E>
 where
     E: core::error::Error + Send + Sync,
 {
