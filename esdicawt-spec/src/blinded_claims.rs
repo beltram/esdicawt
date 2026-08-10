@@ -280,14 +280,12 @@ impl SaltedArray {
     pub fn digested<Hasher: digest::Digest>(&self) -> EsdicawtSpecResult<SaltedArrayWithDigests<'_>> {
         let size = self.0.len();
         let digested = self
-            .as_iter()
-            .map(|d| match d {
-                Ok(salted) => {
-                    let bytes = salted.to_cbor_bytes()?;
-                    let digest = Hasher::digest(&bytes[..]).to_vec();
-                    Ok((digest, salted))
-                }
-                Err(e) => Err(e),
+            .0
+            .iter()
+            .map(|inlined| {
+                let (bytes, value) = (inlined.as_bytes()?, inlined.as_value()?);
+                let digest = Hasher::digest(&bytes[..]).to_vec();
+                Ok((digest, value))
             })
             .collect::<EsdicawtSpecResult<HashMap<_, _>>>()?;
         if size != digested.len() {
