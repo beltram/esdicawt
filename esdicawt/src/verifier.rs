@@ -10,7 +10,7 @@ use ciborium::{Value, value::Integer};
 use cose_key::confirmation::{CoseKeyConfirmationError, KeyConfirmation};
 use coset::{CoseSign1, TaggedCborSerializable};
 use esdicawt_spec::{CWT_CLAIM_KEY_CONFIRMATION, CustomClaims, CwtAny, SdHashAlg, Select, issuance::SdInnerPayload, key_binding::KbtCwtTagged, verified::KbtCwtVerified};
-use std::sync::Arc;
+use std::rc::Rc;
 
 pub trait Verifier {
     type Error: core::error::Error + Send + Sync;
@@ -27,18 +27,18 @@ pub trait Verifier {
     type KbtUnprotectedClaims: CustomClaims;
 
     #[cfg(any(feature = "ed25519", feature = "p256", feature = "p384"))]
-    fn digest(&self, sd_alg: SdHashAlg) -> Arc<dyn digest::DynDigest> {
+    fn digest(&self, sd_alg: SdHashAlg) -> Rc<dyn digest::DynDigest> {
         match sd_alg {
             #[cfg(any(feature = "ed25519", feature = "p256"))]
-            SdHashAlg::Sha256 => Arc::new(sha2::Sha256::default()),
+            SdHashAlg::Sha256 => Rc::new(sha2::Sha256::default()),
             #[cfg(feature = "p384")]
-            SdHashAlg::Sha384 => Arc::new(sha2::Sha384::default()),
+            SdHashAlg::Sha384 => Rc::new(sha2::Sha384::default()),
             _ => unreachable!(),
         }
     }
 
     #[cfg(not(any(feature = "ed25519", feature = "p256", feature = "p384")))]
-    fn digest(&self, sd_alg: SdHashAlg) -> Arc<dyn digest::DynDigest>;
+    fn digest(&self, sd_alg: SdHashAlg) -> Rc<dyn digest::DynDigest>;
 
     /// Only verify the signatures and the time claims without trying to rebuild the whole ClaimSet which
     /// is expensive by requiring a lot of hashes
@@ -446,7 +446,7 @@ pub trait VerifierWithStatus: Verifier {
         &self,
         status_url: &str,
         status_list_cks: &cose_key::keyset::CoseKeySet,
-    ) -> impl Future<Output = Result<Option<Arc<VerifiedStatusListToken<Self::Status>>>, SdCwtVerifierError<Self::Error>>> + Send;
+    ) -> impl Future<Output = Result<Option<std::sync::Arc<VerifiedStatusListToken<Self::Status>>>, SdCwtVerifierError<Self::Error>>> + Send;
 
     fn verify_status_token(
         &self,
@@ -1279,7 +1279,7 @@ pub mod test_utils {
     #[allow(dead_code)]
     #[derive(Debug, Clone)]
     pub struct HybridVerifier<DisclosedClaims: CustomClaims, KbtClaims: CustomClaims> {
-        pub status_cache: HashMap<String, Arc<VerifiedStatusListToken<OauthStatus>>>,
+        pub status_cache: HashMap<String, std::sync::Arc<VerifiedStatusListToken<OauthStatus>>>,
         pub _marker: core::marker::PhantomData<(DisclosedClaims, KbtClaims)>,
     }
 
@@ -1323,7 +1323,7 @@ pub mod test_utils {
             &self,
             status_url: &str,
             _status_list_cks: &cose_key::keyset::CoseKeySet,
-        ) -> impl Future<Output = Result<Option<Arc<VerifiedStatusListToken<Self::Status>>>, SdCwtVerifierError<Self::Error>>> + Send {
+        ) -> impl Future<Output = Result<Option<std::sync::Arc<VerifiedStatusListToken<Self::Status>>>, SdCwtVerifierError<Self::Error>>> + Send {
             std::future::ready(self.status_cache.get(status_url).cloned().map(Ok).transpose())
         }
     }
