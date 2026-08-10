@@ -74,6 +74,6 @@ pub trait Redact {
 
 impl Redact for &mut Value {
     fn redact(&mut self) {
-        **self = Value::Tag(crate::TO_BE_REDACTED_TAG, Box::new(self.clone()));
+        **self = Value::Tag(crate::TO_BE_REDACTED_TAG, core::mem::replace(*self, Value::Null).into());
     }
 }
