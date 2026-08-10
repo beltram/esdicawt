@@ -59,13 +59,7 @@ where
                         paths.push((current.clone(), salted, digest));
                     }
 
-                    let values = match value {
-                        Value::Array(values) => values.iter().enumerate().map(|(i, v)| (i, None, v)).collect::<Vec<_>>(),
-                        Value::Map(values) => values.iter().enumerate().map(|(i, (k, v))| (i, Some(k), v)).collect::<Vec<_>>(),
-                        _ => return Err(SdCwtHolderError::ImplementationError("Traverse impl error. Should be either Map or Array")),
-                    };
-
-                    for (index, label, value) in values {
+                    let mut traverse_salted_collection = |index: usize, label: Option<&Value>, value: &Value| {
                         match (label, value) {
                             // rcks in a mapping
                             (Some(Value::Simple(st)), Value::Array(hashes)) if *st == CWT_LABEL_REDACTED_TAG => {
@@ -96,7 +90,22 @@ where
                             }
                             _ => {}
                         }
-                    }
+                        Ok(())
+                    };
+
+                    match value {
+                        Value::Array(values) => {
+                            for (index, value) in values.iter().enumerate() {
+                                traverse_salted_collection(index, None, value)?;
+                            }
+                        }
+                        Value::Map(values) => {
+                            for (index, (label, value)) in values.iter().enumerate() {
+                                traverse_salted_collection(index, Some(label), value)?;
+                            }
+                        }
+                        _ => return Err(SdCwtHolderError::ImplementationError("Traverse impl error. Should be either Map or Array")),
+                    };
                 }
                 // leaf
                 Salted::Claim(SaltedClaim { .. }) | Salted::Element(SaltedElement { .. }) => {
