@@ -43,7 +43,6 @@ where
     E: core::error::Error + Send + Sync,
     Hasher: digest::Digest,
 {
-    let digest = |v: &Value| Result::<_, SdCwtIssuerError<E>>::Ok(Hasher::digest(&v.to_cbor_bytes()?));
     match value.deref_mut() {
         Value::Map(mapping) => {
             let mut rcks = RedactedClaimKeys::with_capacity(mapping.len());
@@ -71,8 +70,8 @@ where
             let parent_ctx = parent_ctx.map(|(l, rcks)| (l.untag(), rcks));
             if let Some((Some(parent_label), rcks)) = parent_ctx {
                 let salt = new_salt(csprng)?;
-                let salted_claim = sd_claims.push_ref(SaltedClaimRef { salt, name: &parent_label, value })?;
-                rcks.push(&digest(&salted_claim)?[..]);
+                let salted_claim = sd_claims.push_ref_bytes(SaltedClaimRef { salt, name: &parent_label, value })?;
+                rcks.push(&Hasher::digest(salted_claim)[..]);
             }
         }
         Value::Array(array) => {
@@ -85,8 +84,8 @@ where
             if let Some((Some(parent_label), rcks)) = parent_ctx {
                 let salt = new_salt(csprng)?;
                 let disclosure = SaltedClaimRef { salt, name: &parent_label, value };
-                let salted_claim = sd_claims.push_ref(disclosure)?;
-                rcks.push(&digest(&salted_claim)?[..]);
+                let salted_claim = sd_claims.push_ref_bytes(disclosure)?;
+                rcks.push(&Hasher::digest(salted_claim)[..]);
             }
         }
         Value::Tag(tag, original_value) if *tag == TO_BE_REDACTED_TAG && (original_value.is_map() || original_value.is_array()) => {
@@ -97,9 +96,8 @@ where
             // if we are in an array then redact in place
             if in_array {
                 let salt = new_salt(csprng)?;
-                let salted_element = sd_claims.push_ref(SaltedElementRef { salt, value: original_value })?;
-                let digest = digest(&salted_element)?;
-                let rce = RedactedClaimElement::from(&digest[..]);
+                let salted_element = sd_claims.push_ref_bytes(SaltedElementRef { salt, value: original_value })?;
+                let rce = RedactedClaimElement::from(&Hasher::digest(salted_element)[..]);
                 *value = rce.to_cbor_value()?;
             }
         }
@@ -117,8 +115,8 @@ where
                     if let Some(parent_label) = parent_label.untag() {
                         let salt = new_salt(csprng)?;
                         let disclosure = SaltedClaimRef { salt, name: &parent_label, value };
-                        let salted_claim = sd_claims.push_ref(disclosure)?;
-                        rcks.push(&digest(&salted_claim)?[..]);
+                        let salted_claim = sd_claims.push_ref_bytes(disclosure)?;
+                        rcks.push(&Hasher::digest(salted_claim)[..]);
                     }
                 }
                 None => {
@@ -126,9 +124,8 @@ where
                         // ... in an Array. So we insert it in the disclosures and replace the element with its digest in the array
                         let salt = new_salt(csprng)?;
                         let disclosure = SaltedElementRef { salt, value: original_value };
-                        let salted_element = sd_claims.push_ref(disclosure)?;
-                        let digest = digest(&salted_element)?;
-                        let rce = RedactedClaimElement::from(&digest[..]);
+                        let salted_element = sd_claims.push_ref_bytes(disclosure)?;
+                        let rce = RedactedClaimElement::from(&Hasher::digest(salted_element)[..]);
                         *value = rce.to_cbor_value()?;
                     }
                 }

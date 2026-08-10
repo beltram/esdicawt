@@ -250,10 +250,10 @@ impl SaltedArray {
     }
 
     /// Adds the item to the array and return a reference to it in order to hash it later
-    pub fn push_ref<'a, T: CwtAny + 'a>(&'a mut self, salted: impl Into<SaltedRef<'a, T>>) -> EsdicawtSpecResult<Value> {
+    pub fn push_ref_bytes<'a, T: CwtAny + 'a>(&'a mut self, salted: impl Into<SaltedRef<'a, T>>) -> EsdicawtSpecResult<&'a [u8]> {
         self.0.push(Salted::from(salted.into()).upcast()?.into());
         // SAFETY: we just inserted the item in the array so '.last_mut()' cannot fail
-        Ok(self.0.last_mut().map(InlinedCbor::to_value).transpose()?.map(Value::serialized).transpose()?.unwrap())
+        Ok(self.0.last_mut().map(InlinedCbor::to_bytes).transpose()?.unwrap())
     }
 
     pub fn as_iter(&self) -> impl Iterator<Item = EsdicawtSpecResult<Cow<'_, Salted<Value>>>> + '_ {
