@@ -470,7 +470,7 @@ mod tests {
     fn find_cbor_paths<const N: usize>(disclosures: [SaltedRef<Value>; N]) -> [Vec<CborPath>; N] {
         let mut d = SaltedArray::new();
         for s in disclosures {
-            d.push_ref(s).unwrap();
+            d.push_ref_bytes(s).unwrap();
         }
         let d = d.digested::<Sha256>().unwrap();
 
