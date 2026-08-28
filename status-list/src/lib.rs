@@ -87,11 +87,15 @@ impl<S: Status> StatusList<S> {
     }
 
     /// Flips a status.
-    /// Note: will only copy the underlying bytes if there is another StatusList with the same content ; this
-    /// should rarely happen with large enough lists (except at initialization which is expected).
+    /// Takes the underlying `Bytes` out of `self` (leaving a cheap empty placeholder behind) instead of
+    /// cloning it, so that the `Bytes` -> `BytesMut` conversion is unique and can reuse the existing
+    /// allocation in place rather than copying it. This only copies if another `Lst`/`StatusList` clone
+    /// is holding a reference to the same buffer at the same time.
+    ///
+    /// IMPORTANT: it is recommended to hold this behind a RwLock because using this method will invalidate the state of all the readers.
     #[cfg(feature = "issuer")]
     pub fn set(&mut self, index: BitIndex, new: impl Into<S>) -> Option<S> {
-        let mut lst_mut = issuer::LstMut::from(self.lst.clone());
+        let mut lst_mut = issuer::LstMut::from(std::mem::take(&mut self.lst));
         let old_status = lst_mut.set(index, new);
         self.lst = lst_mut.into();
         old_status
