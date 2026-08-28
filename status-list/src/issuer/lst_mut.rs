@@ -13,6 +13,15 @@ impl<S: Status> LstMut<S> {
         Self(bytes::BytesMut::zeroed(byte_capacity), Default::default())
     }
 
+    /// Creates a new StatusList and initializes it
+    pub fn new_with(nb_statuses: usize, updates: impl Iterator<Item = (BitIndex, impl Into<S>)>) -> Self {
+        let mut lst = Self::new(nb_statuses);
+        for (index, status) in updates {
+            lst.set(index, status);
+        }
+        lst
+    }
+
     /// Create a new StatusList.
     /// It is RECOMMENDED that the size of a Status List in bits is divisible in bytes (8 bits) without a remainder.
     /// Arguments:
