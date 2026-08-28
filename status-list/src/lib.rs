@@ -101,6 +101,15 @@ impl<S: Status> StatusList<S> {
         old_status
     }
 
+    #[cfg(feature = "issuer")]
+    pub fn set_all(&mut self, updates: impl Iterator<Item = (BitIndex, impl Into<S>)>) {
+        let mut lst_mut = issuer::LstMut::from(std::mem::take(&mut self.lst));
+        for (index, new) in updates {
+            lst_mut.set(index, new);
+        }
+        self.lst = lst_mut.into();
+    }
+
     /// Read a status from the list as bit.
     /// Might panic in case of overflow, prefer [Self::get]
     pub fn get_unchecked(&self, index: BitIndex) -> S {
