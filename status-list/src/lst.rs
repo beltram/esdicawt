@@ -4,6 +4,12 @@ use crate::{BitIndex, Status, StatusListResult};
 #[repr(transparent)]
 pub struct Lst<S: Status = u8>(pub(crate) bytes::Bytes, pub(crate) core::marker::PhantomData<S>);
 
+impl<S: Status> Default for Lst<S> {
+    fn default() -> Self {
+        Self(Default::default(), Default::default())
+    }
+}
+
 impl<S: Status> Lst<S> {
     /// Create a new StatusList.
     /// Arguments:
