@@ -50,6 +50,15 @@ impl<S: Status> StatusList<S> {
         }
     }
 
+    /// Creates a new StatusList and initializes it
+    #[cfg(feature = "issuer")]
+    pub fn new_with(nb_statuses: usize, aggregation_uri: Option<url::Url>, updates: impl Iterator<Item = (BitIndex, impl Into<S>)>) -> Self {
+        Self {
+            lst: issuer::LstMut::new_with(nb_statuses, updates).into(),
+            aggregation_uri,
+        }
+    }
+
     /// Create a new StatusList.
     /// It is RECOMMENDED that the size of a Status List in bits is divisible in bytes (8 bits) without a remainder.
     /// Arguments:
@@ -94,9 +103,9 @@ impl<S: Status> StatusList<S> {
     ///
     /// IMPORTANT: it is recommended to hold this behind a RwLock because using this method will invalidate the state of all the readers.
     #[cfg(feature = "issuer")]
-    pub fn set(&mut self, index: BitIndex, new: impl Into<S>) -> Option<S> {
+    pub fn set(&mut self, index: BitIndex, status: impl Into<S>) -> Option<S> {
         let mut lst_mut = issuer::LstMut::from(std::mem::take(&mut self.lst));
-        let old_status = lst_mut.set(index, new);
+        let old_status = lst_mut.set(index, status);
         self.lst = lst_mut.into();
         old_status
     }
@@ -104,8 +113,8 @@ impl<S: Status> StatusList<S> {
     #[cfg(feature = "issuer")]
     pub fn set_all(&mut self, updates: impl Iterator<Item = (BitIndex, impl Into<S>)>) {
         let mut lst_mut = issuer::LstMut::from(std::mem::take(&mut self.lst));
-        for (index, new) in updates {
-            lst_mut.set(index, new);
+        for (index, status) in updates {
+            lst_mut.set(index, status);
         }
         self.lst = lst_mut.into();
     }
