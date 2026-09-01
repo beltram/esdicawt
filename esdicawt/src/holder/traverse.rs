@@ -35,7 +35,6 @@ fn __traverse<'a, Hasher: Digest, E>(
 where
     E: core::error::Error + Send + Sync,
 {
-    let find_hash = |hash: &[u8]| disclosures.iter().find_map(|(h, salted)| (h == hash).then_some(salted.clone()));
     match salted_or_value {
         SaltedOrValue::Salted(salted) => {
             let digest = Hasher::digest(&salted.to_cbor_bytes()?).to_vec();
@@ -65,7 +64,7 @@ where
                             (Some(Value::Simple(st)), Value::Array(hashes)) if *st == CWT_LABEL_REDACTED_TAG => {
                                 let hashes = hashes.iter().filter_map(|h| h.as_bytes()).collect::<Vec<_>>();
                                 for hash in hashes {
-                                    if let Some(salted_child) = find_hash(hash) {
+                                    if let Some(salted_child) = disclosures.get(hash) {
                                         __traverse::<Hasher, E>(&salted_child.into(), current.clone(), disclosures, paths)?;
                                     }
                                 }
@@ -75,7 +74,7 @@ where
                                 let Some(hash) = value.as_bytes() else {
                                     return Err(SdCwtHolderError::<E>::ImplementationError("Invalid redacted array element"));
                                 };
-                                if let Some(salted_child) = find_hash(hash) {
+                                if let Some(salted_child) = disclosures.get(hash) {
                                     current.push(CborPath::Index(index as u64));
                                     __traverse::<Hasher, E>(&salted_child.into(), current.clone(), disclosures, paths)?;
                                     current.pop();
@@ -133,7 +132,7 @@ where
                     (Value::Simple(st), Value::Array(hashes)) if *st == CWT_LABEL_REDACTED_TAG => {
                         let hashes = hashes.iter().filter_map(|h| h.as_bytes()).collect::<Vec<_>>();
                         for hash in hashes {
-                            if let Some(salted_child) = find_hash(hash) {
+                            if let Some(salted_child) = disclosures.get(hash) {
                                 __traverse::<Hasher, E>(&salted_child.into(), current.clone(), disclosures, paths)?;
                             }
                         }
@@ -154,7 +153,7 @@ where
                         let Some(hash) = hash.as_bytes() else {
                             return Err(SdCwtHolderError::<E>::ImplementationError("Invalid redacted array element"));
                         };
-                        if let Some(salted_child) = find_hash(hash) {
+                        if let Some(salted_child) = disclosures.get(hash) {
                             current.push(CborPath::Index(index as u64));
                             __traverse::<Hasher, E>(&salted_child.into(), current.clone(), disclosures, paths)?;
                             current.pop();
