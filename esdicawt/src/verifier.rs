@@ -363,7 +363,6 @@ fn __shallow_verify_sd_kbt<
     let kbt_payload = kbt.0.payload.to_value()?;
 
     // verify time claims of the SD-KBT
-    let validation_time = params.artificial_time.map_or_else(|| elapsed_since_epoch().as_secs(), |t| t as u64);
     let (iat, exp, nbf) = (Some(kbt_payload.issued_at), kbt_payload.expiration, kbt_payload.not_before);
     verify_time_claims(validation_time, params.sd_kbt_leeway, iat, exp, nbf, params.sd_kbt_time_verification)?;
 
