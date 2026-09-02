@@ -109,7 +109,6 @@ impl<
                         }
                         _ => break,
                     }
-
                     index += 1;
                 }
 

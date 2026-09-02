@@ -205,7 +205,7 @@ pub trait Holder {
         let alg = coset::Algorithm::Assigned(self.cwt_algorithm());
         let protected = KbtProtected::<Self::IssuerPayloadClaims, Self::Hasher, Self::IssuerProtectedClaims, Self::IssuerUnprotectedClaims, Self::KbtProtectedClaims> {
             alg: alg.into(),
-            kcwt: sd_cwt.0.into(),
+            kcwt: sd_cwt.0,
             extra: params.extra_kbt_protected,
         }
         .try_into()

@@ -1,6 +1,8 @@
-use crate::inlined_cbor::InlinedCbor;
-use crate::issuance::SdCwtIssuedTagged;
-use crate::{COSE_HEADER_KCWT, CustomClaims, EsdicawtSpecError, EsdicawtSpecResult, Select, issuance::SdCwtIssued, key_binding::KbtCwt};
+use crate::{
+    COSE_HEADER_KCWT, CustomClaims, EsdicawtSpecError, EsdicawtSpecResult, Select,
+    issuance::{SdCwtIssued, SdCwtIssuedTagged},
+    key_binding::KbtCwt,
+};
 use ciborium::Value;
 
 impl<
@@ -15,7 +17,7 @@ impl<
 {
     /// Get the SD-CWT wrapped by this SD-KBT
     pub fn sd_cwt(&mut self) -> EsdicawtSpecResult<&SdCwtIssued<IssuerPayloadClaims, Hasher, IssuerProtectedClaims, IssuerUnprotectedClaims>> {
-        Ok(&self.protected.to_value_mut()?.kcwt.to_value()?.0)
+        Ok(&self.protected.to_value_mut()?.kcwt.0)
     }
 
     /// Get the SD-CWT wrapped by this SD-KBT
@@ -26,13 +28,12 @@ impl<
             .into_iter()
             .find_map(|(k, v)| matches!(k, Value::Integer(i) if i == COSE_HEADER_KCWT.into()).then_some(v))
             .ok_or(EsdicawtSpecError::ImplementationError("Invalid SD-KBT, missing kcwt"))?;
-        let sd_cwt = kcwt.deserialized::<InlinedCbor<SdCwtIssuedTagged<Value, Hasher, IssuerProtectedClaims, IssuerUnprotectedClaims>>>()?;
-        Ok(sd_cwt.try_into_value()?.0)
+        Ok(kcwt.deserialized::<SdCwtIssuedTagged<Value, Hasher, IssuerProtectedClaims, IssuerUnprotectedClaims>>()?.0)
     }
 
     /// Get the SD-CWT wrapped by this SD-KBT
     pub fn sd_cwt_mut(&mut self) -> EsdicawtSpecResult<&mut SdCwtIssued<IssuerPayloadClaims, Hasher, IssuerProtectedClaims, IssuerUnprotectedClaims>> {
-        Ok(&mut self.protected.to_value_mut()?.kcwt.to_value_mut()?.0)
+        Ok(&mut self.protected.to_value_mut()?.kcwt.0)
     }
 
     /// SD-KBT expiration, different from SD-CWT one !!!

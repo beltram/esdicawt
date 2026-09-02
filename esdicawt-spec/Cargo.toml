@@ -8,6 +8,7 @@ authors.workspace = true
 [features]
 default = []
 status = ["dep:status-list"]
+backward = []
 
 [dependencies]
 coset = { workspace = true, features = ["std"] }

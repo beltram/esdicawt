@@ -15,6 +15,7 @@ p384 = ["dep:p384", "cose-key/p384", "dep:sha2"]
 test-utils = ["ed25519", "p256", "p384", "dep:sha2", "cose-key/ed25519", "cose-key/p256", "cose-key/p384", "status"]
 test-vectors = ["test-utils"]
 status = ["dep:status-list", "esdicawt-spec/status"]
+backward = ["esdicawt-spec/backward"]
 
 [dependencies]
 esdicawt-spec.workspace = true
