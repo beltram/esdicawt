@@ -89,7 +89,6 @@ pub trait Verifier {
         let generic_sd_cwt_payload_map = generic_sd_cwt_payload.as_map().ok_or(SdCwtVerifierError::InvalidSdCwt)?;
 
         let kbt_protected = kbt.0.protected.to_value_mut()?;
-        let sd_cwt = kbt_protected.kcwt.to_value_mut()?;
 
         let (mut sub, mut iss, mut aud) = (None, None, None);
 
@@ -177,10 +176,10 @@ pub trait Verifier {
             }
         }
 
-        let sd_alg = sd_cwt.0.protected.to_value_mut()?.sd_alg;
+        let sd_alg = kbt_protected.kcwt.0.protected.to_value_mut()?.sd_alg;
 
         // now verifying the disclosures
-        if let Some(disclosures) = sd_cwt.0.disclosures_mut() {
+        if let Some(disclosures) = kbt_protected.kcwt.0.disclosures_mut() {
             let disclosures_size = disclosures.len();
 
             // compute the hash of all disclosures
@@ -256,7 +255,7 @@ fn __shallow_verify_sd_kbt<
 
     let generic_sd_cwt_payload = generic_sd_cwt.payload.upcast_value()?;
     let generic_sd_cwt_payload_map = generic_sd_cwt_payload.as_map().ok_or(SdCwtVerifierError::InvalidSdCwt)?;
-    let sd_cwt_bytes = kbt_protected.kcwt.to_bytes()?;
+    let sd_cwt_bytes = kbt_protected.kcwt.to_cbor_bytes()?;
 
     let mut key_confirmation = None;
     let (mut iat, mut exp, mut nbf) = (None, None, None);
@@ -288,7 +287,7 @@ fn __shallow_verify_sd_kbt<
         .deserialized::<KeyConfirmation>()?;
 
     let kbt_cose_sign1 = CoseSign1::from_tagged_slice(raw_sd_kbt)?;
-    let sd_cwt_cose_sign1 = CoseSign1::from_tagged_slice(sd_cwt_bytes)?;
+    let sd_cwt_cose_sign1 = CoseSign1::from_tagged_slice(&sd_cwt_bytes)?;
 
     // First the Verifier must validate the SD-KBT as described in Section 7.2 of [RFC8392].
     // verifying signature
@@ -401,8 +400,7 @@ pub trait VerifierWithStatus: Verifier {
         let mut kbt = self.shallow_verify_sd_kbt(raw_sd_kbt, params.shallow(), holder_verifier, cks)?;
 
         let kbt_protected = kbt.0.protected.to_value_mut()?;
-        let sd_cwt = kbt_protected.kcwt.to_value_mut()?;
-        let sd_cwt_payload = sd_cwt.0.payload.to_value_mut()?;
+        let sd_cwt_payload = kbt_protected.kcwt.0.payload.to_value_mut()?;
 
         // Read the StatusClaim from the SD-CWT to know where to fetch the Status from
         // Note: no StatusList for the SD-KBT as it is self-issued by a Holder
