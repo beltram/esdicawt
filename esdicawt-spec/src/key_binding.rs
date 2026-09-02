@@ -1,7 +1,7 @@
 use crate::{
     CustomClaims, EsdicawtSpecResult, NoClaims, Select,
     alg::Algorithm,
-    blinded_claims::{Salted, SaltedArray},
+    blinded_claims::{SaltedArray, SaltedEntry},
     inlined_cbor::InlinedCbor,
     issuance::{SdCwtIssuedTagged, SdPayload},
 };
@@ -146,7 +146,7 @@ impl<
 > KbtCwt<IssuerPayloadClaims, Hasher, PayloadClaims, IssuerProtectedClaims, IssuerUnprotectedClaims, ProtectedClaims, UnprotectedClaims>
 {
     /// Iterates through all the disclosed claims in this SD-KBT
-    pub fn walk_disclosed_claims(&mut self) -> EsdicawtSpecResult<Box<dyn Iterator<Item = EsdicawtSpecResult<&Salted<ciborium::Value>>> + '_>> {
+    pub fn walk_disclosed_claims(&mut self) -> EsdicawtSpecResult<Box<dyn Iterator<Item = EsdicawtSpecResult<&SaltedEntry<ciborium::Value>>> + '_>> {
         let protected = self.protected.to_value_mut()?;
 
         #[allow(clippy::option_if_let_else)]

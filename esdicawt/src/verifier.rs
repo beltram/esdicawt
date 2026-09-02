@@ -817,7 +817,7 @@ mod tests {
     fn should_reject_orphan_disclosure() {
         use crate::spec::{
             Salt,
-            blinded_claims::{Salted, SaltedElement},
+            blinded_claims::{SaltedElement, SaltedEntry},
         };
 
         let payload = CustomTokenClaims {
@@ -834,7 +834,7 @@ mod tests {
         let cks = CoseKeySet::builder().with_signing_key(&issuer_signing_key).unwrap().build();
         let mut sd_cwt = holder.verify_sd_cwt(&sd_cwt, Default::default(), &cks).unwrap();
 
-        let orphan = Salted::Element(SaltedElement {
+        let orphan = SaltedEntry::Element(SaltedElement {
             salt: Salt::empty(),
             value: Stuff { foo: "baz".into() }.to_cbor_value().unwrap(),
         });

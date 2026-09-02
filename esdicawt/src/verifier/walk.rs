@@ -2,7 +2,7 @@ use crate::{SdCwtVerifierError, SdCwtVerifierResult};
 use ciborium::Value;
 use esdicawt_spec::{
     CwtAny,
-    blinded_claims::{Salted, SaltedArrayToVerify, SaltedClaim, SaltedElement},
+    blinded_claims::{SaltedArrayToVerify, SaltedClaim, SaltedElement, SaltedEntry},
     redacted_claims::{RedactedClaimElement, RedactedClaimKeys},
 };
 use std::rc::Rc;
@@ -35,7 +35,7 @@ where
                         match digest {
                             Some(digest) => **digest == **rck,
                             entry => {
-                                let Salted::Claim(sc) = salted.as_ref() else { return false };
+                                let SaltedEntry::Claim(sc) = salted.as_ref() else { return false };
                                 let Ok(cbor_bytes) = sc.to_cbor_bytes() else { return false };
 
                                 // box_clone clones the hasher and his state.
@@ -50,7 +50,7 @@ where
                     }) {
                         let (mut found, _) = disclosures.swap_remove(pos);
                         match found.to_mut() {
-                            Salted::Claim(SaltedClaim { name, value, .. }) => {
+                            SaltedEntry::Claim(SaltedClaim { name, value, .. }) => {
                                 if value.is_map() || value.is_array() {
                                     walk_payload(hasher.clone(), value, disclosures)?;
                                 }
@@ -60,8 +60,8 @@ where
                                 }
                                 mapping.push((key, core::mem::replace(value, Value::Null)))
                             }
-                            Salted::Decoy(_) => {} // nothing to do, validity of hash already checked
-                            Salted::Element(_) => return Err(SdCwtVerifierError::MalformedSdCwt("'redacted_claim_keys' must not contain redacted elements")),
+                            SaltedEntry::Decoy(_) => {} // nothing to do, validity of hash already checked
+                            SaltedEntry::Element(_) => return Err(SdCwtVerifierError::MalformedSdCwt("'redacted_claim_keys' must not contain redacted elements")),
                         }
                     }
                 }
@@ -83,7 +83,7 @@ where
                     match digest {
                         Some(digest) => **digest == *redacted_element,
                         entry => {
-                            let Salted::Element(sc) = salted.as_ref() else { return false };
+                            let SaltedEntry::Element(sc) = salted.as_ref() else { return false };
                             let Ok(cbor_bytes) = sc.to_cbor_bytes() else { return false };
 
                             // box_clone clones the hasher and his state.
@@ -98,14 +98,14 @@ where
                 }) {
                     let (mut found, _) = disclosures.swap_remove(pos);
                     match found.to_mut() {
-                        Salted::Element(SaltedElement { value, .. }) => {
+                        SaltedEntry::Element(SaltedElement { value, .. }) => {
                             if value.is_map() || value.is_array() {
                                 walk_payload(hasher.clone(), value, disclosures)?;
                             }
                             *element = core::mem::replace(value, Value::Null);
                         }
-                        Salted::Decoy(_) => {} // nothing to do, validity of hash already checked
-                        Salted::Claim(_) => return Err(SdCwtVerifierError::MalformedSdCwt("a array must not contain a redacted claim key")),
+                        SaltedEntry::Decoy(_) => {} // nothing to do, validity of hash already checked
+                        SaltedEntry::Claim(_) => return Err(SdCwtVerifierError::MalformedSdCwt("a array must not contain a redacted claim key")),
                     }
                 }
             }
