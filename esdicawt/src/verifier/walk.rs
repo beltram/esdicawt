@@ -1,10 +1,12 @@
-use crate::{SdCwtVerifierError, SdCwtVerifierResult};
-use ciborium::Value;
-use esdicawt_spec::{
-    CwtAny,
-    blinded_claims::{SaltedArrayToVerify, SaltedClaim, SaltedElement, SaltedEntry},
-    redacted_claims::{RedactedClaimElement, RedactedClaimKeys},
+use crate::{
+    SdCwtVerifierError, SdCwtVerifierResult,
+    spec::{
+        CwtAny,
+        blinded_claims::{SaltedArrayToVerify, SaltedClaim, SaltedElement, SaltedEntry},
+        redacted_claims::{RedactedClaimElement, RedactedClaimKeys},
+    },
 };
+use ciborium::Value;
 use std::rc::Rc;
 
 // wrapping "_walk" is required for fallible recursion
@@ -22,31 +24,15 @@ where
 {
     match payload {
         Value::Map(mapping) => {
-            let pos = mapping.iter().position(|(k, _)| match k {
-                Value::Simple(i) => *i == RedactedClaimKeys::CWT_LABEL,
-                _ => false,
-            });
+            let pos = mapping.iter().position(|(k, _)| matches!(k, Value::Simple(RedactedClaimKeys::CWT_LABEL)));
 
             if let Some(pos) = pos {
                 let (_, rcks) = mapping.swap_remove(pos);
                 let rcks = rcks.deserialized::<RedactedClaimKeys>()?;
-                for rck in rcks.iter() {
-                    if let Some(pos) = disclosures.iter_mut().position(|(salted, digest)| {
-                        match digest {
-                            Some(digest) => **digest == **rck,
-                            entry => {
-                                let SaltedEntry::Claim(sc) = salted.as_ref() else { return false };
-                                let Ok(cbor_bytes) = sc.to_cbor_bytes() else { return false };
-
-                                // box_clone clones the hasher and his state.
-                                // Otherwise, this code would not be thread safe as different threads could share the same hasher state.
-                                let mut h = hasher.box_clone();
-                                h.as_mut().update(&cbor_bytes[..]);
-                                let digest = h.finalize();
-                                entry.replace(digest.to_vec());
-                                *digest.as_ref() == **rck
-                            }
-                        }
+                for rck in rcks {
+                    if let Some(pos) = disclosures.iter().position(|(salted, redacted)| {
+                        redacted.or_init_detached_hasher(salted.as_ref(), &hasher);
+                        *redacted == rck
                     }) {
                         let (mut found, _) = disclosures.swap_remove(pos);
                         match found.to_mut() {
@@ -79,22 +65,9 @@ where
                     continue;
                 };
 
-                if let Some(pos) = disclosures.iter_mut().position(|(salted, digest)| {
-                    match digest {
-                        Some(digest) => **digest == *redacted_element,
-                        entry => {
-                            let SaltedEntry::Element(sc) = salted.as_ref() else { return false };
-                            let Ok(cbor_bytes) = sc.to_cbor_bytes() else { return false };
-
-                            // box_clone clones the hasher and his state.
-                            // Otherwise, this code would not be thread safe as different threads could share the same hasher state.
-                            let mut h = hasher.box_clone();
-                            h.as_mut().update(&cbor_bytes[..]);
-                            let digest = h.finalize();
-                            entry.replace(digest.to_vec());
-                            *digest.as_ref() == *redacted_element
-                        }
-                    }
+                if let Some(pos) = disclosures.iter().position(|(salted, redacted)| {
+                    redacted.or_init_detached_hasher(salted.as_ref(), &hasher);
+                    *redacted == redacted_element
                 }) {
                     let (mut found, _) = disclosures.swap_remove(pos);
                     match found.to_mut() {

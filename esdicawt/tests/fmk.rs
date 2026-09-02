@@ -1,5 +1,7 @@
-use esdicawt::{Holder, Issuer, Verifier};
-use esdicawt_spec::{CustomClaims, EsdicawtSpecError, NoClaims, SdHashAlg, Select, reexports::coset::iana::Algorithm};
+use esdicawt::{
+    Holder, Issuer, Verifier,
+    spec::{CustomClaims, EsdicawtSpecError, NoClaims, SdHashAlg, Select, reexports::coset::iana::Algorithm},
+};
 
 pub mod ed25519 {
     use super::*;

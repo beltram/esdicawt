@@ -1,7 +1,9 @@
-use crate::time::TimeVerification;
+use crate::{
+    spec::{REDACTED_CLAIM_ELEMENT_TAG, redacted_claims::RedactedClaimKeys},
+    time::TimeVerification,
+};
 use ciborium::Value;
-use esdicawt_spec::{REDACTED_CLAIM_ELEMENT_TAG, blinded_claims::SaltedEntry, redacted_claims::RedactedClaimKeys};
-use std::{borrow::Cow, collections::HashMap};
+use esdicawt_spec::blinded_claims::SaltedArrayWithDigests;
 
 #[derive(Default, Debug, Clone)]
 pub struct HolderValidationParams<'a> {
@@ -51,7 +53,7 @@ pub enum SdCwtHolderValidationError<CustomError: Send + Sync> {
 }
 
 // wrapping "_validate" is required for fallible recursion
-pub fn validate_disclosures<E>(payload: &Value, disclosures: &HashMap<Vec<u8>, Cow<SaltedEntry<Value>>>) -> Result<usize, SdCwtHolderValidationError<E>>
+pub fn validate_disclosures<E>(payload: &Value, disclosures: &SaltedArrayWithDigests<'_>) -> Result<usize, SdCwtHolderValidationError<E>>
 where
     E: core::error::Error + Send + Sync,
 {
@@ -59,7 +61,7 @@ where
 }
 
 #[tailcall::tailcall]
-fn _validate<E>(payload: &Value, disclosures: &HashMap<Vec<u8>, Cow<SaltedEntry<Value>>>) -> Result<usize, SdCwtHolderValidationError<E>>
+fn _validate<E>(payload: &Value, disclosures: &SaltedArrayWithDigests<'_>) -> Result<usize, SdCwtHolderValidationError<E>>
 where
     E: core::error::Error + Send + Sync,
 {
@@ -70,7 +72,8 @@ where
                 match entry {
                     (Value::Simple(RedactedClaimKeys::CWT_LABEL), rcks) => {
                         let rcks = rcks.deserialized::<RedactedClaimKeys>()?;
-                        for rck in rcks.iter() {
+                        count += rcks.len();
+                        for rck in rcks {
                             let Some(d) = disclosures.get(rck.as_ref()) else {
                                 return Err(SdCwtHolderValidationError::DisclosureNotFound);
                             };
@@ -78,7 +81,6 @@ where
                                 count += validate_disclosures(v, disclosures)?
                             }
                         }
-                        count += rcks.len();
                     }
                     (_, v) if v.is_map() || v.is_array() => count += validate_disclosures(v, disclosures)?,
                     _ => {}
@@ -115,17 +117,16 @@ mod tests {
         holder::Holder,
         issuer::Issuer,
         signature_verifier::SignatureVerifierError,
-        spec::{Salt, blinded_claims::Decoy},
+        spec::{
+            CwtAny, EsdicawtSpecError, NoClaims, Salt, SdCwtClaim,
+            blinded_claims::{Decoy, SaltedElement, SaltedEntry},
+            issuance::SdCwtIssuedTagged,
+            sd,
+        },
         test_utils::{Ed25519Holder, Ed25519Issuer},
     };
     use ciborium::{Value, cbor};
     use cose_key::keyset::CoseKeySet;
-    use esdicawt_spec::{
-        CwtAny, EsdicawtSpecError, NoClaims, SdCwtClaim,
-        blinded_claims::{SaltedElement, SaltedEntry},
-        issuance::SdCwtIssuedTagged,
-        sd,
-    };
 
     #[test]
     fn should_fail_when_std_claims_mismatch() {

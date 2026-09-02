@@ -28,7 +28,16 @@ impl<
             .into_iter()
             .find_map(|(k, v)| matches!(k, Value::Integer(i) if i == COSE_HEADER_KCWT.into()).then_some(v))
             .ok_or(EsdicawtSpecError::ImplementationError("Invalid SD-KBT, missing kcwt"))?;
-        Ok(kcwt.deserialized::<SdCwtIssuedTagged<Value, Hasher, IssuerProtectedClaims, IssuerUnprotectedClaims>>()?.0)
+
+        let sd_cwt = kcwt.deserialized::<SdCwtIssuedTagged<Value, Hasher, IssuerProtectedClaims, IssuerUnprotectedClaims>>();
+
+        #[cfg(feature = "backward")]
+        let sd_cwt = sd_cwt.or_else(|_| {
+            kcwt.deserialized::<crate::key_binding::InlinedCbor<SdCwtIssuedTagged<Value, Hasher, IssuerProtectedClaims, IssuerUnprotectedClaims>>>()?
+                .try_into_value()
+        });
+
+        Ok(sd_cwt?.0)
     }
 
     /// Get the SD-CWT wrapped by this SD-KBT

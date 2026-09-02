@@ -2,14 +2,16 @@ pub mod error;
 pub mod params;
 mod redaction;
 
-use crate::issuer::{error::SdCwtIssuerError, params::IssuerParams, redaction::redact};
+use crate::{
+    issuer::{error::SdCwtIssuerError, params::IssuerParams, redaction::redact},
+    spec::{
+        COSE_HEADER_SD_ALG, COSE_HEADER_SD_CLAIMS, CWT_CLAIM_AUDIENCE, CWT_CLAIM_CNONCE, CWT_CLAIM_CTI, CWT_CLAIM_EXPIRES_AT, CWT_CLAIM_ISSUED_AT, CWT_CLAIM_ISSUER,
+        CWT_CLAIM_KEY_CONFIRMATION, CWT_CLAIM_NOT_BEFORE, CWT_CLAIM_SUBJECT, CWT_MEDIA_TYPE, CustomClaims, CwtAny, MEDIA_TYPE_SD_CWT, SdHashAlg, Select,
+        issuance::SdCwtIssuedTagged, reexports::coset,
+    },
+};
 use ciborium::Value;
 use coset::{AsCborValue as _, TaggedCborSerializable as _};
-use esdicawt_spec::{
-    COSE_HEADER_SD_ALG, COSE_HEADER_SD_CLAIMS, CWT_CLAIM_AUDIENCE, CWT_CLAIM_CNONCE, CWT_CLAIM_CTI, CWT_CLAIM_EXPIRES_AT, CWT_CLAIM_ISSUED_AT, CWT_CLAIM_ISSUER,
-    CWT_CLAIM_KEY_CONFIRMATION, CWT_CLAIM_NOT_BEFORE, CWT_CLAIM_SUBJECT, CWT_MEDIA_TYPE, CustomClaims, CwtAny, MEDIA_TYPE_SD_CWT, SdHashAlg, Select, issuance::SdCwtIssuedTagged,
-    reexports::coset,
-};
 use signature::{Keypair, SignatureEncoding, Signer};
 
 pub trait Issuer {
@@ -195,21 +197,20 @@ pub trait Issuer {
 #[cfg(test)]
 mod tests {
     use super::{claims::CustomTokenClaims, test_utils::Ed25519Issuer};
-    use crate::issuer::claims::FullClaims;
-    use crate::lookup::TokenQuery;
-    use crate::read::SdCwtRead;
     use crate::{
         CwtStdLabel, Issuer, IssuerParams, StatusParams, TimeArg, elapsed_since_epoch,
+        issuer::claims::FullClaims,
+        lookup::TokenQuery,
+        read::SdCwtRead,
         spec::{
             CwtAny, NoClaims, SdCwtClaim, Select, SelectExt,
             blinded_claims::{SaltedClaim, SaltedElement, SaltedEntry},
             issuance::SdCwtIssuedTagged,
-            redacted_claims::RedactedClaimKeys,
+            redacted_claims::{RedactedClaimKeys, ToRedacted},
             reexports::coset::{CoseSign1, TaggedCborSerializable},
         },
     };
     use ciborium::{Value, cbor};
-    use digest::Digest as _;
     use std::collections::HashMap;
 
     wasm_bindgen_test::wasm_bindgen_test_configure!(run_in_browser);
@@ -232,7 +233,7 @@ mod tests {
         let payload = payload.to_value().unwrap();
         let rck = payload.redacted_claim_keys.as_ref().unwrap();
         assert_eq!(rck.len(), 1);
-        let rck_name = rck.first().unwrap();
+        let rck_name = rck.0.first().unwrap();
 
         let payload = sd_cwt.0.disclosures_mut().unwrap().iter().collect::<Result<Vec<_>, _>>().unwrap();
         assert_eq!(payload.len(), 1);
@@ -244,7 +245,7 @@ mod tests {
         assert_eq!(value, &cbor!("Alice Smith").unwrap());
 
         // verify digest of disclosure in 'redacted_key_claims'
-        let digest = sha2::Sha256::digest(d0.to_cbor_bytes().unwrap()).to_vec();
+        let digest = d0.to_redacted::<sha2::Sha256>().unwrap().to_vec();
         assert_eq!(digest, rck_name.to_vec());
     }
 
@@ -498,8 +499,8 @@ mod tests {
 #[cfg(any(test, feature = "test-utils"))]
 #[allow(unused)]
 pub mod claims {
+    use crate::spec::{CwtAny, Redact, Select, SelectExt, sd};
     use ciborium::Value;
-    use esdicawt_spec::{CwtAny, Redact, Select, SelectExt, sd};
     use std::collections::HashMap;
 
     #[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
@@ -531,7 +532,7 @@ pub mod claims {
 
             let mut model = Self::default();
             for (k, v) in value.into_map().unwrap() {
-                match (k, v) {
+                match (k.clone(), v.clone()) {
                     (Value::Text(label), Value::Text(name)) if &label == "name" => {
                         model.name.replace(name);
                     }
@@ -550,7 +551,7 @@ pub mod claims {
                             .map(|(k, v)| (k.into_text().unwrap(), v.into_text().unwrap()))
                             .collect();
                     }
-                    _ => unreachable!(),
+                    _ => panic!("unreachable {k:?} => {v:?}"),
                 }
             }
             Ok(model)
@@ -606,7 +607,7 @@ pub mod claims {
 #[cfg(feature = "test-utils")]
 pub mod test_utils {
     use super::*;
-    use esdicawt_spec::{EsdicawtSpecError, NoClaims, Select};
+    use crate::spec::{EsdicawtSpecError, NoClaims, Select};
     use status_list::issuer::StatusListIssuer;
 
     pub struct Ed25519Issuer<T: Select> {

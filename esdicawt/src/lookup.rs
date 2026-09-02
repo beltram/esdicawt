@@ -4,16 +4,19 @@ mod blanket;
 mod model;
 
 use crate::{
-    spec::{CwtAny, EsdicawtSpecResult, REDACTED_CLAIM_ELEMENT_TAG, blinded_claims::SaltedEntry, redacted_claims::RedactedClaimKeys},
+    spec::{
+        CwtAny, EsdicawtSpecError, EsdicawtSpecResult, REDACTED_CLAIM_ELEMENT_TAG,
+        blinded_claims::{SaltedArrayToVerify, SaltedEntry},
+        redacted_claims::RedactedClaimKeys,
+    },
     verifier::walk::walk_payload,
 };
 use ciborium::Value;
-use esdicawt_spec::{EsdicawtSpecError, blinded_claims::SaltedArrayToVerify};
 pub use model::{Query, QueryElement};
-use std::{ops::Deref, rc::Rc};
+use std::rc::Rc;
 
 pub trait TokenQuery {
-    fn query(&mut self, query: Query) -> EsdicawtSpecResult<Option<Value>>;
+    fn query(&self, query: Query) -> EsdicawtSpecResult<Option<Value>>;
 }
 
 /// Allows reading claims in a SD-CWT even when they are redacted
@@ -34,9 +37,9 @@ where
 }
 
 #[tailcall::tailcall]
-fn query_inner<Hasher>(salted_array: &mut SaltedArrayToVerify, payload: &mut Value, mut query: Vec<QueryElement>) -> EsdicawtSpecResult<Option<Value>>
+fn query_inner<H>(salted_array: &mut SaltedArrayToVerify, payload: &mut Value, mut query: Vec<QueryElement>) -> EsdicawtSpecResult<Option<Value>>
 where
-    Hasher: digest::Digest + digest::FixedOutputReset + Clone + 'static,
+    H: digest::Digest + digest::FixedOutputReset + Clone + 'static,
 {
     let mut value = match query.pop() {
         Some(QueryElement::ClaimName(claim_name)) => {
@@ -49,29 +52,23 @@ where
                 None => {
                     // if not in the payload, we will look in the salted array
                     const RCKS_KEY: Value = Value::Simple(RedactedClaimKeys::CWT_LABEL);
-                    let Some(rcks) = map.iter().find_map(|(k, v)| (k == &RCKS_KEY).then_some(v)).and_then(Value::as_array) else {
+                    let Some(rcks) = map
+                        .iter()
+                        .find_map(|(k, v)| (k == &RCKS_KEY).then_some(v))
+                        .map(|v| v.deserialized::<RedactedClaimKeys>())
+                        .transpose()?
+                    else {
                         return Ok(None);
                     };
 
-                    let Some(pos) = salted_array.iter_mut().position(|(salted, digest)| {
+                    let Some(pos) = salted_array.iter().position(|(salted, redacted)| {
                         if let SaltedEntry::Claim(sc) = salted.as_ref()
                             && sc.name == claim_name
                         {
                             // if we found an element with a matching claim name, check that it is present in the payload's
                             // redacted claim keys list
-                            let digest: Value = match digest {
-                                Some(digest) => digest.as_slice().into(),
-                                entry => {
-                                    let Ok(cbor_bytes) = sc.to_cbor_bytes() else {
-                                        // this salted cannot be hashed, ignore it
-                                        return false;
-                                    };
-                                    let digest = Hasher::digest(cbor_bytes);
-                                    entry.replace(digest.to_vec());
-                                    digest.deref().into()
-                                }
-                            };
-                            return rcks.contains(&digest);
+                            redacted.or_init::<H>(sc);
+                            return rcks.contains_redacted(redacted);
                         }
                         false
                     }) else {
@@ -90,21 +87,10 @@ where
             let array = payload.as_array().ok_or(EsdicawtSpecError::LookupError("Query index not in an array"))?;
             match array.get(index) {
                 Some(Value::Tag(REDACTED_CLAIM_ELEMENT_TAG, value)) => {
-                    let Some(pos) = salted_array.iter_mut().position(|(salted, digest)| {
-                        if let SaltedEntry::Element(sc) = salted.as_ref() {
-                            let digest: Value = match digest {
-                                Some(digest) => digest.as_slice().into(),
-                                entry => {
-                                    let Ok(cbor_bytes) = sc.to_cbor_bytes() else {
-                                        // this salted cannot be hashed, ignore it
-                                        return false;
-                                    };
-                                    let digest = Hasher::digest(cbor_bytes);
-                                    entry.replace(digest.to_vec());
-                                    digest.deref().into()
-                                }
-                            };
-                            return **value == digest;
+                    let Some(pos) = salted_array.iter().position(|(salted, redacted)| {
+                        if let SaltedEntry::Element(se) = salted.as_ref() {
+                            redacted.or_init::<H>(se);
+                            return value.as_bytes().map(|v| v.as_slice() == *redacted).unwrap_or_default();
                         }
                         false
                     }) else {
@@ -124,13 +110,12 @@ where
         }
         _ => return Ok(None),
     };
-
     match &query[..] {
         [] => {
-            walk_payload::<EsdicawtSpecError>(Rc::new(Hasher::new()), &mut value, salted_array).unwrap();
+            walk_payload::<EsdicawtSpecError>(Rc::new(H::new()), &mut value, salted_array).unwrap();
             Ok(Some(value))
         }
-        _ => query_inner::<Hasher>(salted_array, &mut value, query),
+        _ => query_inner::<H>(salted_array, &mut value, query),
     }
 }
 
@@ -139,11 +124,11 @@ mod tests {
     use super::*;
     use crate::{
         Holder, HolderParams, Issuer, IssuerParams, Presentation, StatusParams, Verifier,
+        spec::{CustomClaims, NoClaims, SdCwtClaim, Select, SelectExt, issuance::SdCwtIssuedTagged, key_binding::KbtCwtTagged, sd, verified::KbtCwtVerified},
         test_utils::{Ed25519Holder, Ed25519Issuer},
     };
     use ciborium::cbor;
     use cose_key::keyset::CoseKeySet;
-    use esdicawt_spec::{CustomClaims, NoClaims, SdCwtClaim, Select, SelectExt, issuance::SdCwtIssuedTagged, key_binding::KbtCwtTagged, sd, verified::KbtCwtVerified};
 
     #[test]
     fn can_query_top_level_claim() {
@@ -202,7 +187,7 @@ mod tests {
         let payload = payload.unwrap().select_none().unwrap();
         let (mut sd_cwt, holder_signing_key, issuer_verifying_key) = new_sd_cwt(payload);
         let mut sd_kbt = present_sd_kbt::<Value>(&sd_cwt.to_cbor_bytes().unwrap()[..], holder_signing_key, issuer_verifying_key);
-        let mut sd_kbt_verified = verify::<Value>(&sd_kbt.to_cbor_bytes().unwrap(), issuer_verifying_key);
+        let sd_kbt_verified = verify::<Value>(&sd_kbt.to_cbor_bytes().unwrap(), issuer_verifying_key);
 
         assert_eq!(sd_cwt.query(query.to_vec().into()).unwrap(), expected.clone());
         assert_eq!(sd_kbt.query(query.to_vec().into()).unwrap(), expected.clone());
@@ -310,5 +295,72 @@ mod tests {
         verifier
             .verify_sd_kbt(sd_kbt, Default::default(), None, &CoseKeySet::builder().with(&issuer_verifying_key).unwrap().build())
             .unwrap()
+    }
+}
+
+#[cfg(test)]
+mod backward {
+    use super::*;
+    use crate::{
+        snapshots::{SdCwtSnapshots, SdKbtSnapshots},
+        spec::key_binding::KbtCwtTagged,
+        verifier::claims::CustomTokenClaims,
+    };
+    use esdicawt_spec::issuance::SdCwtIssuedTagged;
+    use strum::IntoEnumIterator as _;
+
+    #[test]
+    fn should_work_with_snapshots() {
+        for snapshot in SdKbtSnapshots::iter() {
+            let sd_kbt = KbtCwtTagged::<CustomTokenClaims, sha2::Sha256>::from_cbor_bytes(&snapshot.sd_kbt()).unwrap();
+            match snapshot {
+                #[cfg(feature = "backward")]
+                SdKbtSnapshots::FullDraft08 => sd_kbt_queries(&sd_kbt),
+                SdKbtSnapshots::Full => sd_kbt_queries(&sd_kbt),
+                _ => Ok(()),
+            }
+            .inspect_err(|err: &anyhow::Error| panic!("'{snapshot:?}' failed because: {err:?}"))
+            .unwrap();
+        }
+        for snapshot in SdCwtSnapshots::iter() {
+            let sd_cwt = SdCwtIssuedTagged::<CustomTokenClaims, sha2::Sha256>::from_cbor_bytes(&snapshot.sd_cwt()).unwrap();
+            match snapshot {
+                #[cfg(feature = "backward")]
+                SdCwtSnapshots::FullDraft08 => sd_cwt_queries(&sd_cwt),
+                SdCwtSnapshots::Full => sd_cwt_queries(&sd_cwt),
+                _ => Ok(()),
+            }
+            .inspect_err(|err: &anyhow::Error| panic!("'{snapshot:?}' failed because: {err:?}"))
+            .unwrap();
+        }
+    }
+
+    fn sd_kbt_queries(cwt: &impl TokenQuery) -> anyhow::Result<()> {
+        assert_eq!(cwt.query(vec!["name".into()].into())?.unwrap(), "Alice Smith".into());
+        assert_eq!(cwt.query(vec!["age".into()].into())?.unwrap(), 42.into());
+        assert_eq!(
+            cwt.query(vec!["array".into()].into())?.unwrap(),
+            vec![Value::Text("apple".into()), Value::Text("orange".into())].into()
+        );
+        assert_eq!(cwt.query(vec!["array".into(), 0usize.into()].into())?.unwrap(), "apple".into());
+        assert_eq!(cwt.query(vec!["array".into(), 1usize.into()].into())?.unwrap(), "orange".into());
+        assert_eq!(cwt.query(vec!["map".into()].into())?.unwrap(), vec![("a".into(), "b".into())].into());
+        assert_eq!(cwt.query(vec!["map".into(), "a".into()].into())?.unwrap(), "b".into());
+        Ok(())
+    }
+
+    fn sd_cwt_queries(cwt: &impl TokenQuery) -> anyhow::Result<()> {
+        assert_eq!(cwt.query(vec!["name".into()].into())?.unwrap(), "Alice Smith".into());
+        assert_eq!(cwt.query(vec!["age".into()].into())?.unwrap(), 42.into());
+        assert_eq!(
+            cwt.query(vec!["numbers".into()].into())?.unwrap(),
+            vec![Value::Integer(0.into()), Value::Integer(1.into()), Value::Integer(2.into())].into()
+        );
+        assert_eq!(cwt.query(vec!["numbers".into(), 0usize.into()].into())?.unwrap(), 0.into());
+        assert_eq!(cwt.query(vec!["numbers".into(), 1usize.into()].into())?.unwrap(), 1.into());
+        assert_eq!(cwt.query(vec!["numbers".into(), 2usize.into()].into())?.unwrap(), 2.into());
+        assert_eq!(cwt.query(vec!["inner".into()].into())?.unwrap(), vec![("a".into(), "b".into())].into());
+        assert_eq!(cwt.query(vec!["inner".into(), "a".into()].into())?.unwrap(), "b".into());
+        Ok(())
     }
 }

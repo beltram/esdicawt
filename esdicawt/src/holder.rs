@@ -151,14 +151,18 @@ pub trait Holder {
         // validate disclosure
         let disclosures = sd_cwt.0.disclosures();
         if let Some((raw_payload, disclosures)) = cose_sign1_sd_cwt.payload.as_deref().map(Value::from_cbor_bytes).transpose()?.zip(disclosures) {
-            let actual_nb_disclosures = disclosures.digested::<Self::Hasher>()?;
+            let actual_disclosures = disclosures.digested::<Self::Hasher>()?;
+            let expected_nb_disclosures = validate_disclosures(&raw_payload, &actual_disclosures)?;
 
-            let expected_nb_disclosures = validate_disclosures(&raw_payload, &actual_nb_disclosures)?;
+            #[cfg(not(feature = "backward"))]
+            let actual_nb_disclosures = actual_disclosures.len();
+            #[cfg(feature = "backward")]
+            let actual_nb_disclosures = actual_disclosures.len() / 2;
 
-            if expected_nb_disclosures != actual_nb_disclosures.len() {
+            if expected_nb_disclosures != actual_nb_disclosures {
                 return Err(SdCwtHolderError::ValidationError(SdCwtHolderValidationError::OrphanDisclosure {
                     expected: expected_nb_disclosures,
-                    actual: actual_nb_disclosures.len(),
+                    actual: actual_nb_disclosures,
                 }));
             }
         } else if disclosures.map(|d| !d.is_empty()).unwrap_or_default() {
@@ -282,18 +286,15 @@ impl<PayloadClaims: Select, Hasher: digest::Digest + Clone, ProtectedClaims: Cus
 #[cfg(test)]
 mod tests {
     use super::{claims::CustomTokenClaims, test_utils::Ed25519Holder, *};
-    use crate::lookup::TokenQuery;
     use crate::{
         CwtStdLabel, Issuer, IssuerParams, Presentation, StatusParams, TimeArg,
         holder::{accessor::ClaimSetExt, params::CborPath},
         issuer::test_utils::Ed25519Issuer,
+        lookup::TokenQuery,
+        spec::{NoClaims, SdCwtClaim, blinded_claims::SaltedClaim, blinded_claims::SaltedEntry},
     };
     use ciborium::cbor;
     use cose_key::keyset::CoseKeySet;
-    use esdicawt_spec::{
-        NoClaims, SdCwtClaim,
-        blinded_claims::{SaltedClaim, SaltedEntry},
-    };
     use std::collections::HashMap;
 
     wasm_bindgen_test::wasm_bindgen_test_configure!(run_in_browser);
@@ -333,7 +334,7 @@ mod tests {
                 uri: "https://example.com/statuslists/1".parse().unwrap(),
             },
         };
-        let mut sd_cwt = issuer.issue_cwt(&mut rand::thread_rng(), issue_params).unwrap();
+        let sd_cwt = issuer.issue_cwt(&mut rand::thread_rng(), issue_params).unwrap();
 
         assert_eq!(sd_cwt.query(vec!["name".into()].into()).unwrap().unwrap(), cbor!("Alice Smith").unwrap());
         assert_eq!(sd_cwt.query(vec!["age".into()].into()).unwrap().unwrap(), cbor!(42).unwrap());
@@ -483,9 +484,8 @@ mod tests {
 
 #[cfg(test)]
 pub mod claims {
+    use crate::spec::{CwtAny, Redact, Select, SelectExt};
     use ciborium::Value;
-    use esdicawt_spec::{CwtAny, Select};
-    use esdicawt_spec::{Redact, SelectExt};
     use std::collections::HashMap;
 
     #[derive(Default, Debug, Clone, PartialEq, serde::Serialize)]
@@ -606,7 +606,7 @@ pub mod test_utils {
 mod snapshot {
     use super::*;
     use crate::{
-        Issuer, Presentation,
+        Issuer, Presentation, TimeVerification,
         holder::claims::{CustomTokenClaims, CustomTokenClaimsAllRedacted},
         issuer::snapshot::issuer_params,
         test_utils::{Ed25519Holder, Ed25519Issuer},
@@ -646,7 +646,7 @@ mod snapshot {
         assert_snapshot!("sd-kbt-none-ed25519.txt", hex::encode(&sd_kbt));
     }
 
-    fn holder_params(presentation: Presentation) -> HolderParams<'static> {
+    pub(super) fn holder_params(presentation: Presentation) -> HolderParams<'static> {
         HolderParams {
             presentation,
             audience: Default::default(),
@@ -657,8 +657,57 @@ mod snapshot {
             extra_kbt_protected: None,
             extra_kbt_unprotected: None,
             artificial_time: Some(core::time::Duration::from_secs(4242)),
-            time_verification: Default::default(),
+            time_verification: TimeVerification {
+                verify_exp: false,
+                verify_iat: false,
+                verify_nbf: false,
+            },
             extra_kbt_payload: None,
         }
+    }
+}
+
+#[cfg(test)]
+mod backward {
+    use super::*;
+    use crate::{
+        Presentation,
+        holder::snapshot::holder_params,
+        issuer::claims::{FullClaims, FullClaimsAllRedacted, FullClaimsNoRedaction},
+        snapshots::SdCwtSnapshots,
+        test_utils::Ed25519Holder,
+    };
+    use cose_key::keyset::CoseKeySet;
+    use strum::IntoEnumIterator as _;
+
+    #[test]
+    fn should_work_with_snapshot_sd_cwt() {
+        for snapshot in SdCwtSnapshots::iter() {
+            match snapshot {
+                #[cfg(feature = "backward")]
+                SdCwtSnapshots::FullDraft08 | SdCwtSnapshots::EmptyDraft08 => sd_kbt_presentation::<FullClaims>(&snapshot.sd_cwt()),
+                SdCwtSnapshots::Full | SdCwtSnapshots::Empty => sd_kbt_presentation::<FullClaims>(&snapshot.sd_cwt()),
+                #[cfg(feature = "backward")]
+                SdCwtSnapshots::AllRedactedDraft08 => sd_kbt_presentation::<FullClaimsAllRedacted>(&snapshot.sd_cwt()),
+                SdCwtSnapshots::AllRedacted => sd_kbt_presentation::<FullClaimsAllRedacted>(&snapshot.sd_cwt()),
+                #[cfg(feature = "backward")]
+                SdCwtSnapshots::NoneRedactedDraft08 => sd_kbt_presentation::<FullClaimsNoRedaction>(&snapshot.sd_cwt()),
+                SdCwtSnapshots::NoneRedacted => sd_kbt_presentation::<FullClaimsNoRedaction>(&snapshot.sd_cwt()),
+            }
+            .inspect_err(|err| panic!("'{snapshot:?}' failed because: {err:?}"))
+            .unwrap();
+        }
+    }
+
+    fn sd_kbt_presentation<T: Select>(sd_cwt: &[u8]) -> anyhow::Result<()> {
+        let mut rng = dernged::Rng::default();
+        let issuer_signing_key = ed25519_dalek::SigningKey::generate(&mut rng);
+        let cks = CoseKeySet::builder().with(&issuer_signing_key.verifying_key())?.build();
+        let holder_signing_key = ed25519_dalek::SigningKey::generate(&mut rng);
+        let holder = Ed25519Holder::<T, NoClaims>::new(holder_signing_key);
+        let sd_cwt_verified = holder.verify_sd_cwt(sd_cwt, Default::default(), &cks)?;
+        let params = holder_params(Presentation::Full);
+        holder.new_presentation_raw(sd_cwt_verified, params)?;
+        Ok(())
     }
 }

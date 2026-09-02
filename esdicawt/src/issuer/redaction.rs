@@ -1,10 +1,12 @@
-use crate::SdCwtIssuerError;
-use ciborium::Value;
-use esdicawt_spec::{
-    CwtAny, Salt, SdCwtClaim, TO_BE_REDACTED_TAG,
-    blinded_claims::{SaltedArray, SaltedClaimRef, SaltedElementRef},
-    redacted_claims::{RedactedClaimElement, RedactedClaimKeys},
+use crate::{
+    SdCwtIssuerError,
+    spec::{
+        CwtAny, Salt, SdCwtClaim, TO_BE_REDACTED_TAG,
+        blinded_claims::{SaltedArray, SaltedClaimRef, SaltedElementRef},
+        redacted_claims::{RedactedClaimElement, RedactedClaimKeys},
+    },
 };
+use ciborium::Value;
 use std::ops::DerefMut;
 
 /// Redacts the claims in this Value by recursively traversing, depth-first the ClaimSet
@@ -33,7 +35,7 @@ where
 }
 
 #[tailcall::tailcall]
-fn _redact<E, Hasher>(
+fn _redact<E, H>(
     mut value: &mut Value,
     csprng: &mut dyn rand_core::CryptoRngCore,
     sd_claims: &mut SaltedArray,
@@ -41,7 +43,7 @@ fn _redact<E, Hasher>(
 ) -> Result<(), SdCwtIssuerError<E>>
 where
     E: core::error::Error + Send + Sync,
-    Hasher: digest::Digest,
+    H: digest::Digest,
 {
     match value.deref_mut() {
         Value::Map(mapping) => {
@@ -52,7 +54,7 @@ where
                     redacted.push(i);
                 };
                 let label = Value::deserialized::<SdCwtClaim>(label)?;
-                redact_value::<E, Hasher>(claim_value, csprng, sd_claims, Some((&label, &mut rcks)))?;
+                redact_value::<E, H>(claim_value, csprng, sd_claims, Some((&label, &mut rcks)))?;
             }
 
             // removal indexes need to be sorted in decreasing order
@@ -70,34 +72,36 @@ where
             let parent_ctx = parent_ctx.map(|(l, rcks)| (l.untag(), rcks));
             if let Some((Some(parent_label), rcks)) = parent_ctx {
                 let salt = new_salt(csprng)?;
-                let salted_claim = sd_claims.push_ref_bytes(SaltedClaimRef { salt, name: &parent_label, value })?;
-                rcks.push(&Hasher::digest(salted_claim)[..]);
+                let salted_claim = SaltedClaimRef { salt, name: &parent_label, value };
+                rcks.push::<H>(&salted_claim)?;
+                sd_claims.push_ref_bytes(salted_claim)?;
             }
         }
         Value::Array(array) => {
             for element in array.iter_mut() {
-                redact_value::<E, Hasher>(element, csprng, sd_claims, None)?;
+                redact_value::<E, H>(element, csprng, sd_claims, None)?;
             }
 
             // if we are in a mapping then redact the array itself
             let parent_ctx = parent_ctx.map(|(l, rcks)| (l.untag(), rcks));
             if let Some((Some(parent_label), rcks)) = parent_ctx {
                 let salt = new_salt(csprng)?;
-                let disclosure = SaltedClaimRef { salt, name: &parent_label, value };
-                let salted_claim = sd_claims.push_ref_bytes(disclosure)?;
-                rcks.push(&Hasher::digest(salted_claim)[..]);
+                let salted_claim = SaltedClaimRef { salt, name: &parent_label, value };
+                rcks.push::<H>(&salted_claim)?;
+                sd_claims.push_ref_bytes(salted_claim)?;
             }
         }
         Value::Tag(tag, original_value) if *tag == TO_BE_REDACTED_TAG && (original_value.is_map() || original_value.is_array()) => {
             let in_array = parent_ctx.is_none();
 
-            redact_value::<E, Hasher>(original_value, csprng, sd_claims, parent_ctx)?;
+            redact_value::<E, H>(original_value, csprng, sd_claims, parent_ctx)?;
 
             // if we are in an array then redact in place
             if in_array {
                 let salt = new_salt(csprng)?;
-                let salted_element = sd_claims.push_ref_bytes(SaltedElementRef { salt, value: original_value })?;
-                let rce = RedactedClaimElement::from(&Hasher::digest(salted_element)[..]);
+                let salted_element = SaltedElementRef { salt, value: original_value };
+                let rce = RedactedClaimElement::from_salted_entry::<H>(&salted_element)?;
+                sd_claims.push_ref_bytes(salted_element)?;
                 *value = rce.to_cbor_value()?;
             }
         }
@@ -114,18 +118,18 @@ where
 
                     if let Some(parent_label) = parent_label.untag() {
                         let salt = new_salt(csprng)?;
-                        let disclosure = SaltedClaimRef { salt, name: &parent_label, value };
-                        let salted_claim = sd_claims.push_ref_bytes(disclosure)?;
-                        rcks.push(&Hasher::digest(salted_claim)[..]);
+                        let salted_claim = SaltedClaimRef { salt, name: &parent_label, value };
+                        rcks.push::<H>(&salted_claim)?;
+                        sd_claims.push_ref_bytes(salted_claim)?;
                     }
                 }
                 None => {
                     if let Value::Tag(TO_BE_REDACTED_TAG, original_value) = value {
                         // ... in an Array. So we insert it in the disclosures and replace the element with its digest in the array
                         let salt = new_salt(csprng)?;
-                        let disclosure = SaltedElementRef { salt, value: original_value };
-                        let salted_element = sd_claims.push_ref_bytes(disclosure)?;
-                        let rce = RedactedClaimElement::from(&Hasher::digest(salted_element)[..]);
+                        let salted_element = SaltedElementRef { salt, value: original_value };
+                        let rce = RedactedClaimElement::from_salted_entry::<H>(&salted_element)?;
+                        sd_claims.push_ref_bytes(salted_element)?;
                         *value = rce.to_cbor_value()?;
                     }
                 }
@@ -147,13 +151,13 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use ciborium::cbor;
-    use esdicawt_spec::{
+    use crate::spec::{
         REDACTED_CLAIM_ELEMENT_TAG,
-        blinded_claims::{SaltedClaim, SaltedElement},
+        blinded_claims::{SaltedClaim, SaltedElement, SaltedEntry},
+        redacted_claims::ToRedacted,
         sd,
     };
-    use sha2::Digest as _;
+    use ciborium::cbor;
 
     wasm_bindgen_test::wasm_bindgen_test_configure!(run_in_browser);
 
@@ -228,8 +232,10 @@ mod tests {
         // verify that the disclosure of mapping claim '1' contains a redacted array which itself
         // contains the redacted in place elements "a" and "b"
         let [a, b]: [RedactedClaimElement; 2] = d3.value.try_into().unwrap();
-        assert_eq!(a.to_cbor_value().unwrap(), element_digest(&d1));
-        assert_eq!(b.to_cbor_value().unwrap(), element_digest(&d2));
+
+        assert_eq!(a.to_cbor_value().unwrap(), element_digest(&SaltedEntry::<Value>::from_cbor_value(&d1).unwrap()));
+
+        assert_eq!(b.to_cbor_value().unwrap(), element_digest(&SaltedEntry::<Value>::from_cbor_value(&d2).unwrap()));
 
         let d1 = d1.deserialized::<SaltedElement<String>>().unwrap();
         assert_eq!(d1.value, "a".to_string());
@@ -258,12 +264,12 @@ mod tests {
         // verify that the disclosure of mapping claim '1' contains a redacted array which itself
         // contains a redacted array which itself contains the redacted in place elements "a" & "b"
         let [nested_array]: [RedactedClaimElement; 1] = d4.value.try_into().unwrap();
-        assert_eq!(nested_array.to_cbor_value().unwrap(), element_digest(&d3));
+        assert_eq!(nested_array.to_cbor_value().unwrap(), element_digest(&SaltedEntry::<Value>::from_cbor_value(&d3).unwrap()));
 
         let d3 = d3.deserialized::<SaltedElement<Vec<RedactedClaimElement>>>().unwrap();
         let [a, b]: [RedactedClaimElement; 2] = d3.value.try_into().unwrap();
-        assert_eq!(a.to_cbor_value().unwrap(), element_digest(&d1));
-        assert_eq!(b.to_cbor_value().unwrap(), element_digest(&d2));
+        assert_eq!(a.to_cbor_value().unwrap(), element_digest(&SaltedEntry::<Value>::from_cbor_value(&d1).unwrap()));
+        assert_eq!(b.to_cbor_value().unwrap(), element_digest(&SaltedEntry::<Value>::from_cbor_value(&d2).unwrap()));
 
         let d1 = d1.deserialized::<SaltedElement<String>>().unwrap();
         assert_eq!(d1.value, "a".to_string());
@@ -292,7 +298,7 @@ mod tests {
         let payload1 = d0.value;
         let rck1 = get_redacted_claim_keys::<1>(&payload1);
         assert!(!payload0.iter().any(|(k, _)| k == &cbor!(1).unwrap()));
-        assert!(rck_contains_digest(&rck1, &d1));
+        assert!(rck_contains_digest(&rck1, &SaltedEntry::<Value>::from_cbor_value(&d1).unwrap()));
 
         // --- disclosures ---
         let d1 = d1.deserialized::<SaltedClaim<String>>().unwrap();
@@ -308,7 +314,7 @@ mod tests {
 
         // --- depth 0 ---
         let rck0 = get_redacted_claim_keys::<1>(&payload);
-        assert!(rck_contains_digest(&rck0, &d0));
+        assert!(rck_contains_digest(&rck0, &SaltedEntry::<Value>::from_cbor_value(&d0).unwrap()));
 
         let payload0 = payload.as_map().unwrap();
         assert!(!payload0.iter().any(|(k, _)| k == &cbor!(0).unwrap()));
@@ -351,18 +357,13 @@ mod tests {
         (payload, disclosures)
     }
 
-    fn rck_contains_digest(rck: &[Value], disclosure: &impl CwtAny) -> bool {
-        let digest = &claim_digest(disclosure)[..];
-        rck.iter().map(|r| r.as_bytes().unwrap()).any(|r| r == digest)
+    fn rck_contains_digest(rck: &[Value], salted: &impl ToRedacted) -> bool {
+        let redacted = salted.to_redacted::<sha2::Sha256>().unwrap().to_vec();
+        rck.iter().map(|r| r.as_bytes().unwrap()).any(|r| r == &redacted)
     }
 
-    fn claim_digest(disclosure: &impl CwtAny) -> Vec<u8> {
-        let cbor = disclosure.to_cbor_bytes().unwrap();
-        sha2::Sha256::digest(cbor).to_vec()
-    }
-
-    fn element_digest(disclosure: &impl CwtAny) -> Value {
-        Value::Tag(REDACTED_CLAIM_ELEMENT_TAG, Box::new(Value::Bytes(claim_digest(disclosure))))
+    fn element_digest(salted: &impl ToRedacted) -> Value {
+        Value::Tag(REDACTED_CLAIM_ELEMENT_TAG, Value::Bytes(salted.to_redacted::<sha2::Sha256>().unwrap().to_vec()).into())
     }
 
     fn get_redacted_claim_keys<const N: usize>(payload: &Value) -> [Value; N] {
