@@ -1,5 +1,5 @@
+use crate::spec::SdCwtClaim;
 use ciborium::Value;
-use esdicawt_spec::SdCwtClaim;
 use serde::ser::SerializeTuple;
 
 #[derive(Debug, Clone, Hash, PartialEq, Eq, serde::Serialize, serde::Deserialize)]

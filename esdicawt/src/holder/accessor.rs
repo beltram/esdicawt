@@ -1,6 +1,9 @@
-use crate::{SdCwtVerifierError, SdCwtVerifierResult, verifier::walk::walk_payload};
+use crate::{
+    SdCwtVerifierError, SdCwtVerifierResult,
+    spec::{CWT_CLAIM_KEY_CONFIRMATION, CustomClaims, Select, issuance::SdInnerPayload, key_binding::KbtCwt},
+    verifier::walk::walk_payload,
+};
 use ciborium::{Value, value::Integer};
-use esdicawt_spec::{CWT_CLAIM_KEY_CONFIRMATION, CustomClaims, Select, issuance::SdInnerPayload, key_binding::KbtCwt};
 use std::{convert::Infallible, rc::Rc};
 
 pub trait ClaimSetExt {

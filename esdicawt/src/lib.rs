@@ -6,30 +6,29 @@ pub use {
     verifier::{VerifiedStatusListToken, VerifierWithStatus, params::StatusListVerifierParams},
 };
 
-pub use {
-    cose_key, esdicawt_spec as spec,
-    esdicawt_spec::reexports::coset,
-    holder::{
-        Holder, SdCwtVerified,
-        accessor::ClaimSetExt,
-        error::{SdCwtHolderError, SdCwtHolderResult},
-        params::{CborPath, HolderParams, Presentation},
-        validation::{HolderValidationParams, SdCwtHolderValidationError},
-    },
-    issuer::{
-        Issuer,
-        error::{SdCwtIssuerError, SdCwtIssuerResult},
-        params::IssuerParams,
-    },
-    lookup::*,
-    read::{EsdicawtReadError, EsdicawtReadResult, SdCwtRead},
-    signature::Keypair,
-    time::{CwtTimeError, TimeArg, TimeVerification},
-    verifier::{
-        Verifier,
-        error::{SdCwtVerifierError, SdCwtVerifierResult},
-        params::{ShallowVerifierParams, VerifierParams},
-    },
+pub use cose_key;
+pub use esdicawt_spec as spec;
+pub use esdicawt_spec::reexports::coset;
+pub use holder::{
+    Holder, SdCwtVerified,
+    accessor::ClaimSetExt,
+    error::{SdCwtHolderError, SdCwtHolderResult},
+    params::{CborPath, HolderParams, Presentation},
+    validation::{HolderValidationParams, SdCwtHolderValidationError},
+};
+pub use issuer::{
+    Issuer,
+    error::{SdCwtIssuerError, SdCwtIssuerResult},
+    params::IssuerParams,
+};
+pub use lookup::*;
+pub use read::{EsdicawtReadError, EsdicawtReadResult, SdCwtRead};
+pub use signature::Keypair;
+pub use time::{CwtTimeError, TimeArg, TimeVerification};
+pub use verifier::{
+    Verifier,
+    error::{SdCwtVerifierError, SdCwtVerifierResult},
+    params::{ShallowVerifierParams, VerifierParams},
 };
 
 pub(crate) mod any_digest;
@@ -38,6 +37,8 @@ mod issuer;
 mod lookup;
 mod read;
 mod signature_verifier;
+#[cfg(test)]
+pub mod snapshots;
 pub(crate) mod time;
 mod verifier;
 

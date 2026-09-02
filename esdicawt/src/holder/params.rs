@@ -1,6 +1,10 @@
-use crate::{SdCwtHolderResult, TimeVerification, holder::traverse::traverse_all_cbor_paths_in_disclosures, time::TimeArg};
+use crate::{
+    SdCwtHolderResult, TimeVerification,
+    holder::traverse::traverse_all_cbor_paths_in_disclosures,
+    spec::{CustomClaims, NoClaims, SdCwtClaim, blinded_claims::SaltedArray},
+    time::TimeArg,
+};
 use ciborium::Value;
-use esdicawt_spec::{CustomClaims, NoClaims, SdCwtClaim, blinded_claims::SaltedArray};
 
 #[derive(Debug)]
 pub struct HolderParams<'a, KbtPayloadClaims: CustomClaims = NoClaims, KbtProtectedClaims: CustomClaims = NoClaims, KbtUnprotectedClaims: CustomClaims = NoClaims> {

@@ -1,5 +1,5 @@
+use crate::spec::{EsdicawtSpecError, reexports::coset};
 use ciborium::Value;
-use esdicawt_spec::{EsdicawtSpecError, reexports::coset};
 
 pub type SdCwtIssuerResult<T, CustomError> = Result<T, SdCwtIssuerError<CustomError>>;
 

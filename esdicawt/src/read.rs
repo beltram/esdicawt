@@ -1,12 +1,15 @@
-use crate::{SdCwtVerified, lookup::TokenQuery};
+use crate::{
+    SdCwtVerified,
+    lookup::TokenQuery,
+    spec::{
+        CustomClaims, Select,
+        issuance::{SdCwtIssued, SdCwtIssuedTagged},
+        key_binding::{KbtCwt, KbtCwtTagged},
+        reexports::{coset, coset::iana::EnumI64},
+    },
+};
 use ciborium::Value;
 use coset::iana::CwtClaimName;
-use esdicawt_spec::{
-    CustomClaims, Select,
-    issuance::{SdCwtIssued, SdCwtIssuedTagged},
-    key_binding::{KbtCwt, KbtCwtTagged},
-    reexports::{coset, coset::iana::EnumI64},
-};
 use std::borrow::Cow;
 
 #[allow(dead_code)]

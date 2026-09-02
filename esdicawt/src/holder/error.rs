@@ -1,5 +1,8 @@
-use crate::{SdCwtHolderValidationError, signature_verifier::SignatureVerifierError};
-use esdicawt_spec::{EsdicawtSpecError, reexports::coset};
+use crate::{
+    SdCwtHolderValidationError,
+    signature_verifier::SignatureVerifierError,
+    spec::{EsdicawtSpecError, reexports::coset},
+};
 
 pub type SdCwtHolderResult<T, CustomError> = Result<T, SdCwtHolderError<CustomError>>;
 

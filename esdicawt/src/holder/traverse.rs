@@ -1,18 +1,22 @@
-use crate::{SdCwtHolderError, SdCwtHolderResult, holder::params::CborPath};
+use crate::{
+    SdCwtHolderError, SdCwtHolderResult,
+    holder::params::CborPath,
+    spec::{
+        CWT_LABEL_REDACTED_TAG, REDACTED_CLAIM_ELEMENT_TAG,
+        blinded_claims::{SaltedArrayWithDigests, SaltedClaim, SaltedElement, SaltedEntry},
+        redacted_claims::ToRedacted,
+    },
+};
 use ciborium::Value;
 use digest::Digest;
-use esdicawt_spec::{
-    CWT_LABEL_REDACTED_TAG, CwtAny, REDACTED_CLAIM_ELEMENT_TAG,
-    blinded_claims::{SaltedClaim, SaltedElement, SaltedEntry},
-};
-use std::{borrow::Cow, collections::HashMap};
+use std::borrow::Cow;
 
 type PathAndSalted = Vec<(Vec<CborPath>, SaltedEntry<Value>)>;
 type PathAndSaltedAndDigest = Vec<(Vec<CborPath>, SaltedEntry<Value>, Vec<u8>)>;
 
 /// Given disclosures, this method returns all the possible paths one can build from it
 // FIXME: this does not work for orphan disclosures, not anchored at the root of the payload
-pub fn traverse_all_cbor_paths_in_disclosures<Hasher: Digest, E>(hashed_disclosures: &HashMap<Vec<u8>, Cow<SaltedEntry<Value>>>) -> SdCwtHolderResult<PathAndSalted, E>
+pub fn traverse_all_cbor_paths_in_disclosures<Hasher: Digest, E>(hashed_disclosures: &SaltedArrayWithDigests<'_>) -> SdCwtHolderResult<PathAndSalted, E>
 where
     E: core::error::Error + Send + Sync,
 {
@@ -29,7 +33,7 @@ where
 fn __traverse<'a, Hasher: Digest, E>(
     salted_or_value: &'a SaltedOrValue<'a>,
     mut current: Vec<CborPath>,
-    disclosures: &HashMap<Vec<u8>, Cow<SaltedEntry<Value>>>,
+    disclosures: &SaltedArrayWithDigests<'_>,
     paths: &mut PathAndSaltedAndDigest,
 ) -> SdCwtHolderResult<(), E>
 where
@@ -37,7 +41,7 @@ where
 {
     match salted_or_value {
         SaltedOrValue::Salted(salted) => {
-            let digest = Hasher::digest(&salted.to_cbor_bytes()?).to_vec();
+            let digest = salted.to_redacted::<Hasher>()?.to_vec();
             let previous_depth = paths.iter().find_map(|(p, _, d)| (d == &digest).then_some(p.len()));
             let retract_previous = previous_depth.map(|prev| prev <= current.len()).unwrap_or_default();
             let insert = previous_depth.is_none() || previous_depth.map(|prev| current.len() >= prev).unwrap_or_default() || retract_previous;
@@ -61,7 +65,7 @@ where
                     let mut traverse_salted_collection = |index: usize, label: Option<&Value>, value: &Value| {
                         match (label, value) {
                             // rcks in a mapping
-                            (Some(Value::Simple(st)), Value::Array(hashes)) if *st == CWT_LABEL_REDACTED_TAG => {
+                            (Some(Value::Simple(CWT_LABEL_REDACTED_TAG)), Value::Array(hashes)) => {
                                 let hashes = hashes.iter().filter_map(|h| h.as_bytes()).collect::<Vec<_>>();
                                 for hash in hashes {
                                     if let Some(salted_child) = disclosures.get(hash) {
@@ -70,7 +74,7 @@ where
                                 }
                             }
                             // redacted in an array
-                            (None, Value::Tag(tag, value)) if *tag == REDACTED_CLAIM_ELEMENT_TAG => {
+                            (None, Value::Tag(REDACTED_CLAIM_ELEMENT_TAG, value)) => {
                                 let Some(hash) = value.as_bytes() else {
                                     return Err(SdCwtHolderError::<E>::ImplementationError("Invalid redacted array element"));
                                 };
@@ -149,7 +153,7 @@ where
         SaltedOrValue::Value(Value::Array(values)) => {
             for (index, value) in values.iter().enumerate() {
                 match value {
-                    Value::Tag(tag, hash) if *tag == REDACTED_CLAIM_ELEMENT_TAG => {
+                    Value::Tag(REDACTED_CLAIM_ELEMENT_TAG, hash) => {
                         let Some(hash) = hash.as_bytes() else {
                             return Err(SdCwtHolderError::<E>::ImplementationError("Invalid redacted array element"));
                         };
@@ -203,12 +207,14 @@ impl<'a> From<&'a Value> for SaltedOrValue<'a> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{salted, spec::blinded_claims::SaltedArray};
-    use ciborium::{Value, Value::Simple, cbor, tag::RequireExact};
-    use esdicawt_spec::{
-        Salt,
-        blinded_claims::{SaltedClaimRef, SaltedElementRef, SaltedRef},
+    use crate::{
+        salted,
+        spec::{
+            Salt,
+            blinded_claims::{SaltedArray, SaltedClaimRef, SaltedElementRef, SaltedEntryRef},
+        },
     };
+    use ciborium::{Value, Value::Simple, cbor, tag::RequireExact};
     use sha2::Sha256;
 
     #[test]
@@ -234,32 +240,32 @@ mod tests {
 
     #[test]
     fn mapping() {
-        let [map, a] = find_cbor_paths([
+        let paths = find_cbor_paths([
             salted!(obj => "map", cbor!({
                 "c" => "d",
                 Simple(59) => [salted!(digest => "a", cbor!(1))],
             })),
             salted!("a", 1),
         ]);
-        assert_eq!(map, vec![CborPath::Str("map".into())]);
-        assert_eq!(a, vec![CborPath::Str("map".into()), CborPath::Str("a".into())]);
+        assert!(paths.iter().any(|p| p == &[CborPath::Str("map".into())]));
+        assert!(paths.iter().any(|p| p == &[CborPath::Str("map".into()), CborPath::Str("a".into())]));
     }
 
     #[test]
     fn mapping_reversed_order() {
-        let [map, a] = find_cbor_paths([
+        let paths = find_cbor_paths([
             salted!("a", 1),
             salted!(obj => "map", cbor!({
                 Simple(59) => [salted!(digest => "a", cbor!(1))],
             })),
         ]);
-        assert_eq!(map, vec![CborPath::Str("map".into())]);
-        assert_eq!(a, vec![CborPath::Str("map".into()), CborPath::Str("a".into())]);
+        assert!(paths.iter().any(|p| p == &[CborPath::Str("map".into())]));
+        assert!(paths.iter().any(|p| p == &[CborPath::Str("map".into()), CborPath::Str("a".into())]));
     }
 
     #[test]
     fn mapping_many_claims() {
-        let [map, a, b] = find_cbor_paths([
+        let paths = find_cbor_paths([
             salted!(obj => "map", cbor!({
                 "c" => "d",
                 Simple(59) => [
@@ -270,14 +276,14 @@ mod tests {
             salted!("a", 1),
             salted!("b", 1),
         ]);
-        assert_eq!(map, vec![CborPath::Str("map".into())]);
-        assert_eq!(a, vec![CborPath::Str("map".into()), CborPath::Str("a".into())]);
-        assert_eq!(b, vec![CborPath::Str("map".into()), CborPath::Str("b".into())]);
+        assert!(paths.iter().any(|p| p == &[CborPath::Str("map".into())]));
+        assert!(paths.iter().any(|p| p == &[CborPath::Str("map".into()), CborPath::Str("a".into())]));
+        assert!(paths.iter().any(|p| p == &[CborPath::Str("map".into()), CborPath::Str("b".into())]));
     }
 
     #[test]
     fn mapping_nested_redacted_mapping() {
-        let [map1, map2, a] = find_cbor_paths([
+        let paths = find_cbor_paths([
             salted!(obj => "map1", cbor!({
                 "c" => "d",
                 Simple(59) => [salted!(digest => "map2", cbor!({Simple(59) => [salted!(digest => "a", cbor!(1))]}))],
@@ -287,14 +293,19 @@ mod tests {
             })),
             salted!("a", 1),
         ]);
-        assert_eq!(map1, vec![CborPath::Str("map1".into())]);
-        assert_eq!(map2, vec![CborPath::Str("map1".into()), CborPath::Str("map2".into())]);
-        assert_eq!(a, vec![CborPath::Str("map1".into()), CborPath::Str("map2".into()), CborPath::Str("a".into())]);
+
+        assert!(paths.iter().any(|p| p == &[CborPath::Str("map1".into())]));
+        assert!(paths.iter().any(|p| p == &[CborPath::Str("map1".into()), CborPath::Str("map2".into())]));
+        assert!(
+            paths
+                .iter()
+                .any(|p| p == &[CborPath::Str("map1".into()), CborPath::Str("map2".into()), CborPath::Str("a".into())])
+        );
     }
 
     #[test]
     fn mapping_nested_unredacted_mapping() {
-        let [map, a, b] = find_cbor_paths([
+        let paths = find_cbor_paths([
             salted!(obj => "map", cbor!({
                 "wrap1" => {
                     Simple(59) => [salted!(digest => "a", cbor!(1))]
@@ -306,14 +317,22 @@ mod tests {
             salted!("a", 1),
             salted!("b", 1),
         ]);
-        assert_eq!(map, vec![CborPath::Str("map".into())]);
-        assert_eq!(a, vec![CborPath::Str("map".into()), CborPath::Str("wrap1".into()), CborPath::Str("a".into())]);
-        assert_eq!(b, vec![CborPath::Str("map".into()), CborPath::Str("wrap2".into()), CborPath::Str("b".into())]);
+        assert!(paths.iter().any(|p| p == &[CborPath::Str("map".into())]));
+        assert!(
+            paths
+                .iter()
+                .any(|p| p == &[CborPath::Str("map".into()), CborPath::Str("wrap1".into()), CborPath::Str("a".into())])
+        );
+        assert!(
+            paths
+                .iter()
+                .any(|p| p == &[CborPath::Str("map".into()), CborPath::Str("wrap2".into()), CborPath::Str("b".into())])
+        );
     }
 
     #[test]
     fn mapping_nested_unredacted_nested_unredacted_mapping() {
-        let [map, a] = find_cbor_paths([
+        let paths = find_cbor_paths([
             salted!(obj => "map", cbor!({
                 "wrap1" => {
                     "wrap2" => {
@@ -323,21 +342,19 @@ mod tests {
             })),
             salted!("a", 1),
         ]);
-        assert_eq!(map, vec![CborPath::Str("map".into())]);
-        assert_eq!(
-            a,
-            vec![
+        assert!(paths.iter().any(|p| p == &[CborPath::Str("map".into())]));
+        assert!(paths.iter().any(|p| p
+            == &[
                 CborPath::Str("map".into()),
                 CborPath::Str("wrap1".into()),
                 CborPath::Str("wrap2".into()),
                 CborPath::Str("a".into())
-            ]
-        );
+            ]));
     }
 
     #[test]
     fn array() {
-        let [array, a, b] = find_cbor_paths([
+        let paths = find_cbor_paths([
             salted!(obj => "array", cbor!([
                 RequireExact::<_, 60>(salted!(digest => cbor!("a"))),
                 RequireExact::<_, 60>(salted!(digest => cbor!("b"))),
@@ -345,26 +362,26 @@ mod tests {
             salted!("a"),
             salted!("b"),
         ]);
-        assert_eq!(array, vec![CborPath::Str("array".into())]);
-        assert_eq!(a, vec![CborPath::Str("array".into()), CborPath::Index(0)]);
-        assert_eq!(b, vec![CborPath::Str("array".into()), CborPath::Index(1)]);
+        assert!(paths.iter().any(|p| p == &[CborPath::Str("array".into())]));
+        assert!(paths.iter().any(|p| p == &[CborPath::Str("array".into()), CborPath::Index(0)]));
+        assert!(paths.iter().any(|p| p == &[CborPath::Str("array".into()), CborPath::Index(1)]));
     }
 
     #[test]
     fn array_reverse_order() {
-        let [array, a] = find_cbor_paths([
+        let paths = find_cbor_paths([
             salted!("a"),
             salted!(obj => "array", cbor!([
                 RequireExact::<_, 60>(salted!(digest => cbor!("a"))),
             ])),
         ]);
-        assert_eq!(array, vec![CborPath::Str("array".into())]);
-        assert_eq!(a, vec![CborPath::Str("array".into()), CborPath::Index(0)]);
+        assert!(paths.iter().any(|p| p == &[CborPath::Str("array".into())]));
+        assert!(paths.iter().any(|p| p == &[CborPath::Str("array".into()), CborPath::Index(0)]));
     }
 
     #[test]
     fn array_many_elements() {
-        let [array, a, b] = find_cbor_paths([
+        let paths = find_cbor_paths([
             salted!(obj => "array", cbor!([
                 RequireExact::<_, 60>(salted!(digest => cbor!("a"))),
                 RequireExact::<_, 60>(salted!(digest => cbor!("b"))),
@@ -372,14 +389,14 @@ mod tests {
             salted!("a"),
             salted!("b"),
         ]);
-        assert_eq!(array, vec![CborPath::Str("array".into())]);
-        assert_eq!(a, vec![CborPath::Str("array".into()), CborPath::Index(0)]);
-        assert_eq!(b, vec![CborPath::Str("array".into()), CborPath::Index(1)]);
+        assert!(paths.iter().any(|p| p == &[CborPath::Str("array".into())]));
+        assert!(paths.iter().any(|p| p == &[CborPath::Str("array".into()), CborPath::Index(0)]));
+        assert!(paths.iter().any(|p| p == &[CborPath::Str("array".into()), CborPath::Index(1)]));
     }
 
     #[test]
     fn array_nested_redacted_array() {
-        let [array1, array2, a] = find_cbor_paths([
+        let paths = find_cbor_paths([
             salted!(obj => "array", cbor!([
                 RequireExact::<_, 60>(salted!(digest => cbor!([
                     RequireExact::<_, 60>(salted!(digest => cbor!("a")))
@@ -390,14 +407,14 @@ mod tests {
             ])),
             salted!("a"),
         ]);
-        assert_eq!(array1, vec![CborPath::Str("array".into())]);
-        assert_eq!(array2, vec![CborPath::Str("array".into()), CborPath::Index(0)]);
-        assert_eq!(a, vec![CborPath::Str("array".into()), CborPath::Index(0), CborPath::Index(0)]);
+        assert!(paths.iter().any(|p| p == &[CborPath::Str("array".into())]));
+        assert!(paths.iter().any(|p| p == &[CborPath::Str("array".into()), CborPath::Index(0)]));
+        assert!(paths.iter().any(|p| p == &[CborPath::Str("array".into()), CborPath::Index(0), CborPath::Index(0)]));
     }
 
     #[test]
     fn array_nested_unredacted_array() {
-        let [array, a, b, c] = find_cbor_paths([
+        let paths = find_cbor_paths([
             salted!(obj => "array", cbor!([
                 [
                     RequireExact::<_, 60>(salted!(digest => cbor!("a"))),
@@ -411,15 +428,15 @@ mod tests {
             salted!("b"),
             salted!("c"),
         ]);
-        assert_eq!(array, vec![CborPath::Str("array".into())]);
-        assert_eq!(a, vec![CborPath::Str("array".into()), CborPath::Index(0), CborPath::Index(0)]);
-        assert_eq!(b, vec![CborPath::Str("array".into()), CborPath::Index(0), CborPath::Index(1)]);
-        assert_eq!(c, vec![CborPath::Str("array".into()), CborPath::Index(1), CborPath::Index(0)]);
+        assert!(paths.iter().any(|p| p == &[CborPath::Str("array".into())]));
+        assert!(paths.iter().any(|p| p == &[CborPath::Str("array".into()), CborPath::Index(0), CborPath::Index(0)]));
+        assert!(paths.iter().any(|p| p == &[CborPath::Str("array".into()), CborPath::Index(0), CborPath::Index(1)]));
+        assert!(paths.iter().any(|p| p == &[CborPath::Str("array".into()), CborPath::Index(1), CborPath::Index(0)]));
     }
 
     #[test]
     fn array_nested_unredacted_nested_unredacted_array() {
-        let [array, a] = find_cbor_paths([
+        let paths = find_cbor_paths([
             salted!(obj => "array", cbor!([
                 [
                     [
@@ -429,13 +446,17 @@ mod tests {
             ])),
             salted!("a"),
         ]);
-        assert_eq!(array, vec![CborPath::Str("array".into())]);
-        assert_eq!(a, vec![CborPath::Str("array".into()), CborPath::Index(0), CborPath::Index(0), CborPath::Index(0)]);
+        assert!(paths.iter().any(|p| p == &[CborPath::Str("array".into())]));
+        assert!(
+            paths
+                .iter()
+                .any(|p| p == &[CborPath::Str("array".into()), CborPath::Index(0), CborPath::Index(0), CborPath::Index(0)])
+        );
     }
 
     #[test]
     fn array_nested_redacted_mapping() {
-        let [array, map, a] = find_cbor_paths([
+        let paths = find_cbor_paths([
             salted!(obj => "array", cbor!([
                 RequireExact::<_, 60>(salted!(digest => cbor!({
                     Simple(59) => [salted!(digest => "a", cbor!(1))]
@@ -446,14 +467,14 @@ mod tests {
             })),
             salted!("a", 1),
         ]);
-        assert_eq!(array, vec![CborPath::Str("array".into())]);
-        assert_eq!(map, vec![CborPath::Str("array".into()), CborPath::Index(0)]);
-        assert_eq!(a, vec![CborPath::Str("array".into()), CborPath::Index(0), CborPath::Str("a".into())]);
+        assert!(paths.iter().any(|p| p == &[CborPath::Str("array".into())]));
+        assert!(paths.iter().any(|p| p == &[CborPath::Str("array".into()), CborPath::Index(0)]));
+        assert!(paths.iter().any(|p| p == &[CborPath::Str("array".into()), CborPath::Index(0), CborPath::Str("a".into())]));
     }
 
     #[test]
     fn array_nested_unredacted_mapping() {
-        let [array, a] = find_cbor_paths([
+        let paths = find_cbor_paths([
             salted!(obj => "array", cbor!([
                 {
                     "c" => "d",
@@ -462,11 +483,11 @@ mod tests {
             ])),
             salted!("a", 1),
         ]);
-        assert_eq!(array, vec![CborPath::Str("array".into())]);
-        assert_eq!(a, vec![CborPath::Str("array".into()), CborPath::Index(0), CborPath::Str("a".into())]);
+        assert!(paths.iter().any(|p| p == &[CborPath::Str("array".into())]));
+        assert!(paths.iter().any(|p| p == &[CborPath::Str("array".into()), CborPath::Index(0), CborPath::Str("a".into())]));
     }
 
-    fn find_cbor_paths<const N: usize>(disclosures: [SaltedRef<Value>; N]) -> [Vec<CborPath>; N] {
+    fn find_cbor_paths<const N: usize>(disclosures: [SaltedEntryRef<Value>; N]) -> [Vec<CborPath>; N] {
         let mut d = SaltedArray::new();
         for s in disclosures {
             d.push_ref_bytes(s).unwrap();
@@ -483,7 +504,7 @@ mod tests {
     macro_rules! salted {
         // salted claim of a simple type
         ($name:literal, $value:expr) => {
-            SaltedRef::Claim(SaltedClaimRef {
+            SaltedEntryRef::Claim(SaltedClaimRef {
                 salt: Salt::empty(),
                 name: &$name.clone().into(),
                 value: &$value.into(),
@@ -491,7 +512,7 @@ mod tests {
         };
         // salted claim where the value is a mapping or an array
         (obj => $name:literal, $value:expr) => {
-            SaltedRef::Claim(SaltedClaimRef {
+            SaltedEntryRef::Claim(SaltedClaimRef {
                 salt: Salt::empty(),
                 name: &$name.clone().into(),
                 value: &$value.unwrap(),
@@ -499,14 +520,14 @@ mod tests {
         };
         // salted element of a simple type
         ($value:expr) => {
-            SaltedRef::Element(SaltedElementRef {
+            SaltedEntryRef::Element(SaltedElementRef {
                 salt: Salt::empty(),
                 value: &$value.into(),
             })
         };
         // salted element where the value is a mapping or an array
         (obj => $value:expr) => {
-            SaltedRef::Element(SaltedElementRef {
+            SaltedEntryRef::Element(SaltedElementRef {
                 salt: Salt::empty(),
                 value: &$value.unwrap(),
             })
@@ -514,31 +535,25 @@ mod tests {
         // digest of a salted claim
         (digest => $name:literal, $value:expr) => {
             Value::Bytes(
-                Sha256::digest(
-                    Value::serialized(&SaltedRef::Claim(SaltedClaimRef {
-                        salt: Salt::empty(),
-                        name: &$name.clone().into(),
-                        value: &$value.unwrap(),
-                    }))
-                    .unwrap()
-                    .to_cbor_bytes()
-                    .unwrap(),
-                )
+                SaltedClaimRef {
+                    salt: Salt::empty(),
+                    name: &$name.clone().into(),
+                    value: &$value.unwrap(),
+                }
+                .to_redacted::<Sha256>()
+                .unwrap()
                 .to_vec(),
             )
         };
         // digest of a salted element
         (digest => $value:expr) => {
             Value::Bytes(
-                Sha256::digest(
-                    Value::serialized(&SaltedRef::Element(SaltedElementRef {
-                        salt: Salt::empty(),
-                        value: &$value.unwrap(),
-                    }))
-                    .unwrap()
-                    .to_cbor_bytes()
-                    .unwrap(),
-                )
+                SaltedElementRef {
+                    salt: Salt::empty(),
+                    value: &$value.unwrap(),
+                }
+                .to_redacted::<Sha256>()
+                .unwrap()
                 .to_vec(),
             )
         };

@@ -23,7 +23,7 @@ ed25519-dalek = "2.1"
 p256 = "0.13"
 p384 = "0.13"
 subtle = "2.6"
-digest = { version = "0.10" , features = ["alloc"]}
+digest = { version = "0.10", features = ["alloc"] }
 sha2 = "0.10"
 pkcs8 = "0.10"
 rand = "0.8"
@@ -51,6 +51,9 @@ flate2 = { version = "1.1", default-features = false }
 tokio = { version = "1.48", default-features = true }
 dernged = "0.1"
 insta = "1"
+strum = "0.28"
+strum_macros = "0.28"
+anyhow = { version = "1", default-features = false }
 
 [workspace.dependencies.coset]
 git = "https://github.com/beltram/coset.git"
@@ -85,6 +88,7 @@ missing_const_for_fn = "allow"
 derive_partial_eq_without_eq = "allow"
 significant_drop_tightening = "allow"  # Allowed due false positives
 trait_duplication_in_bounds = "allow"  # Allowed due false positives
+needless_pass_by_ref_mut = "warn"
 ## restriction
 rc_mutex = "warn"
 ## Pedantic
@@ -96,7 +100,6 @@ explicit_into_iter_loop = "warn"
 manual_ok_or = "warn"
 indexing_slicing = "warn"
 unused_self = "warn"
-from_iter_instead_of_collect = "warn"
 implicit_clone = "warn"
 inefficient_to_string = "warn"
 large_types_passed_by_value = "warn"

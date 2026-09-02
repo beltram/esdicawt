@@ -81,12 +81,9 @@ impl<'de, IssuerPayloadClaims: Select, Hasher: digest::Digest + Clone, IssuerPro
                                         .map_err(|value| A::Error::custom(format!("'issuer-sd-cwt' is not a sd-cwt-presentation: {value:?}")))?
                                         .try_into_value()
                                         .map_err(A::Error::custom)
-                                })?;
+                                });
 
-                                #[cfg(not(feature = "backward"))]
-                                let issuer_sd_cwt = issuer_sd_cwt?;
-
-                                builder.kcwt(issuer_sd_cwt);
+                                builder.kcwt(issuer_sd_cwt?);
                             }
                             _ => {
                                 extra.push((k, v));

@@ -57,6 +57,9 @@ blake3 = { version = "1.8", features = ["traits-preview"] }
 tokio = { workspace = true, features = ["macros", "rt"] }
 dernged.workspace = true
 insta.workspace = true
+strum.workspace = true
+strum_macros.workspace = true
+anyhow.workspace = true
 
 [target.'cfg(not(target_arch = "wasm32"))'.dev-dependencies]
 criterion = "0.6"

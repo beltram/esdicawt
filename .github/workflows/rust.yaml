@@ -52,7 +52,8 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         # temporary pinning the draft because the test vectors fail
       - run: git submodule init && git submodule update --recursive --remote && cd draft-ietf-spice-sd-cwt
-      - run: cargo test --all-features
+      - run: cargo test
+      - run: cargo test --features backward # remove at some point when all consumers migrated
       - run: cargo test --doc
       - run: cargo test --benches
 

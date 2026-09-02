@@ -3,13 +3,16 @@ pub mod params;
 pub mod walk;
 
 use crate::{
-    CwtStdLabel, ShallowVerifierParams, VerifierParams, any_digest::AnyDigest, elapsed_since_epoch, spec::reexports::coset, time::verify_time_claims,
+    CwtStdLabel, ShallowVerifierParams, VerifierParams,
+    any_digest::AnyDigest,
+    elapsed_since_epoch,
+    spec::{CWT_CLAIM_KEY_CONFIRMATION, CustomClaims, CwtAny, SdHashAlg, Select, issuance::SdInnerPayload, key_binding::KbtCwtTagged, reexports::coset, verified::KbtCwtVerified},
+    time::verify_time_claims,
     verifier::error::SdCwtVerifierError,
 };
 use ciborium::{Value, value::Integer};
 use cose_key::confirmation::{CoseKeyConfirmationError, KeyConfirmation};
 use coset::{CoseSign1, TaggedCborSerializable};
-use esdicawt_spec::{CWT_CLAIM_KEY_CONFIRMATION, CustomClaims, CwtAny, SdHashAlg, Select, issuance::SdInnerPayload, key_binding::KbtCwtTagged, verified::KbtCwtVerified};
 use std::rc::Rc;
 
 pub trait Verifier {
@@ -181,16 +184,19 @@ pub trait Verifier {
         // now verifying the disclosures
         if let Some(disclosures) = kbt_protected.kcwt.0.disclosures_mut() {
             let disclosures_size = disclosures.len();
-
             // compute the hash of all disclosures
             let mut disclosures = disclosures.to_verify()?;
 
+            // FIXME: this does actually look for collisions
             if disclosures.len() != disclosures_size {
                 return Err(SdCwtVerifierError::DisclosureHashCollision);
             }
 
             walk::walk_payload(self.digest(sd_alg), &mut generic_sd_cwt_payload, &mut disclosures)?;
-            if !disclosures.is_empty() {
+
+            // disclosures not found in the SD-CWT payload => invalid
+            let orphan_disclosures = disclosures;
+            if !orphan_disclosures.is_empty() {
                 return Err(SdCwtVerifierError::OrphanDisclosure);
             }
         }
@@ -479,12 +485,12 @@ mod tests {
     use crate::{
         CwtTimeError, HolderParams, Issuer, IssuerParams, Presentation, SdCwtVerifierError, StatusParams, TimeArg, Verifier, VerifierParams, elapsed_since_epoch,
         holder::Holder,
+        spec::{CustomClaims, CwtAny, NoClaims, Select, sd, verified::KbtCwtVerified},
         test_utils::{Ed25519Holder, Ed25519Issuer},
         verifier::{VerifierWithStatus, error::SdCwtStatusVerifierError, test_utils::HybridVerifier},
     };
     use ciborium::{Value, cbor};
     use cose_key::keyset::CoseKeySet;
-    use esdicawt_spec::{CustomClaims, CwtAny, NoClaims, Select, sd, verified::KbtCwtVerified};
     use status_list::{OauthStatus, StatusList, issuer::StatusListIssuerParams};
     use std::convert::Infallible;
 
@@ -1211,14 +1217,13 @@ mod tests {
 
 #[cfg(test)]
 pub mod claims {
+    use crate::spec::{Redact, Select};
     use ciborium::Value;
-    use esdicawt_spec::{Redact, Select};
 
     #[derive(Default, Debug, Clone, PartialEq, serde::Serialize)]
-    pub(super) struct CustomTokenClaims {
+    pub struct CustomTokenClaims {
         pub name: Option<String>,
-        pub stuffs: Vec<Stuff>,
-        // pub stuffs_stuffs: Vec<Vec<Stuff>>,
+        pub(super) stuffs: Vec<Stuff>,
     }
 
     impl<'de> serde::Deserialize<'de> for CustomTokenClaims {
@@ -1267,7 +1272,7 @@ pub mod claims {
 #[cfg(feature = "test-utils")]
 pub mod test_utils {
     use super::*;
-    use esdicawt_spec::NoClaims;
+    use crate::spec::NoClaims;
     use status_list::OauthStatus;
     use std::collections::HashMap;
     use url::Url;
@@ -1275,7 +1280,7 @@ pub mod test_utils {
     // TODO: turn generic again
     #[allow(dead_code)]
     #[derive(Debug, Clone)]
-    pub struct HybridVerifier<DisclosedClaims: CustomClaims, KbtClaims: CustomClaims> {
+    pub struct HybridVerifier<DisclosedClaims: CustomClaims, KbtClaims: CustomClaims = NoClaims> {
         pub status_cache: HashMap<String, std::sync::Arc<VerifiedStatusListToken<OauthStatus>>>,
         pub _marker: core::marker::PhantomData<(DisclosedClaims, KbtClaims)>,
     }
@@ -1323,5 +1328,56 @@ pub mod test_utils {
         ) -> impl Future<Output = Result<Option<std::sync::Arc<VerifiedStatusListToken<Self::Status>>>, SdCwtVerifierError<Self::Error>>> + Send {
             std::future::ready(self.status_cache.get(status_url).cloned().map(Ok).transpose())
         }
+    }
+}
+
+#[cfg(test)]
+mod backward {
+    use super::*;
+    use crate::{
+        TimeVerification,
+        snapshots::SdKbtSnapshots,
+        spec::NoClaims,
+        verifier::{claims::CustomTokenClaims, test_utils::HybridVerifier},
+    };
+    use cose_key::keyset::CoseKeySet;
+    use strum::IntoEnumIterator as _;
+
+    #[test]
+    fn should_work_with_snapshot_sd_kbt() {
+        for snapshot in SdKbtSnapshots::iter() {
+            match snapshot {
+                #[cfg(feature = "backward")]
+                SdKbtSnapshots::FullDraft08 | SdKbtSnapshots::NoneDraft08 => sd_kbt_verification::<CustomTokenClaims>(&snapshot.sd_kbt()),
+                SdKbtSnapshots::Full | SdKbtSnapshots::None => sd_kbt_verification::<CustomTokenClaims>(&snapshot.sd_kbt()),
+            }
+            .inspect_err(|err: &anyhow::Error| panic!("'{snapshot:?}' failed because: {err:?}"))
+            .unwrap();
+        }
+    }
+
+    fn sd_kbt_verification<T: Select>(sd_kbt: &[u8]) -> anyhow::Result<()> {
+        let mut rng = dernged::Rng::default();
+        let issuer_signing_key = ed25519_dalek::SigningKey::generate(&mut rng);
+        let cks = CoseKeySet::builder().with(&issuer_signing_key.verifying_key())?.build();
+        let holder_signing_key = ed25519_dalek::SigningKey::generate(&mut rng);
+
+        let verifier = HybridVerifier::<T, NoClaims>::default();
+        let params = VerifierParams {
+            sd_cwt_time_verification: TimeVerification {
+                verify_exp: false,
+                verify_iat: false,
+                verify_nbf: false,
+            },
+            sd_kbt_time_verification: TimeVerification {
+                verify_exp: false,
+                verify_iat: false,
+                verify_nbf: false,
+            },
+            ..Default::default()
+        };
+        verifier.verify_sd_kbt(sd_kbt, params, Some(&holder_signing_key.verifying_key()), &cks)?;
+
+        Ok(())
     }
 }

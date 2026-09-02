@@ -2,8 +2,10 @@ use crate::fmk::ed25519::{Ed25519Holder, Ed25519Issuer, Ed25519Verifier};
 use ciborium::{Value, value::Error};
 use cose_key::keyset::CoseKeySet;
 use criterion::{BatchSize, BenchmarkId, Criterion, criterion_group, criterion_main};
-use esdicawt::{Holder, HolderParams, Issuer, IssuerParams, SdCwtVerified, ShallowVerifierParams, StatusParams, Verifier, VerifierParams};
-use esdicawt_spec::{CwtAny, Select, SelectExt};
+use esdicawt::{
+    Holder, HolderParams, Issuer, IssuerParams, SdCwtVerified, ShallowVerifierParams, StatusParams, Verifier, VerifierParams,
+    spec::{CwtAny, Select, SelectExt},
+};
 use std::{collections::HashMap, hint::black_box};
 
 #[path = "../tests/fmk.rs"]
