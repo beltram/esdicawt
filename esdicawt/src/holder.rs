@@ -484,8 +484,8 @@ mod tests {
 #[cfg(test)]
 pub mod claims {
     use ciborium::Value;
-    use esdicawt_spec::Redact;
     use esdicawt_spec::{CwtAny, Select};
+    use esdicawt_spec::{Redact, SelectExt};
     use std::collections::HashMap;
 
     #[derive(Default, Debug, Clone, PartialEq, serde::Serialize)]
@@ -539,6 +539,15 @@ pub mod claims {
             Ok(Value::Map(values))
         }
     }
+
+    #[derive(Default, Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
+    pub(super) struct CustomTokenClaimsAllRedacted(pub(super) CustomTokenClaims);
+
+    impl Select for CustomTokenClaimsAllRedacted {
+        fn select(mut self) -> Result<Value, ciborium::value::Error> {
+            self.select_all()
+        }
+    }
 }
 
 #[cfg(feature = "test-utils")]
@@ -588,6 +597,67 @@ pub mod test_utils {
 
         fn verifier(&self) -> &Self::Verifier {
             &self.verifying_key
+        }
+    }
+}
+
+#[cfg(test)]
+mod snapshot {
+    use super::*;
+    use crate::{
+        Issuer, Presentation,
+        holder::claims::{CustomTokenClaims, CustomTokenClaimsAllRedacted},
+        issuer::snapshot::issuer_params,
+        test_utils::{Ed25519Holder, Ed25519Issuer},
+        time::TimeArg,
+    };
+    use cose_key::keyset::CoseKeySet;
+    use insta::*;
+    use std::collections::HashMap;
+
+    #[test]
+    fn ed25519_sd_kbt() {
+        let mut rng = dernged::Rng::default();
+        let issuer_signing_key = ed25519_dalek::SigningKey::generate(&mut rng);
+        let cks = CoseKeySet::builder().with(&issuer_signing_key.verifying_key()).unwrap().build();
+        let holder_signing_key = ed25519_dalek::SigningKey::generate(&mut rng);
+
+        let issuer = Ed25519Issuer::new(issuer_signing_key);
+        let holder_confirmation_key = (&holder_signing_key.verifying_key()).try_into().unwrap();
+        let payload = CustomTokenClaimsAllRedacted(CustomTokenClaims {
+            name: Some("Alice Smith".to_string()),
+            age: Some(42),
+            array: vec!["apple".into(), "orange".into()],
+            map: HashMap::from_iter([("a".into(), "b".into())]),
+        });
+        let issuer_params = issuer_params::<CustomTokenClaimsAllRedacted>(Some(payload), &holder_confirmation_key);
+        let sd_cwt = issuer.issue_raw_cwt(&mut rng, issuer_params.clone()).unwrap();
+
+        let holder = Ed25519Holder::<CustomTokenClaimsAllRedacted, _>::new(holder_signing_key);
+
+        let sd_cwt_verified = holder.verify_sd_cwt(&sd_cwt, Default::default(), &cks).unwrap();
+        let params = holder_params(Presentation::Full);
+        let sd_kbt = holder.new_presentation_raw(sd_cwt_verified.clone(), params).unwrap();
+        assert_snapshot!("sd-kbt-full-ed25519.txt", hex::encode(&sd_kbt));
+
+        let params = holder_params(Presentation::None);
+        let sd_kbt = holder.new_presentation_raw(sd_cwt_verified, params).unwrap();
+        assert_snapshot!("sd-kbt-none-ed25519.txt", hex::encode(&sd_kbt));
+    }
+
+    fn holder_params(presentation: Presentation) -> HolderParams<'static> {
+        HolderParams {
+            presentation,
+            audience: Default::default(),
+            cnonce: Default::default(),
+            expiry: Some(TimeArg::Relative(core::time::Duration::from_secs(42))),
+            with_not_before: true,
+            leeway: core::time::Duration::from_secs(1),
+            extra_kbt_protected: None,
+            extra_kbt_unprotected: None,
+            artificial_time: Some(core::time::Duration::from_secs(4242)),
+            time_verification: Default::default(),
+            extra_kbt_payload: None,
         }
     }
 }

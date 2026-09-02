@@ -195,6 +195,7 @@ pub trait Issuer {
 #[cfg(test)]
 mod tests {
     use super::{claims::CustomTokenClaims, test_utils::Ed25519Issuer};
+    use crate::issuer::claims::FullClaims;
     use crate::lookup::TokenQuery;
     use crate::read::SdCwtRead;
     use crate::{
@@ -209,7 +210,6 @@ mod tests {
     };
     use ciborium::{Value, cbor};
     use digest::Digest as _;
-    use esdicawt_spec::Redact;
     use std::collections::HashMap;
 
     wasm_bindgen_test::wasm_bindgen_test_configure!(run_in_browser);
@@ -355,72 +355,7 @@ mod tests {
     #[test]
     #[wasm_bindgen_test::wasm_bindgen_test]
     fn should_selectively_disclose() {
-        #[derive(Default, Debug, Clone, PartialEq, serde::Serialize)]
-        pub struct Model {
-            pub name: Option<String>,
-            pub age: Option<u64>,
-            pub numbers: Vec<u64>,
-            pub inner: HashMap<String, String>,
-        }
-
-        impl<'de> serde::Deserialize<'de> for Model {
-            fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-                let value = <Value as serde::Deserialize>::deserialize(deserializer).unwrap();
-
-                let mut model = Self::default();
-                for (k, v) in value.into_map().unwrap() {
-                    match (k, v) {
-                        (Value::Text(label), Value::Text(name)) if &label == "name" => {
-                            model.name.replace(name);
-                        }
-                        (Value::Text(label), Value::Integer(age)) if &label == "age" => {
-                            model.age.replace(age.try_into().unwrap());
-                        }
-                        (Value::Text(label), Value::Array(numbers)) if &label == "numbers" => {
-                            // filter out tags
-                            let numbers = numbers.iter().filter_map(Value::as_integer).map(u64::try_from).collect::<Result<Vec<_>, _>>().unwrap();
-                            model.numbers.extend(numbers);
-                        }
-                        (Value::Text(label), Value::Map(inner)) if &label == "inner" => {
-                            model.inner = inner
-                                .into_iter()
-                                .filter(|(k, _)| !k.is_simple())
-                                .map(|(k, v)| (k.into_text().unwrap(), v.into_text().unwrap()))
-                                .collect();
-                        }
-                        _ => unreachable!(),
-                    }
-                }
-                Ok(model)
-            }
-        }
-
-        impl Select for Model {
-            fn select(self) -> Result<Value, ciborium::value::Error> {
-                let mut values = self.to_cbor_value().unwrap().into_map().unwrap();
-                for (label, value) in &mut values {
-                    let mut label = label;
-                    match (&label, value) {
-                        (Value::Text(s), _) if s == "name" => label.redact(),
-                        (Value::Text(s), values) if s == "numbers" => {
-                            values.as_array_mut().into_iter().flatten().enumerate().for_each(|(i, mut v)| {
-                                if i == 1 {
-                                    v.redact()
-                                }
-                            });
-                        }
-                        (Value::Text(s), values) if *s == "inner" => {
-                            use std::borrow::BorrowMut;
-                            values.as_map_mut().into_iter().flatten().for_each(|(k, _)| k.borrow_mut().redact());
-                        }
-                        _ => {}
-                    };
-                }
-                Ok(Value::Map(values))
-            }
-        }
-
-        let model = Model {
+        let model = FullClaims {
             name: Some("Alice Smith".to_string()),
             age: Some(42),
             numbers: vec![0, 1, 2],
@@ -564,7 +499,8 @@ mod tests {
 #[allow(unused)]
 pub mod claims {
     use ciborium::Value;
-    use esdicawt_spec::{Select, sd};
+    use esdicawt_spec::{CwtAny, Redact, Select, SelectExt, sd};
+    use std::collections::HashMap;
 
     #[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
     pub(super) struct CustomTokenClaims {
@@ -578,6 +514,89 @@ pub mod claims {
                 map.push((sd!("name"), Value::Text(name)));
             }
             Ok(Value::Map(map))
+        }
+    }
+
+    #[derive(Default, Debug, Clone, PartialEq, serde::Serialize)]
+    pub struct FullClaims {
+        pub name: Option<String>,
+        pub age: Option<u64>,
+        pub numbers: Vec<u64>,
+        pub inner: HashMap<String, String>,
+    }
+
+    impl<'de> serde::Deserialize<'de> for FullClaims {
+        fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+            let value = <Value as serde::Deserialize>::deserialize(deserializer).unwrap();
+
+            let mut model = Self::default();
+            for (k, v) in value.into_map().unwrap() {
+                match (k, v) {
+                    (Value::Text(label), Value::Text(name)) if &label == "name" => {
+                        model.name.replace(name);
+                    }
+                    (Value::Text(label), Value::Integer(age)) if &label == "age" => {
+                        model.age.replace(age.try_into().unwrap());
+                    }
+                    (Value::Text(label), Value::Array(numbers)) if &label == "numbers" => {
+                        // filter out tags
+                        let numbers = numbers.iter().filter_map(Value::as_integer).map(u64::try_from).collect::<Result<Vec<_>, _>>().unwrap();
+                        model.numbers.extend(numbers);
+                    }
+                    (Value::Text(label), Value::Map(inner)) if &label == "inner" => {
+                        model.inner = inner
+                            .into_iter()
+                            .filter(|(k, _)| !k.is_simple())
+                            .map(|(k, v)| (k.into_text().unwrap(), v.into_text().unwrap()))
+                            .collect();
+                    }
+                    _ => unreachable!(),
+                }
+            }
+            Ok(model)
+        }
+    }
+
+    impl Select for FullClaims {
+        fn select(self) -> Result<Value, ciborium::value::Error> {
+            let mut values = self.to_cbor_value().unwrap().into_map().unwrap();
+            for (label, value) in &mut values {
+                let mut label = label;
+                match (&label, value) {
+                    (Value::Text(s), _) if s == "name" => label.redact(),
+                    (Value::Text(s), values) if s == "numbers" => {
+                        values.as_array_mut().into_iter().flatten().enumerate().for_each(|(i, mut v)| {
+                            if i == 1 {
+                                v.redact()
+                            }
+                        });
+                    }
+                    (Value::Text(s), values) if *s == "inner" => {
+                        use std::borrow::BorrowMut;
+                        values.as_map_mut().into_iter().flatten().for_each(|(k, _)| k.borrow_mut().redact());
+                    }
+                    _ => {}
+                };
+            }
+            Ok(Value::Map(values))
+        }
+    }
+
+    #[derive(Default, Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
+    pub struct FullClaimsNoRedaction(pub FullClaims);
+
+    impl Select for FullClaimsNoRedaction {
+        fn select(self) -> Result<Value, ciborium::value::Error> {
+            self.select_none()
+        }
+    }
+
+    #[derive(Default, Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
+    pub struct FullClaimsAllRedacted(pub FullClaims);
+
+    impl Select for FullClaimsAllRedacted {
+        fn select(mut self) -> Result<Value, ciborium::value::Error> {
+            self.select_all()
         }
     }
 }
@@ -670,6 +689,76 @@ pub mod test_utils {
 
         fn hash_algorithm(&self) -> SdHashAlg {
             SdHashAlg::Sha256
+        }
+    }
+}
+
+#[cfg(test)]
+pub mod snapshot {
+    use super::{claims::FullClaims, test_utils::*, *};
+    use crate::{
+        StatusParams,
+        issuer::claims::{FullClaimsAllRedacted, FullClaimsNoRedaction},
+        time::TimeArg,
+    };
+    use cose_key::confirmation::KeyConfirmation;
+    use insta::*;
+    use std::collections::HashMap;
+
+    #[test]
+    fn ed25519_sd_cwt() {
+        let mut rng = dernged::Rng::default();
+        let issuer_signing_key = ed25519_dalek::SigningKey::generate(&mut rng);
+        let holder_signing_key = ed25519_dalek::SigningKey::generate(&mut rng);
+
+        let issuer = Ed25519Issuer::new(issuer_signing_key.clone());
+        let holder_confirmation_key = (&holder_signing_key.verifying_key()).try_into().unwrap();
+        let payload = FullClaims {
+            name: Some("Alice Smith".to_string()),
+            age: Some(42),
+            numbers: vec![0, 1, 2],
+            inner: HashMap::from_iter([("a".into(), "b".into())]),
+        };
+        let mut params = issuer_params(Some(payload.clone()), &holder_confirmation_key);
+        let sd_cwt = issuer.issue_raw_cwt(&mut rng, params.clone()).unwrap();
+        assert_snapshot!("sd-cwt-full-ed25519.txt", hex::encode(&sd_cwt));
+
+        params.payload = None;
+        let sd_cwt = issuer.issue_raw_cwt(&mut rng, params).unwrap();
+        assert_snapshot!("sd-cwt-empty-ed25519.txt", hex::encode(&sd_cwt));
+
+        let params = crate::issuer::snapshot::issuer_params(Some(FullClaimsNoRedaction(payload.clone())), &holder_confirmation_key);
+        let issuer = Ed25519Issuer::<FullClaimsNoRedaction>::new(issuer_signing_key.clone());
+        let sd_cwt = issuer.issue_raw_cwt(&mut rng, params).unwrap();
+        assert_snapshot!("sd-cwt-none-redacted-ed25519.txt", hex::encode(&sd_cwt));
+
+        let params = crate::issuer::snapshot::issuer_params(Some(FullClaimsAllRedacted(payload)), &holder_confirmation_key);
+        let issuer = Ed25519Issuer::<FullClaimsAllRedacted>::new(issuer_signing_key);
+        let sd_cwt = issuer.issue_raw_cwt(&mut rng, params).unwrap();
+        assert_snapshot!("sd-cwt-all-redacted-ed25519.txt", hex::encode(&sd_cwt));
+    }
+
+    pub fn issuer_params<T: Select>(payload: Option<T>, holder_confirmation_key: &KeyConfirmation) -> IssuerParams<'static, T> {
+        IssuerParams {
+            protected_claims: None,
+            unprotected_claims: None,
+            payload,
+            issuer: "https://example.com/i/acme.io",
+            subject: Some("https://example.com/alice.smith"),
+            audience: Default::default(),
+            cti: Default::default(),
+            cnonce: Default::default(),
+            expiry: Some(TimeArg::Relative(core::time::Duration::from_secs(42))),
+            with_not_before: true,
+            with_issued_at: true,
+            leeway: core::time::Duration::from_secs(1),
+            key_location: "https://auth.acme.io/issuer.cwk",
+            holder_confirmation_key: holder_confirmation_key.clone(),
+            artificial_time: Some(core::time::Duration::from_secs(4242)),
+            status: StatusParams {
+                status_list_bit_index: 0,
+                uri: "https://example.com/statuslists/1".parse().unwrap(),
+            },
         }
     }
 }

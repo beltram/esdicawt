@@ -49,6 +49,8 @@ indexmap = "2.12"
 bytes = "1.10"
 flate2 = { version = "1.1", default-features = false }
 tokio = { version = "1.48", default-features = true }
+dernged = "0.1"
+insta = "1"
 
 [workspace.dependencies.coset]
 git = "https://github.com/beltram/coset.git"
