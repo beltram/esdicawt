@@ -3,16 +3,16 @@ use ciborium::Value;
 use digest::Digest;
 use esdicawt_spec::{
     CWT_LABEL_REDACTED_TAG, CwtAny, REDACTED_CLAIM_ELEMENT_TAG,
-    blinded_claims::{Salted, SaltedClaim, SaltedElement},
+    blinded_claims::{SaltedClaim, SaltedElement, SaltedEntry},
 };
 use std::{borrow::Cow, collections::HashMap};
 
-type PathAndSalted = Vec<(Vec<CborPath>, Salted<Value>)>;
-type PathAndSaltedAndDigest = Vec<(Vec<CborPath>, Salted<Value>, Vec<u8>)>;
+type PathAndSalted = Vec<(Vec<CborPath>, SaltedEntry<Value>)>;
+type PathAndSaltedAndDigest = Vec<(Vec<CborPath>, SaltedEntry<Value>, Vec<u8>)>;
 
 /// Given disclosures, this method returns all the possible paths one can build from it
 // FIXME: this does not work for orphan disclosures, not anchored at the root of the payload
-pub fn traverse_all_cbor_paths_in_disclosures<Hasher: Digest, E>(hashed_disclosures: &HashMap<Vec<u8>, Cow<Salted<Value>>>) -> SdCwtHolderResult<PathAndSalted, E>
+pub fn traverse_all_cbor_paths_in_disclosures<Hasher: Digest, E>(hashed_disclosures: &HashMap<Vec<u8>, Cow<SaltedEntry<Value>>>) -> SdCwtHolderResult<PathAndSalted, E>
 where
     E: core::error::Error + Send + Sync,
 {
@@ -29,7 +29,7 @@ where
 fn __traverse<'a, Hasher: Digest, E>(
     salted_or_value: &'a SaltedOrValue<'a>,
     mut current: Vec<CborPath>,
-    disclosures: &HashMap<Vec<u8>, Cow<Salted<Value>>>,
+    disclosures: &HashMap<Vec<u8>, Cow<SaltedEntry<Value>>>,
     paths: &mut PathAndSaltedAndDigest,
 ) -> SdCwtHolderResult<(), E>
 where
@@ -43,8 +43,8 @@ where
             let insert = previous_depth.is_none() || previous_depth.map(|prev| current.len() >= prev).unwrap_or_default() || retract_previous;
 
             match &**salted {
-                Salted::Claim(SaltedClaim { value, .. }) | Salted::Element(SaltedElement { value, .. }) if value.is_map() || value.is_array() => {
-                    if let Salted::Claim(SaltedClaim { name, .. }) = &**salted {
+                SaltedEntry::Claim(SaltedClaim { value, .. }) | SaltedEntry::Element(SaltedElement { value, .. }) if value.is_map() || value.is_array() => {
+                    if let SaltedEntry::Claim(SaltedClaim { name, .. }) = &**salted {
                         current.push(name.into());
                     }
                     if retract_previous {
@@ -107,8 +107,8 @@ where
                     };
                 }
                 // leaf
-                Salted::Claim(SaltedClaim { .. }) | Salted::Element(SaltedElement { .. }) => {
-                    if let Salted::Claim(SaltedClaim { name, .. }) = &**salted {
+                SaltedEntry::Claim(SaltedClaim { .. }) | SaltedEntry::Element(SaltedElement { .. }) => {
+                    if let SaltedEntry::Claim(SaltedClaim { name, .. }) = &**salted {
                         current.push(name.into());
                     }
                     if retract_previous {
@@ -123,7 +123,7 @@ where
                     }
                 }
                 // ignored
-                Salted::Decoy(_) => {}
+                SaltedEntry::Decoy(_) => {}
             }
         }
         SaltedOrValue::Value(Value::Map(values)) => {
@@ -175,18 +175,18 @@ where
 
 #[derive(Debug, Clone)]
 enum SaltedOrValue<'a> {
-    Salted(Cow<'a, Salted<Value>>),
+    Salted(Cow<'a, SaltedEntry<Value>>),
     Value(&'a Value),
 }
 
-impl<'a> From<Cow<'a, Salted<Value>>> for SaltedOrValue<'a> {
-    fn from(value: Cow<'a, Salted<Value>>) -> Self {
+impl<'a> From<Cow<'a, SaltedEntry<Value>>> for SaltedOrValue<'a> {
+    fn from(value: Cow<'a, SaltedEntry<Value>>) -> Self {
         Self::Salted(value)
     }
 }
 
-impl<'a> From<&'a Cow<'_, Salted<Value>>> for SaltedOrValue<'a> {
-    fn from(value: &'a Cow<Salted<Value>>) -> Self {
+impl<'a> From<&'a Cow<'_, SaltedEntry<Value>>> for SaltedOrValue<'a> {
+    fn from(value: &'a Cow<SaltedEntry<Value>>) -> Self {
         match value {
             Cow::Borrowed(value) => Self::Salted(Cow::Borrowed(value)),
             Cow::Owned(value) => Self::Salted(Cow::Owned(value.clone())),

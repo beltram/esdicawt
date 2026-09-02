@@ -202,7 +202,7 @@ mod tests {
         CwtStdLabel, Issuer, IssuerParams, StatusParams, TimeArg, elapsed_since_epoch,
         spec::{
             CwtAny, NoClaims, SdCwtClaim, Select, SelectExt,
-            blinded_claims::{Salted, SaltedClaim, SaltedElement},
+            blinded_claims::{SaltedClaim, SaltedElement, SaltedEntry},
             issuance::SdCwtIssuedTagged,
             redacted_claims::RedactedClaimKeys,
             reexports::coset::{CoseSign1, TaggedCborSerializable},
@@ -237,7 +237,7 @@ mod tests {
         let payload = sd_cwt.0.disclosures_mut().unwrap().iter().collect::<Result<Vec<_>, _>>().unwrap();
         assert_eq!(payload.len(), 1);
         let d0 = payload.first().unwrap();
-        let Salted::Claim(SaltedClaim { name, value, .. }) = d0 else { unreachable!() };
+        let SaltedEntry::Claim(SaltedClaim { name, value, .. }) = d0 else { unreachable!() };
 
         // verify content of disclosure
         assert_eq!(name, &SdCwtClaim::Tstr("name".into()));
@@ -323,8 +323,8 @@ mod tests {
             let (expected_name, expected_value) = expected;
             let expected_value = expected_value.unwrap();
             let found = disclosable_claims.iter().any(|d| match d {
-                Salted::Claim(SaltedClaim { name, value, .. }) => value == &expected_value && Some(name) == expected_name.as_ref(),
-                Salted::Element(SaltedElement { value, .. }) => value == &expected_value,
+                SaltedEntry::Claim(SaltedClaim { name, value, .. }) => value == &expected_value && Some(name) == expected_name.as_ref(),
+                SaltedEntry::Element(SaltedElement { value, .. }) => value == &expected_value,
                 _ => false,
             });
             assert!(found);
@@ -383,15 +383,15 @@ mod tests {
         assert_eq!(disclosures.len(), 3);
 
         let [d0, d1, d2] = disclosures.try_into().unwrap();
-        let Salted::Claim(SaltedClaim { name, value, .. }) = &d0 else { unreachable!() };
+        let SaltedEntry::Claim(SaltedClaim { name, value, .. }) = &d0 else { unreachable!() };
         // verify content of disclosure
         assert_eq!(*name, SdCwtClaim::Tstr("name".into()));
         assert_eq!(value, &cbor!("Alice Smith").unwrap());
 
-        let Salted::Element(SaltedElement { value, .. }) = d1 else { unreachable!() };
+        let SaltedEntry::Element(SaltedElement { value, .. }) = d1 else { unreachable!() };
         assert_eq!(value, &cbor!(1).unwrap());
 
-        let Salted::Claim(SaltedClaim { name, value, .. }) = &d2 else { unreachable!() };
+        let SaltedEntry::Claim(SaltedClaim { name, value, .. }) = &d2 else { unreachable!() };
         assert_eq!(*name, SdCwtClaim::Tstr("a".into()));
         assert_eq!(value, &cbor!("b").unwrap());
     }

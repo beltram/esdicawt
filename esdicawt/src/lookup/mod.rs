@@ -4,7 +4,7 @@ mod blanket;
 mod model;
 
 use crate::{
-    spec::{CwtAny, EsdicawtSpecResult, REDACTED_CLAIM_ELEMENT_TAG, blinded_claims::Salted, redacted_claims::RedactedClaimKeys},
+    spec::{CwtAny, EsdicawtSpecResult, REDACTED_CLAIM_ELEMENT_TAG, blinded_claims::SaltedEntry, redacted_claims::RedactedClaimKeys},
     verifier::walk::walk_payload,
 };
 use ciborium::Value;
@@ -54,7 +54,7 @@ where
                     };
 
                     let Some(pos) = salted_array.iter_mut().position(|(salted, digest)| {
-                        if let Salted::Claim(sc) = salted.as_ref()
+                        if let SaltedEntry::Claim(sc) = salted.as_ref()
                             && sc.name == claim_name
                         {
                             // if we found an element with a matching claim name, check that it is present in the payload's
@@ -79,7 +79,7 @@ where
                     };
 
                     let (mut found, _) = salted_array.swap_remove(pos);
-                    let Salted::Claim(sc) = found.to_mut() else {
+                    let SaltedEntry::Claim(sc) = found.to_mut() else {
                         return Err(EsdicawtSpecError::ImplementationError("Query inner impl error. Should be SaltedClaim"));
                     };
                     sc.value.clone()
@@ -91,7 +91,7 @@ where
             match array.get(index) {
                 Some(Value::Tag(REDACTED_CLAIM_ELEMENT_TAG, value)) => {
                     let Some(pos) = salted_array.iter_mut().position(|(salted, digest)| {
-                        if let Salted::Element(sc) = salted.as_ref() {
+                        if let SaltedEntry::Element(sc) = salted.as_ref() {
                             let digest: Value = match digest {
                                 Some(digest) => digest.as_slice().into(),
                                 entry => {
@@ -112,7 +112,7 @@ where
                     };
 
                     let found = salted_array.swap_remove(pos);
-                    let Salted::Element(sc) = found.0.as_ref() else {
+                    let SaltedEntry::Element(sc) = found.0.as_ref() else {
                         return Err(EsdicawtSpecError::ImplementationError("Query inner impl error. Should be SaltedElement"));
                     };
 

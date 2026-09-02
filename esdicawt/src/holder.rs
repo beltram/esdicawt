@@ -292,7 +292,7 @@ mod tests {
     use cose_key::keyset::CoseKeySet;
     use esdicawt_spec::{
         NoClaims, SdCwtClaim,
-        blinded_claims::{Salted, SaltedClaim},
+        blinded_claims::{SaltedClaim, SaltedEntry},
     };
     use std::collections::HashMap;
 
@@ -381,7 +381,7 @@ mod tests {
         assert_eq!(disclosable_claims.len(), 3);
         let is_alice = |sc: &SaltedClaim<Value>| sc.name == SdCwtClaim::Tstr("name".into()) && sc.value == cbor!("Alice Smith").unwrap();
 
-        assert!(disclosable_claims.into_iter().any(|c| { matches!(c.unwrap(), Salted::Claim(sc) if is_alice(sc)) }));
+        assert!(disclosable_claims.into_iter().any(|c| { matches!(c.unwrap(), SaltedEntry::Claim(sc) if is_alice(sc)) }));
 
         let claimset = sd_kbt.0.claimset_unchecked().unwrap().unwrap();
         assert_eq!(&claimset.name.unwrap(), "Alice Smith");

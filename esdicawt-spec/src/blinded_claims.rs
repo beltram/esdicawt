@@ -66,25 +66,25 @@ impl PartialEq for Decoy {
 impl Eq for Decoy {}
 
 #[derive(Debug, Clone, Eq, PartialEq)]
-pub enum Salted<T: CwtAny> {
+pub enum SaltedEntry<T: CwtAny> {
     Claim(SaltedClaim<T>),
     Element(SaltedElement<T>),
     Decoy(Decoy),
 }
 
-impl<T: CwtAny> Salted<T> {
-    pub fn upcast(self) -> EsdicawtSpecResult<Salted<Value>> {
+impl<T: CwtAny> SaltedEntry<T> {
+    pub fn upcast(self) -> EsdicawtSpecResult<SaltedEntry<Value>> {
         Ok(match self {
-            Self::Claim(SaltedClaim { salt, value, name }) => Salted::<Value>::Claim(SaltedClaim {
+            Self::Claim(SaltedClaim { salt, value, name }) => SaltedEntry::<Value>::Claim(SaltedClaim {
                 salt,
                 value: value.to_cbor_value()?,
                 name,
             }),
-            Self::Element(SaltedElement { salt, value }) => Salted::<Value>::Element(SaltedElement {
+            Self::Element(SaltedElement { salt, value }) => SaltedEntry::<Value>::Element(SaltedElement {
                 salt,
                 value: value.to_cbor_value()?,
             }),
-            Self::Decoy(salt) => Salted::<Value>::Decoy(salt),
+            Self::Decoy(salt) => SaltedEntry::<Value>::Decoy(salt),
         })
     }
 
@@ -110,7 +110,7 @@ impl<T: CwtAny> Salted<T> {
     }
 }
 
-impl<T: CwtAny> serde::Serialize for Salted<T> {
+impl<T: CwtAny> serde::Serialize for SaltedEntry<T> {
     fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
         match self {
             Self::Claim(SaltedClaim { salt, name, value }) => {
@@ -135,12 +135,12 @@ impl<T: CwtAny> serde::Serialize for Salted<T> {
     }
 }
 
-impl<'de, T: CwtAny> serde::Deserialize<'de> for Salted<T> {
+impl<'de, T: CwtAny> serde::Deserialize<'de> for SaltedEntry<T> {
     fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
         struct SaltedVisitor<T: CwtAny>(core::marker::PhantomData<T>);
 
         impl<'de, T: CwtAny> serde::de::Visitor<'de> for SaltedVisitor<T> {
-            type Value = Salted<T>;
+            type Value = SaltedEntry<T>;
 
             fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
                 write!(formatter, "a salted disclosure")
@@ -154,9 +154,9 @@ impl<'de, T: CwtAny> serde::Deserialize<'de> for Salted<T> {
                 let name = seq.next_element::<SdCwtClaim>()?;
 
                 Ok(match (salt, value, name) {
-                    (salt, None, None) => Salted::Decoy(Decoy { salt: (salt,) }),
-                    (salt, Some(value), None) => Salted::Element(SaltedElement { salt, value }),
-                    (salt, Some(value), Some(name)) => Salted::Claim(SaltedClaim { salt, value, name }),
+                    (salt, None, None) => SaltedEntry::Decoy(Decoy { salt: (salt,) }),
+                    (salt, Some(value), None) => SaltedEntry::Element(SaltedElement { salt, value }),
+                    (salt, Some(value), Some(name)) => SaltedEntry::Claim(SaltedClaim { salt, value, name }),
                     _ => return Err(A::Error::custom("Invalid disclosure")),
                 })
             }
@@ -166,19 +166,19 @@ impl<'de, T: CwtAny> serde::Deserialize<'de> for Salted<T> {
     }
 }
 
-impl<T: CwtAny> From<SaltedClaim<T>> for Salted<T> {
+impl<T: CwtAny> From<SaltedClaim<T>> for SaltedEntry<T> {
     fn from(v: SaltedClaim<T>) -> Self {
         Self::Claim(v)
     }
 }
 
-impl<T: CwtAny> From<SaltedElement<T>> for Salted<T> {
+impl<T: CwtAny> From<SaltedElement<T>> for SaltedEntry<T> {
     fn from(v: SaltedElement<T>) -> Self {
         Self::Element(v)
     }
 }
 
-impl<T: CwtAny> From<Decoy> for Salted<T> {
+impl<T: CwtAny> From<Decoy> for SaltedEntry<T> {
     fn from(v: Decoy) -> Self {
         Self::Decoy(v)
     }
@@ -210,7 +210,7 @@ impl<T: CwtAny> From<Decoy> for SaltedRef<'_, T> {
     }
 }
 
-impl<'a, T: CwtAny> From<SaltedRef<'a, T>> for Salted<T> {
+impl<'a, T: CwtAny> From<SaltedRef<'a, T>> for SaltedEntry<T> {
     fn from(s: SaltedRef<'a, T>) -> Self {
         match s {
             SaltedRef::Claim(SaltedClaimRef { salt, value, name }) => Self::Claim(SaltedClaim {
@@ -224,21 +224,21 @@ impl<'a, T: CwtAny> From<SaltedRef<'a, T>> for Salted<T> {
     }
 }
 
-impl<'a, T: CwtAny> From<&'a Salted<T>> for SaltedRef<'a, T> {
-    fn from(s: &'a Salted<T>) -> Self {
+impl<'a, T: CwtAny> From<&'a SaltedEntry<T>> for SaltedRef<'a, T> {
+    fn from(s: &'a SaltedEntry<T>) -> Self {
         match s {
-            Salted::Claim(SaltedClaim { salt, value, name }) => Self::Claim(SaltedClaimRef { salt: *salt, value, name }),
-            Salted::Element(SaltedElement { salt, value }) => Self::Element(SaltedElementRef { salt: *salt, value }),
-            Salted::Decoy(decoy) => Self::Decoy(*decoy),
+            SaltedEntry::Claim(SaltedClaim { salt, value, name }) => Self::Claim(SaltedClaimRef { salt: *salt, value, name }),
+            SaltedEntry::Element(SaltedElement { salt, value }) => Self::Element(SaltedElementRef { salt: *salt, value }),
+            SaltedEntry::Decoy(decoy) => Self::Decoy(*decoy),
         }
     }
 }
 
-pub type SaltedArrayWithDigests<'a> = HashMap<Vec<u8>, Cow<'a, Salted<Value>>>;
-pub type SaltedArrayToVerify<'a> = Vec<(Cow<'a, Salted<Value>>, Option<Vec<u8>>)>;
+pub type SaltedArrayWithDigests<'a> = HashMap<Vec<u8>, Cow<'a, SaltedEntry<Value>>>;
+pub type SaltedArrayToVerify<'a> = Vec<(Cow<'a, SaltedEntry<Value>>, Option<Vec<u8>>)>;
 
 #[derive(Default, Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
-pub struct SaltedArray(pub Vec<InlinedCbor<Salted<Value>>>);
+pub struct SaltedArray(pub Vec<InlinedCbor<SaltedEntry<Value>>>);
 
 impl SaltedArray {
     pub fn new() -> Self {
@@ -251,28 +251,28 @@ impl SaltedArray {
 
     /// Adds the item to the array and return a reference to it in order to hash it later
     pub fn push_ref_bytes<'a, T: CwtAny + 'a>(&'a mut self, salted: impl Into<SaltedRef<'a, T>>) -> EsdicawtSpecResult<&'a [u8]> {
-        self.0.push(Salted::from(salted.into()).upcast()?.into());
+        self.0.push(SaltedEntry::from(salted.into()).upcast()?.into());
         // SAFETY: we just inserted the item in the array so '.last_mut()' cannot fail
         Ok(self.0.last_mut().map(InlinedCbor::to_bytes).transpose()?.unwrap())
     }
 
-    pub fn as_iter(&self) -> impl Iterator<Item = EsdicawtSpecResult<Cow<'_, Salted<Value>>>> + '_ {
+    pub fn as_iter(&self) -> impl Iterator<Item = EsdicawtSpecResult<Cow<'_, SaltedEntry<Value>>>> + '_ {
         self.0.iter().map(InlinedCbor::as_value)
     }
 
-    pub fn iter_clone(&self) -> impl Iterator<Item = EsdicawtSpecResult<Salted<Value>>> {
+    pub fn iter_clone(&self) -> impl Iterator<Item = EsdicawtSpecResult<SaltedEntry<Value>>> {
         self.0.iter().map(InlinedCbor::clone_value)
     }
 
-    pub fn iter(&mut self) -> impl Iterator<Item = EsdicawtSpecResult<&Salted<Value>>> + '_ {
+    pub fn iter(&mut self) -> impl Iterator<Item = EsdicawtSpecResult<&SaltedEntry<Value>>> + '_ {
         self.0.iter_mut().map(InlinedCbor::to_value)
     }
 
-    pub fn take_into_iter(self) -> impl Iterator<Item = EsdicawtSpecResult<Salted<Value>>> {
+    pub fn take_into_iter(self) -> impl Iterator<Item = EsdicawtSpecResult<SaltedEntry<Value>>> {
         self.0.into_iter().map(InlinedCbor::try_into_value)
     }
 
-    pub fn iter_mut(&mut self) -> impl Iterator<Item = EsdicawtSpecResult<&mut Salted<Value>>> + '_ {
+    pub fn iter_mut(&mut self) -> impl Iterator<Item = EsdicawtSpecResult<&mut SaltedEntry<Value>>> + '_ {
         self.0.iter_mut().map(InlinedCbor::to_value_mut)
     }
 

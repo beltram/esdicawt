@@ -1,6 +1,6 @@
 use crate::time::TimeVerification;
 use ciborium::Value;
-use esdicawt_spec::{REDACTED_CLAIM_ELEMENT_TAG, blinded_claims::Salted, redacted_claims::RedactedClaimKeys};
+use esdicawt_spec::{REDACTED_CLAIM_ELEMENT_TAG, blinded_claims::SaltedEntry, redacted_claims::RedactedClaimKeys};
 use std::{borrow::Cow, collections::HashMap};
 
 #[derive(Default, Debug, Clone)]
@@ -51,7 +51,7 @@ pub enum SdCwtHolderValidationError<CustomError: Send + Sync> {
 }
 
 // wrapping "_validate" is required for fallible recursion
-pub fn validate_disclosures<E>(payload: &Value, disclosures: &HashMap<Vec<u8>, Cow<Salted<Value>>>) -> Result<usize, SdCwtHolderValidationError<E>>
+pub fn validate_disclosures<E>(payload: &Value, disclosures: &HashMap<Vec<u8>, Cow<SaltedEntry<Value>>>) -> Result<usize, SdCwtHolderValidationError<E>>
 where
     E: core::error::Error + Send + Sync,
 {
@@ -59,7 +59,7 @@ where
 }
 
 #[tailcall::tailcall]
-fn _validate<E>(payload: &Value, disclosures: &HashMap<Vec<u8>, Cow<Salted<Value>>>) -> Result<usize, SdCwtHolderValidationError<E>>
+fn _validate<E>(payload: &Value, disclosures: &HashMap<Vec<u8>, Cow<SaltedEntry<Value>>>) -> Result<usize, SdCwtHolderValidationError<E>>
 where
     E: core::error::Error + Send + Sync,
 {
@@ -122,7 +122,7 @@ mod tests {
     use cose_key::keyset::CoseKeySet;
     use esdicawt_spec::{
         CwtAny, EsdicawtSpecError, NoClaims, SdCwtClaim,
-        blinded_claims::{Salted, SaltedElement},
+        blinded_claims::{SaltedElement, SaltedEntry},
         issuance::SdCwtIssuedTagged,
         sd,
     };
@@ -281,7 +281,7 @@ mod tests {
 
         // adding extra disclosure
         let mut sd_cwt = sd_cwt_tagged.clone();
-        let extra = Salted::Element(SaltedElement {
+        let extra = SaltedEntry::Element(SaltedElement {
             value: cbor!("a").unwrap(),
             salt: Salt::empty(),
         });
@@ -294,7 +294,7 @@ mod tests {
 
         // adding extra decoy disclosure
         let mut sd_cwt = sd_cwt_tagged.clone();
-        let extra = Salted::Decoy(Decoy { salt: (Salt::empty(),) });
+        let extra = SaltedEntry::Decoy(Decoy { salt: (Salt::empty(),) });
         sd_cwt.0.disclosures_mut().unwrap().0.push(extra.into());
         assert!(matches!(
             holder.verify_sd_cwt(&sd_cwt.to_cbor_bytes().unwrap(), Default::default(), &issuer_verifying_key),
@@ -305,7 +305,7 @@ mod tests {
         // alter disclosure of the map element
         let mut sd_cwt = sd_cwt_tagged.clone();
         for d in &mut sd_cwt.0.disclosures_mut().unwrap().0 {
-            if let Salted::Claim(c) = d.to_value_mut().unwrap() {
+            if let SaltedEntry::Claim(c) = d.to_value_mut().unwrap() {
                 c.salt = Salt::empty()
             }
         }
@@ -318,7 +318,7 @@ mod tests {
         #[allow(clippy::redundant_clone)]
         let mut sd_cwt = sd_cwt_tagged.clone();
         for d in &mut sd_cwt.0.disclosures_mut().unwrap().0 {
-            if let Salted::Element(c) = d.to_value_mut().unwrap() {
+            if let SaltedEntry::Element(c) = d.to_value_mut().unwrap() {
                 c.salt = Salt::empty()
             }
         }
