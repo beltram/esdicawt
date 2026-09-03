@@ -583,6 +583,7 @@ pub mod claims {
     }
 
     #[derive(Default, Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
+    #[serde(transparent)]
     pub struct FullClaimsNoRedaction(pub FullClaims);
 
     impl Select for FullClaimsNoRedaction {
@@ -592,6 +593,7 @@ pub mod claims {
     }
 
     #[derive(Default, Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
+    #[serde(transparent)]
     pub struct FullClaimsAllRedacted(pub FullClaims);
 
     impl Select for FullClaimsAllRedacted {

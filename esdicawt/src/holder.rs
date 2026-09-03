@@ -541,6 +541,7 @@ pub mod claims {
     }
 
     #[derive(Default, Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
+    #[serde(transparent)]
     pub(super) struct CustomTokenClaimsAllRedacted(pub(super) CustomTokenClaims);
 
     impl Select for CustomTokenClaimsAllRedacted {
