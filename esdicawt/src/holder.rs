@@ -182,7 +182,7 @@ pub trait Holder {
         params: HolderParams<Self::KbtPayloadClaims, Self::KbtProtectedClaims, Self::KbtUnprotectedClaims>,
     ) -> Result<Vec<u8>, SdCwtHolderError<Self::Error>> {
         // verify again the time claims of the SD-CWT as time could have gone by between the last 'verify_sd_cwt'
-        let payload = sd_cwt.0.payload.to_value()?;
+        let payload = sd_cwt.payload.to_value()?;
         let now = params.artificial_time.unwrap_or_else(crate::elapsed_since_epoch);
         let iat = payload.inner.issued_at;
         let exp = payload.inner.expiration;
@@ -272,8 +272,34 @@ pub trait Holder {
 
 #[derive(Debug, Clone)]
 pub struct SdCwtVerified<PayloadClaims: Select, Hasher: digest::Digest + Clone, ProtectedClaims: CustomClaims = NoClaims, UnprotectedClaims: CustomClaims = NoClaims>(
-    pub SdCwtIssued<PayloadClaims, Hasher, ProtectedClaims, UnprotectedClaims>,
+    SdCwtIssued<PayloadClaims, Hasher, ProtectedClaims, UnprotectedClaims>,
 );
+
+impl<PayloadClaims: Select, Hasher: digest::Digest + Clone, ProtectedClaims: CustomClaims, UnprotectedClaims: CustomClaims> std::ops::Deref
+    for SdCwtVerified<PayloadClaims, Hasher, ProtectedClaims, UnprotectedClaims>
+{
+    type Target = SdCwtIssued<PayloadClaims, Hasher, ProtectedClaims, UnprotectedClaims>;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+impl<PayloadClaims: Select, Hasher: digest::Digest + Clone, ProtectedClaims: CustomClaims, UnprotectedClaims: CustomClaims> std::ops::DerefMut
+    for SdCwtVerified<PayloadClaims, Hasher, ProtectedClaims, UnprotectedClaims>
+{
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.0
+    }
+}
+
+impl<PayloadClaims: Select, Hasher: digest::Digest + Clone, ProtectedClaims: CustomClaims, UnprotectedClaims: CustomClaims>
+    From<SdCwtIssued<PayloadClaims, Hasher, ProtectedClaims, UnprotectedClaims>> for SdCwtVerified<PayloadClaims, Hasher, ProtectedClaims, UnprotectedClaims>
+{
+    fn from(value: SdCwtIssued<PayloadClaims, Hasher, ProtectedClaims, UnprotectedClaims>) -> Self {
+        Self(value)
+    }
+}
 
 impl<PayloadClaims: Select, Hasher: digest::Digest + Clone, ProtectedClaims: CustomClaims, UnprotectedClaims: CustomClaims> PartialEq
     for SdCwtVerified<PayloadClaims, Hasher, ProtectedClaims, UnprotectedClaims>

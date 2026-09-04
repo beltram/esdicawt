@@ -19,11 +19,8 @@ impl<PayloadClaims: Select, Hasher: digest::Digest + digest::FixedOutputReset + 
     for SdCwtVerified<PayloadClaims, Hasher, ProtectedClaims, UnprotectedClaims>
 {
     fn query(&self, token_query: Query) -> EsdicawtSpecResult<Option<Value>> {
-        let payload = self.0.payload.upcast_value()?;
-        self.0
-            .disclosures()
-            .map(|d| query::<Hasher>(&mut d.to_verify()?, &payload, token_query))
-            .unwrap_or(Ok(None))
+        let payload = self.payload.upcast_value()?;
+        self.disclosures().map(|d| query::<Hasher>(&mut d.to_verify()?, &payload, token_query)).unwrap_or(Ok(None))
     }
 }
 
