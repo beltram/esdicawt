@@ -256,7 +256,7 @@ pub type SaltedArrayWithDigests<'a> = HashMap<Vec<u8>, Cow<'a, SaltedEntry<Value
 pub type SaltedArrayToVerify<'a> = Vec<(Cow<'a, SaltedEntry<Value>>, LazyRedacted)>;
 
 #[derive(Default, Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
-pub struct SaltedArray(pub Vec<InlinedCbor<SaltedEntry<Value>>>);
+pub struct SaltedArray(Vec<InlinedCbor<SaltedEntry<Value>>>);
 
 impl SaltedArray {
     pub fn new() -> Self {
@@ -346,6 +346,26 @@ impl SaltedArray {
 
     pub fn len(&self) -> usize {
         self.0.len()
+    }
+}
+
+impl From<Vec<InlinedCbor<SaltedEntry<Value>>>> for SaltedArray {
+    fn from(value: Vec<InlinedCbor<SaltedEntry<Value>>>) -> Self {
+        Self(value)
+    }
+}
+
+impl std::ops::Deref for SaltedArray {
+    type Target = Vec<InlinedCbor<SaltedEntry<Value>>>;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+impl std::ops::DerefMut for SaltedArray {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.0
     }
 }
 

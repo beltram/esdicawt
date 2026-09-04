@@ -345,7 +345,7 @@ mod tests {
 
         redact_value::<Error, sha2::Sha256>(&mut payload, &mut rand::thread_rng(), &mut sd_claims, None).unwrap();
 
-        for d in &mut sd_claims.0 {
+        for d in &mut *sd_claims {
             let d = d.to_value_mut().unwrap();
             assert_eq!(d.salt().len(), Salt::SIZE);
         }

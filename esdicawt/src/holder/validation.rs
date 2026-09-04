@@ -127,6 +127,7 @@ mod tests {
     use ciborium::{Value, cbor};
     use cose_key::keyset::CoseKeySet;
     use esdicawt_spec::issuance::SdCwtIssued;
+    use std::ops::DerefMut;
 
     #[test]
     fn should_fail_when_std_claims_mismatch() {
@@ -233,7 +234,6 @@ mod tests {
         sd_cwt
             .disclosures_mut()
             .unwrap()
-            .0
             .retain(|d| !matches!(d.clone_value().unwrap(), c if c.name() == Some(&SdCwtClaim::Int(42))));
         assert!(matches!(
             holder.verify_sd_cwt(&sd_cwt.to_cbor_bytes().unwrap(), Default::default(), &issuer_verifying_key),
@@ -245,7 +245,6 @@ mod tests {
         sd_cwt
             .disclosures_mut()
             .unwrap()
-            .0
             .retain(|d| !matches!(d.clone_value().unwrap(), c if c.name() == Some(&SdCwtClaim::Int(44))));
         assert!(matches!(
             holder.verify_sd_cwt(&sd_cwt.to_cbor_bytes().unwrap(), Default::default(), &issuer_verifying_key),
@@ -257,7 +256,6 @@ mod tests {
         sd_cwt
             .disclosures_mut()
             .unwrap()
-            .0
             .retain(|d| !matches!(d.clone_value().unwrap(), c if c.value() == Some(&cbor!(46).unwrap())));
         assert!(matches!(
             holder.verify_sd_cwt(&sd_cwt.to_cbor_bytes().unwrap(), Default::default(), &issuer_verifying_key),
@@ -269,7 +267,6 @@ mod tests {
         sd_cwt
             .disclosures_mut()
             .unwrap()
-            .0
             .retain(|d| !matches!(d.clone_value().unwrap(), c if c.value() == Some(&cbor!(48).unwrap())));
         assert!(matches!(
             holder.verify_sd_cwt(&sd_cwt.to_cbor_bytes().unwrap(), Default::default(), &issuer_verifying_key),
@@ -282,7 +279,7 @@ mod tests {
             value: cbor!("a").unwrap(),
             salt: Salt::empty(),
         });
-        sd_cwt.disclosures_mut().unwrap().0.push(extra.into());
+        sd_cwt.disclosures_mut().unwrap().push(extra.into());
         assert!(matches!(
             holder.verify_sd_cwt(&sd_cwt.to_cbor_bytes().unwrap(), Default::default(), &issuer_verifying_key),
             Err(SdCwtHolderError::ValidationError(SdCwtHolderValidationError::OrphanDisclosure { expected, actual }))
@@ -292,7 +289,7 @@ mod tests {
         // adding extra decoy disclosure
         let mut sd_cwt = sd_cwt_tagged.clone();
         let extra = SaltedEntry::Decoy(Decoy { salt: (Salt::empty(),) });
-        sd_cwt.disclosures_mut().unwrap().0.push(extra.into());
+        sd_cwt.disclosures_mut().unwrap().push(extra.into());
         assert!(matches!(
             holder.verify_sd_cwt(&sd_cwt.to_cbor_bytes().unwrap(), Default::default(), &issuer_verifying_key),
             Err(SdCwtHolderError::ValidationError(SdCwtHolderValidationError::OrphanDisclosure { expected, actual }))
@@ -301,7 +298,7 @@ mod tests {
 
         // alter disclosure of the map element
         let mut sd_cwt = sd_cwt_tagged.clone();
-        for d in &mut sd_cwt.disclosures_mut().unwrap().0 {
+        for d in sd_cwt.disclosures_mut().unwrap().deref_mut() {
             if let SaltedEntry::Claim(c) = d.to_value_mut().unwrap() {
                 c.salt = Salt::empty()
             }
@@ -314,7 +311,7 @@ mod tests {
         // alter disclosure of the array element
         #[allow(clippy::redundant_clone)]
         let mut sd_cwt = sd_cwt_tagged.clone();
-        for d in &mut sd_cwt.disclosures_mut().unwrap().0 {
+        for d in sd_cwt.disclosures_mut().unwrap().deref_mut() {
             if let SaltedEntry::Element(c) = d.to_value_mut().unwrap() {
                 c.salt = Salt::empty()
             }
@@ -344,8 +341,8 @@ mod tests {
         // duplicate a disclosure
         let disclosures = sd_cwt_tagged.disclosures_mut().unwrap();
         #[allow(clippy::indexing_slicing)]
-        let duplicate = disclosures.0[0].clone();
-        disclosures.0.push(duplicate);
+        let duplicate = disclosures[0].clone();
+        disclosures.push(duplicate);
 
         let err = holder
             .verify_sd_cwt(&sd_cwt_tagged.to_cbor_bytes().unwrap(), Default::default(), &issuer_verifying_key)

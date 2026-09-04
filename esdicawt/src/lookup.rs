@@ -195,7 +195,7 @@ mod tests {
         if !contains_redacted {
             assert_eq!(sd_kbt_verified.query(query.to_vec().into()).unwrap(), expected.clone());
         } else if simple_matching {
-            sd_cwt.disclosures_mut().unwrap().0.clear();
+            sd_cwt.disclosures_mut().unwrap().clear();
             assert_eq!(sd_cwt.query(query.to_vec().into()).unwrap(), None);
 
             sd_kbt.0.clear_disclosures().unwrap();

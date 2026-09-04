@@ -51,16 +51,16 @@ impl Presentation {
     pub(crate) fn try_select_disclosures<Hasher: digest::Digest, E: core::error::Error + Send + Sync>(&self, disclosures: SaltedArray) -> SdCwtHolderResult<SaltedArray, E> {
         Ok(match self {
             Self::Full => disclosures,
-            Self::None => SaltedArray(vec![]),
+            Self::None => SaltedArray::default(),
             Self::Custom(f) => f(disclosures),
             Self::Path(f) => {
                 let hashed_disclosures = disclosures.digested::<Hasher>()?;
                 let cbor_paths = traverse_all_cbor_paths_in_disclosures::<Hasher, E>(&hashed_disclosures)?;
-                let cbor_paths = cbor_paths
+                cbor_paths
                     .into_iter()
                     .filter_map(|(path, salted, ..)| f(&path).then_some(salted.into()))
-                    .collect::<Vec<_>>();
-                SaltedArray(cbor_paths)
+                    .collect::<Vec<_>>()
+                    .into()
             }
         })
     }
