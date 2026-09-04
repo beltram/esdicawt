@@ -844,7 +844,7 @@ mod tests {
             salt: Salt::empty(),
             value: Stuff { foo: "baz".into() }.to_cbor_value().unwrap(),
         });
-        sd_cwt.0.sd_unprotected.sd_claims.as_mut().unwrap().0.push(orphan.into());
+        sd_cwt.0.sd_unprotected.sd_claims.as_mut().unwrap().push(orphan.into());
 
         let holder_params = default_holder_params::<NoClaims>();
         let sd_kbt = holder.new_presentation(sd_cwt, holder_params).unwrap().to_cbor_bytes().unwrap();

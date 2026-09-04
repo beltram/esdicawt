@@ -116,7 +116,7 @@ impl<
     pub fn clear_disclosures(&mut self) -> EsdicawtSpecResult<()> {
         let protected = self.protected.to_value_mut()?;
         if let Some(s) = protected.kcwt.disclosures_mut() {
-            s.0.clear()
+            s.clear()
         }
         self.protected.update_from_value()?;
         Ok(())
