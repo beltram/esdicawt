@@ -3,8 +3,7 @@ use coset::AsCborValue;
 use serde::ser::SerializeMap;
 
 use super::KbtProtected;
-use crate::issuance::SdCwtIssued;
-use crate::{COSE_HEADER_KCWT, CWT_CLAIM_ALG, CWT_MEDIA_TYPE, CustomClaims, CwtAny, MEDIA_TYPE_KB_CWT, Select, key_binding::KbtProtectedBuilder};
+use crate::{COSE_HEADER_KCWT, CWT_CLAIM_ALG, CWT_MEDIA_TYPE, CustomClaims, CwtAny, MEDIA_TYPE_KB_CWT, Select, issuance::SdCwtIssued, key_binding::KbtProtectedBuilder};
 
 impl<IssuerPayloadClaims: Select, Hasher: digest::Digest + Clone, IssuerProtectedClaims: CustomClaims, IssuerUnprotectedClaims: CustomClaims, Extra: CustomClaims> serde::Serialize
     for KbtProtected<IssuerPayloadClaims, Hasher, IssuerProtectedClaims, IssuerUnprotectedClaims, Extra>

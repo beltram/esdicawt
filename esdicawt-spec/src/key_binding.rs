@@ -1,10 +1,9 @@
-use crate::issuance::SdCwtIssued;
 use crate::{
     CustomClaims, EsdicawtSpecResult, NoClaims, Select,
     alg::Algorithm,
     blinded_claims::{SaltedArray, SaltedEntry},
     inlined_cbor::InlinedCbor,
-    issuance::SdPayload,
+    issuance::{SdCwtIssued, SdPayload},
 };
 
 mod accessors;
@@ -123,19 +122,6 @@ impl<
     }
 }
 
-pub type KbtCwtTagged<
-    IssuerPayloadClaims,
-    Hasher,
-    PayloadClaims = NoClaims,
-    IssuerProtectedClaims = NoClaims,
-    IssuerUnprotectedClaims = NoClaims,
-    ProtectedClaims = NoClaims,
-    UnprotectedClaims = NoClaims,
-> = ciborium::tag::RequireExact<
-    KbtCwt<IssuerPayloadClaims, Hasher, PayloadClaims, IssuerProtectedClaims, IssuerUnprotectedClaims, ProtectedClaims, UnprotectedClaims>,
-    { <coset::CoseSign1 as coset::TaggedCborSerializable>::TAG },
->;
-
 impl<
     IssuerPayloadClaims: Select,
     Hasher: digest::Digest + Clone,
@@ -173,8 +159,8 @@ mod tests {
         UnprotectedClaims: CustomClaims,
         PayloadClaims: CustomClaims,
     >(
-        a: KbtCwtTagged<IssuerPayloadClaims, Hasher, PayloadClaims, IssuerProtectedClaims, IssuerUnprotectedClaims, ProtectedClaims, UnprotectedClaims>,
-        b: KbtCwtTagged<IssuerPayloadClaims, Hasher, PayloadClaims, IssuerProtectedClaims, IssuerUnprotectedClaims, ProtectedClaims, UnprotectedClaims>,
+        a: KbtCwt<IssuerPayloadClaims, Hasher, PayloadClaims, IssuerProtectedClaims, IssuerUnprotectedClaims, ProtectedClaims, UnprotectedClaims>,
+        b: KbtCwt<IssuerPayloadClaims, Hasher, PayloadClaims, IssuerProtectedClaims, IssuerUnprotectedClaims, ProtectedClaims, UnprotectedClaims>,
     ) -> bool {
         a == b
     }

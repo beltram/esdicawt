@@ -75,9 +75,6 @@ pub struct SdInnerPayload<Extra: CwtAny> {
     pub extra: Option<Extra>,
 }
 
-/*pub type SdCwtIssuedTagged<PayloadClaims, Hasher, ProtectedClaims = NoClaims, UnprotectedClaims = NoClaims> =
-ciborium::tag::RequireExact<SdCwtIssued<PayloadClaims, Hasher, ProtectedClaims, UnprotectedClaims>, { <coset::CoseSign1 as coset::TaggedCborSerializable>::TAG }>;*/
-
 impl<PayloadClaims: Select, Hasher: digest::Digest + Clone, ProtectedClaims: CustomClaims, UnprotectedClaims: CustomClaims>
     SdCwtIssued<PayloadClaims, Hasher, ProtectedClaims, UnprotectedClaims>
 {

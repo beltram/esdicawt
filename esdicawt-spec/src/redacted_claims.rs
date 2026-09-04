@@ -1,5 +1,4 @@
-use crate::blinded_claims::LazyRedacted;
-use crate::{CwtAny, EsdicawtSpecResult, REDACTED_CLAIM_ELEMENT_TAG};
+use crate::{CwtAny, EsdicawtSpecResult, REDACTED_CLAIM_ELEMENT_TAG, blinded_claims::LazyRedacted};
 use ciborium::Value;
 use std::rc::Rc;
 

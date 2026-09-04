@@ -1,6 +1,5 @@
 use crate::redacted_claims::{RedactedClaimElement, RedactedClaimHash, ToRedacted};
-use std::rc::Rc;
-use std::sync::OnceLock;
+use std::{rc::Rc, sync::OnceLock};
 
 #[cfg(not(feature = "backward"))]
 #[derive(Default, Debug, Clone)]

@@ -6,7 +6,7 @@ use crate::{
     CwtStdLabel, ShallowVerifierParams, VerifierParams,
     any_digest::AnyDigest,
     elapsed_since_epoch,
-    spec::{CWT_CLAIM_KEY_CONFIRMATION, CustomClaims, CwtAny, SdHashAlg, Select, issuance::SdInnerPayload, key_binding::KbtCwtTagged, reexports::coset, verified::KbtCwtVerified},
+    spec::{CWT_CLAIM_KEY_CONFIRMATION, CustomClaims, CwtAny, SdHashAlg, Select, issuance::SdInnerPayload, key_binding::KbtCwt, reexports::coset, verified::KbtCwtVerified},
     time::verify_time_claims,
     verifier::error::SdCwtVerifierError,
 };
@@ -54,7 +54,7 @@ pub trait Verifier {
         holder_verifier: Option<&Self::HolderVerifier>,
         cks: &cose_key::keyset::CoseKeySet,
     ) -> Result<
-        KbtCwtTagged<
+        KbtCwt<
             Self::IssuerPayloadClaims,
             AnyDigest,
             Self::KbtPayloadClaims,
@@ -91,7 +91,7 @@ pub trait Verifier {
         let (mut kbt, mut generic_sd_cwt_payload) = __shallow_verify_sd_kbt(raw_sd_kbt, params.shallow(), holder_verifier, cks)?;
         let generic_sd_cwt_payload_map = generic_sd_cwt_payload.as_map().ok_or(SdCwtVerifierError::InvalidSdCwt)?;
 
-        let kbt_protected = kbt.0.protected.to_value_mut()?;
+        let kbt_protected = kbt.protected.to_value_mut()?;
 
         let (mut sub, mut iss, mut aud) = (None, None, None);
 
@@ -110,7 +110,7 @@ pub trait Verifier {
             }
         }
 
-        let kbt_payload = kbt.0.payload.try_into_value()?;
+        let kbt_payload = kbt.payload.try_into_value()?;
 
         // verify SD-KBT audience
         if let Some(expected) = params.expected_kbt_audience {
@@ -210,8 +210,8 @@ pub trait Verifier {
         let sd_cwt_payload = generic_sd_cwt_payload.deserialized::<SdInnerPayload<Self::IssuerPayloadClaims>>()?;
         let claimset = sd_cwt_payload.extra;
 
-        let protected = kbt.0.protected.try_into_value()?.try_into()?;
-        let unprotected = kbt.0.unprotected;
+        let protected = kbt.protected.try_into_value()?.try_into()?;
+        let unprotected = kbt.unprotected;
 
         Ok(KbtCwtVerified {
             protected,
@@ -241,23 +241,18 @@ fn __shallow_verify_sd_kbt<
     cks: &cose_key::keyset::CoseKeySet,
 ) -> Result<
     (
-        KbtCwtTagged<IssuerPayloadClaims, AnyDigest, KbtPayloadClaims, IssuerProtectedClaims, IssuerUnprotectedClaims, KbtProtectedClaims, KbtUnprotectedClaims>,
+        KbtCwt<IssuerPayloadClaims, AnyDigest, KbtPayloadClaims, IssuerProtectedClaims, IssuerUnprotectedClaims, KbtProtectedClaims, KbtUnprotectedClaims>,
         Value,
     ),
     SdCwtVerifierError<Error>,
 > {
-    let mut kbt = KbtCwtTagged::<
-        IssuerPayloadClaims,
-        AnyDigest,
-        KbtPayloadClaims,
-        IssuerProtectedClaims,
-        IssuerUnprotectedClaims,
-        KbtProtectedClaims,
-        KbtUnprotectedClaims,
-    >::from_cbor_bytes(raw_sd_kbt)?;
+    let mut kbt =
+        KbtCwt::<IssuerPayloadClaims, AnyDigest, KbtPayloadClaims, IssuerProtectedClaims, IssuerUnprotectedClaims, KbtProtectedClaims, KbtUnprotectedClaims>::from_cbor_bytes(
+            raw_sd_kbt,
+        )?;
 
-    let generic_sd_cwt = kbt.0.generic_sd_cwt()?;
-    let kbt_protected = kbt.0.protected.to_value_mut()?;
+    let generic_sd_cwt = kbt.generic_sd_cwt()?;
+    let kbt_protected = kbt.protected.to_value_mut()?;
 
     let generic_sd_cwt_payload = generic_sd_cwt.payload.upcast_value()?;
     let generic_sd_cwt_payload_map = generic_sd_cwt_payload.as_map().ok_or(SdCwtVerifierError::InvalidSdCwt)?;
@@ -365,7 +360,7 @@ fn __shallow_verify_sd_kbt<
         crate::signature_verifier::validate_cose_sign1_signature(&sd_cwt_cose_sign1, cks)?;
     }
 
-    let kbt_payload = kbt.0.payload.to_value()?;
+    let kbt_payload = kbt.payload.to_value()?;
 
     // verify time claims of the SD-KBT
     let (iat, exp, nbf) = (Some(kbt_payload.issued_at), kbt_payload.expiration, kbt_payload.not_before);
@@ -405,7 +400,7 @@ pub trait VerifierWithStatus: Verifier {
 
         let mut kbt = self.shallow_verify_sd_kbt(raw_sd_kbt, params.shallow(), holder_verifier, cks)?;
 
-        let kbt_protected = kbt.0.protected.to_value_mut()?;
+        let kbt_protected = kbt.protected.to_value_mut()?;
         let sd_cwt_payload = kbt_protected.kcwt.payload.to_value_mut()?;
 
         // Read the StatusClaim from the SD-CWT to know where to fetch the Status from

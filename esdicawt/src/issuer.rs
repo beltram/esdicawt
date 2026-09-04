@@ -6,12 +6,12 @@ use crate::{
     issuer::{error::SdCwtIssuerError, params::IssuerParams, redaction::redact},
     spec::{
         COSE_HEADER_SD_ALG, COSE_HEADER_SD_CLAIMS, CWT_CLAIM_AUDIENCE, CWT_CLAIM_CNONCE, CWT_CLAIM_CTI, CWT_CLAIM_EXPIRES_AT, CWT_CLAIM_ISSUED_AT, CWT_CLAIM_ISSUER,
-        CWT_CLAIM_KEY_CONFIRMATION, CWT_CLAIM_NOT_BEFORE, CWT_CLAIM_SUBJECT, CWT_MEDIA_TYPE, CustomClaims, CwtAny, MEDIA_TYPE_SD_CWT, SdHashAlg, Select, reexports::coset,
+        CWT_CLAIM_KEY_CONFIRMATION, CWT_CLAIM_NOT_BEFORE, CWT_CLAIM_SUBJECT, CWT_MEDIA_TYPE, CustomClaims, CwtAny, MEDIA_TYPE_SD_CWT, SdHashAlg, Select, issuance::SdCwtIssued,
+        reexports::coset,
     },
 };
 use ciborium::Value;
 use coset::{AsCborValue as _, TaggedCborSerializable as _};
-use esdicawt_spec::issuance::SdCwtIssued;
 use signature::{Keypair, SignatureEncoding, Signer};
 
 pub trait Issuer {
@@ -205,12 +205,12 @@ mod tests {
         spec::{
             CwtAny, NoClaims, SdCwtClaim, Select, SelectExt,
             blinded_claims::{SaltedClaim, SaltedElement, SaltedEntry},
+            issuance::SdCwtIssued,
             redacted_claims::{RedactedClaimKeys, ToRedacted},
             reexports::coset::{CoseSign1, TaggedCborSerializable},
         },
     };
     use ciborium::{Value, cbor};
-    use esdicawt_spec::issuance::SdCwtIssued;
     use std::collections::HashMap;
 
     wasm_bindgen_test::wasm_bindgen_test_configure!(run_in_browser);

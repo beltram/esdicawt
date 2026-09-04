@@ -4,7 +4,7 @@ use crate::{
     spec::{
         CustomClaims, Select,
         issuance::SdCwtIssued,
-        key_binding::{KbtCwt, KbtCwtTagged},
+        key_binding::KbtCwt,
         reexports::{coset, coset::iana::EnumI64},
     },
 };
@@ -60,18 +60,6 @@ impl<IssuerPayloadClaims: Select, Hasher: digest::Digest + digest::FixedOutputRe
 
 impl<IssuerPayloadClaims: Select, Hasher: digest::Digest + digest::FixedOutputReset + Clone + 'static, IssuerProtectedClaims: CustomClaims, IssuerUnprotectedClaims: CustomClaims>
     SdCwtRead for SdCwtVerified<IssuerPayloadClaims, Hasher, IssuerProtectedClaims, IssuerUnprotectedClaims>
-{
-}
-
-impl<
-    IssuerPayloadClaims: Select,
-    Hasher: digest::Digest + digest::FixedOutputReset + Clone + 'static,
-    KbtPayloadClaims: CustomClaims,
-    IssuerProtectedClaims: CustomClaims,
-    IssuerUnprotectedClaims: CustomClaims,
-    KbtProtectedClaims: CustomClaims,
-    KbtUnprotectedClaims: CustomClaims,
-> SdCwtRead for KbtCwtTagged<IssuerPayloadClaims, Hasher, KbtPayloadClaims, IssuerProtectedClaims, IssuerUnprotectedClaims, KbtProtectedClaims, KbtUnprotectedClaims>
 {
 }
 
