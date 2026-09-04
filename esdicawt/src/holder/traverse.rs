@@ -3,12 +3,12 @@ use crate::{
     holder::params::CborPath,
     spec::{
         CWT_LABEL_REDACTED_TAG, REDACTED_CLAIM_ELEMENT_TAG,
-        blinded_claims::{SaltedArrayWithDigests, SaltedClaim, SaltedElement, SaltedEntry},
+        blinded_claims::SaltedArrayHashing,
+        blinded_claims::{SaltedClaim, SaltedElement, SaltedEntry},
         redacted_claims::ToRedacted,
     },
 };
 use ciborium::Value;
-use digest::Digest;
 use std::borrow::Cow;
 
 type PathAndSalted = Vec<(Vec<CborPath>, SaltedEntry<Value>)>;
@@ -16,24 +16,24 @@ type PathAndSaltedAndDigest = Vec<(Vec<CborPath>, SaltedEntry<Value>, Vec<u8>)>;
 
 /// Given disclosures, this method returns all the possible paths one can build from it
 // FIXME: this does not work for orphan disclosures, not anchored at the root of the payload
-pub fn traverse_all_cbor_paths_in_disclosures<Hasher: Digest, E>(hashed_disclosures: &SaltedArrayWithDigests<'_>) -> SdCwtHolderResult<PathAndSalted, E>
+pub fn traverse_all_cbor_paths_in_salted_array<H: digest::Digest, E>(salted_array: &SaltedArrayHashing<'_>) -> SdCwtHolderResult<PathAndSalted, E>
 where
     E: core::error::Error + Send + Sync,
 {
     // there are at least as many paths in the ClaimSet as there are disclosures, small optimization
-    let mut paths = Vec::with_capacity(hashed_disclosures.len());
+    let mut paths = Vec::with_capacity(salted_array.len());
 
-    for salted in hashed_disclosures.values() {
-        __traverse::<Hasher, _>(&salted.into(), vec![], hashed_disclosures, &mut paths)?;
+    for salted in salted_array.values() {
+        __traverse::<H, _>(&salted.into(), vec![], salted_array, &mut paths)?;
     }
     Ok(paths.into_iter().map(|(p, s, _)| (p, s)).collect())
 }
 
 #[tailcall::tailcall]
-fn __traverse<'a, Hasher: Digest, E>(
+fn __traverse<'a, H: digest::Digest, E>(
     salted_or_value: &'a SaltedOrValue<'a>,
     mut current: Vec<CborPath>,
-    disclosures: &SaltedArrayWithDigests<'_>,
+    disclosures: &SaltedArrayHashing<'_>,
     paths: &mut PathAndSaltedAndDigest,
 ) -> SdCwtHolderResult<(), E>
 where
@@ -41,7 +41,7 @@ where
 {
     match salted_or_value {
         SaltedOrValue::Salted(salted) => {
-            let digest = salted.to_redacted::<Hasher>()?.to_vec();
+            let digest = salted.to_redacted::<H>()?.to_vec();
             let previous_depth = paths.iter().find_map(|(p, _, d)| (d == &digest).then_some(p.len()));
             let retract_previous = previous_depth.map(|prev| prev <= current.len()).unwrap_or_default();
             let insert = previous_depth.is_none() || previous_depth.map(|prev| current.len() >= prev).unwrap_or_default() || retract_previous;
@@ -68,8 +68,8 @@ where
                             (Some(Value::Simple(CWT_LABEL_REDACTED_TAG)), Value::Array(hashes)) => {
                                 let hashes = hashes.iter().filter_map(|h| h.as_bytes()).collect::<Vec<_>>();
                                 for hash in hashes {
-                                    if let Some(salted_child) = disclosures.get(hash) {
-                                        __traverse::<Hasher, E>(&salted_child.into(), current.clone(), disclosures, paths)?;
+                                    if let Some(salted_child) = disclosures.get::<H>(hash) {
+                                        __traverse::<H, E>(&salted_child.into(), current.clone(), disclosures, paths)?;
                                     }
                                 }
                             }
@@ -78,9 +78,9 @@ where
                                 let Some(hash) = value.as_bytes() else {
                                     return Err(SdCwtHolderError::<E>::ImplementationError("Invalid redacted array element"));
                                 };
-                                if let Some(salted_child) = disclosures.get(hash) {
+                                if let Some(salted_child) = disclosures.get::<H>(hash) {
                                     current.push(CborPath::Index(index as u64));
-                                    __traverse::<Hasher, E>(&salted_child.into(), current.clone(), disclosures, paths)?;
+                                    __traverse::<H, E>(&salted_child.into(), current.clone(), disclosures, paths)?;
                                     current.pop();
                                 }
                             }
@@ -88,7 +88,7 @@ where
                             (label, value) if value.is_map() || value.is_array() => {
                                 let path = label.map(TryInto::try_into).transpose()?.unwrap_or(CborPath::Index(index as u64));
                                 current.push(path);
-                                __traverse::<Hasher, E>(&value.into(), current.clone(), disclosures, paths)?;
+                                __traverse::<H, E>(&value.into(), current.clone(), disclosures, paths)?;
                                 current.pop();
                             }
                             _ => {}
@@ -136,14 +136,14 @@ where
                     (Value::Simple(st), Value::Array(hashes)) if *st == CWT_LABEL_REDACTED_TAG => {
                         let hashes = hashes.iter().filter_map(|h| h.as_bytes()).collect::<Vec<_>>();
                         for hash in hashes {
-                            if let Some(salted_child) = disclosures.get(hash) {
-                                __traverse::<Hasher, E>(&salted_child.into(), current.clone(), disclosures, paths)?;
+                            if let Some(salted_child) = disclosures.get::<H>(hash) {
+                                __traverse::<H, E>(&salted_child.into(), current.clone(), disclosures, paths)?;
                             }
                         }
                     }
                     (_, value) if value.is_map() || value.is_array() => {
                         current.push(label.try_into()?);
-                        __traverse::<Hasher, E>(&value.into(), current.clone(), disclosures, paths)?;
+                        __traverse::<H, E>(&value.into(), current.clone(), disclosures, paths)?;
                         current.pop();
                     }
                     _ => {}
@@ -157,15 +157,15 @@ where
                         let Some(hash) = hash.as_bytes() else {
                             return Err(SdCwtHolderError::<E>::ImplementationError("Invalid redacted array element"));
                         };
-                        if let Some(salted_child) = disclosures.get(hash) {
+                        if let Some(salted_child) = disclosures.get::<H>(hash) {
                             current.push(CborPath::Index(index as u64));
-                            __traverse::<Hasher, E>(&salted_child.into(), current.clone(), disclosures, paths)?;
+                            __traverse::<H, E>(&salted_child.into(), current.clone(), disclosures, paths)?;
                             current.pop();
                         }
                     }
                     value if value.is_map() || value.is_array() => {
                         current.push(CborPath::Index(index as u64));
-                        __traverse::<Hasher, E>(&value.into(), current.clone(), disclosures, paths)?;
+                        __traverse::<H, E>(&value.into(), current.clone(), disclosures, paths)?;
                         current.pop();
                     }
                     _ => {}
@@ -494,7 +494,7 @@ mod tests {
         }
         let d = d.digested::<Sha256>().unwrap();
 
-        let traversed = traverse_all_cbor_paths_in_disclosures::<Sha256, core::convert::Infallible>(&d).unwrap();
+        let traversed = traverse_all_cbor_paths_in_salted_array::<Sha256, core::convert::Infallible>(&d).unwrap();
         let paths = traversed.into_iter().map(|(p, _)| p).collect::<Vec<_>>();
         let size = paths.len();
         paths.try_into().unwrap_or_else(|_| panic!("Expected {N} got {size}"))

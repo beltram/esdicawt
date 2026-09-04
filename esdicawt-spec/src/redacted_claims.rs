@@ -1,5 +1,6 @@
 use crate::{CwtAny, EsdicawtSpecResult, REDACTED_CLAIM_ELEMENT_TAG, blinded_claims::LazyRedacted};
 use ciborium::Value;
+use std::ops::Deref;
 use std::rc::Rc;
 
 /// Digest of a claim in a CBOR Mapping represented by a [crate::blinded_claims::SaltedClaim] in the disclosures
@@ -110,6 +111,10 @@ impl RedactedClaimKeys {
 
     pub fn contains_redacted(&self, x: &LazyRedacted) -> bool {
         self.0.iter().any(|h| h == x)
+    }
+
+    pub fn contains(&self, x: &[u8]) -> bool {
+        self.0.iter().any(|h| h.deref() == x)
     }
 }
 

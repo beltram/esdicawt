@@ -4,14 +4,11 @@ mod blanket;
 mod model;
 
 use crate::{
-    spec::{
-        CwtAny, EsdicawtSpecError, EsdicawtSpecResult, REDACTED_CLAIM_ELEMENT_TAG,
-        blinded_claims::{SaltedArrayToVerify, SaltedEntry},
-        redacted_claims::RedactedClaimKeys,
-    },
+    spec::{CwtAny, EsdicawtSpecError, EsdicawtSpecResult, REDACTED_CLAIM_ELEMENT_TAG, blinded_claims::SaltedEntry, redacted_claims::RedactedClaimKeys},
     verifier::walk::walk_payload,
 };
 use ciborium::Value;
+use esdicawt_spec::blinded_claims::SaltedArrayHashing;
 pub use model::{Query, QueryElement};
 use std::rc::Rc;
 
@@ -20,7 +17,7 @@ pub trait TokenQuery {
 }
 
 /// Allows reading claims in a SD-CWT even when they are redacted
-pub fn query<Hasher>(salted_array: &mut SaltedArrayToVerify, payload: &Value, mut q: Query) -> EsdicawtSpecResult<Option<Value>>
+pub fn query<Hasher>(salted_array: &mut SaltedArrayHashing, payload: &Value, mut q: Query) -> EsdicawtSpecResult<Option<Value>>
 where
     Hasher: digest::Digest + digest::FixedOutputReset + Clone + 'static,
 {
@@ -29,7 +26,7 @@ where
 }
 
 /// Allows reading claims in a SD-CWT even when they are redacted
-pub fn query_encoded<Hasher>(salted_array: &mut SaltedArrayToVerify, payload: &Value, query_cbor: &[u8]) -> EsdicawtSpecResult<Option<Value>>
+pub fn query_encoded<Hasher>(salted_array: &mut SaltedArrayHashing, payload: &Value, query_cbor: &[u8]) -> EsdicawtSpecResult<Option<Value>>
 where
     Hasher: digest::Digest + digest::FixedOutputReset + Clone + 'static,
 {
@@ -37,7 +34,7 @@ where
 }
 
 #[tailcall::tailcall]
-fn query_inner<H>(salted_array: &mut SaltedArrayToVerify, payload: &mut Value, mut query: Vec<QueryElement>) -> EsdicawtSpecResult<Option<Value>>
+fn query_inner<H>(salted_array: &mut SaltedArrayHashing, payload: &mut Value, mut query: Vec<QueryElement>) -> EsdicawtSpecResult<Option<Value>>
 where
     H: digest::Digest + digest::FixedOutputReset + Clone + 'static,
 {
@@ -61,21 +58,18 @@ where
                         return Ok(None);
                     };
 
-                    let Some(pos) = salted_array.iter().position(|(salted, redacted)| {
-                        if let SaltedEntry::Claim(sc) = salted.as_ref()
+                    let Some(mut found) = salted_array.remove_if::<H>(|r, se| {
+                        if let SaltedEntry::Claim(sc) = se.as_ref()
                             && sc.name == claim_name
                         {
-                            // if we found an element with a matching claim name, check that it is present in the payload's
-                            // redacted claim keys list
-                            redacted.or_init::<H>(sc);
-                            return rcks.contains_redacted(redacted);
+                            rcks.contains(r)
+                        } else {
+                            false
                         }
-                        false
                     }) else {
                         return Ok(None);
                     };
 
-                    let (mut found, _) = salted_array.swap_remove(pos);
                     let SaltedEntry::Claim(sc) = found.to_mut() else {
                         return Err(EsdicawtSpecError::ImplementationError("Query inner impl error. Should be SaltedClaim"));
                     };
@@ -86,19 +80,18 @@ where
         Some(QueryElement::Index(index)) => {
             let array = payload.as_array().ok_or(EsdicawtSpecError::LookupError("Query index not in an array"))?;
             match array.get(index) {
-                Some(Value::Tag(REDACTED_CLAIM_ELEMENT_TAG, value)) => {
-                    let Some(pos) = salted_array.iter().position(|(salted, redacted)| {
-                        if let SaltedEntry::Element(se) = salted.as_ref() {
-                            redacted.or_init::<H>(se);
-                            return value.as_bytes().map(|v| v.as_slice() == *redacted).unwrap_or_default();
+                Some(Value::Tag(REDACTED_CLAIM_ELEMENT_TAG, searched)) => {
+                    let Some(found) = salted_array.remove_if::<H>(|r, se| {
+                        if let SaltedEntry::Element(_) = se.as_ref() {
+                            searched.as_bytes().map(|v| v.as_slice() == r).unwrap_or_default()
+                        } else {
+                            false
                         }
-                        false
                     }) else {
                         return Ok(None);
                     };
 
-                    let found = salted_array.swap_remove(pos);
-                    let SaltedEntry::Element(sc) = found.0.as_ref() else {
+                    let SaltedEntry::Element(sc) = found.as_ref() else {
                         return Err(EsdicawtSpecError::ImplementationError("Query inner impl error. Should be SaltedElement"));
                     };
 

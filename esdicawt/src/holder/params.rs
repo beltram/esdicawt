@@ -1,6 +1,6 @@
 use crate::{
     SdCwtHolderResult, TimeVerification,
-    holder::traverse::traverse_all_cbor_paths_in_disclosures,
+    holder::traverse::traverse_all_cbor_paths_in_salted_array,
     spec::{CustomClaims, NoClaims, SdCwtClaim, blinded_claims::SaltedArray},
     time::TimeArg,
 };
@@ -55,7 +55,7 @@ impl Presentation {
             Self::Custom(f) => f(disclosures),
             Self::Path(f) => {
                 let hashed_disclosures = disclosures.digested::<Hasher>()?;
-                let cbor_paths = traverse_all_cbor_paths_in_disclosures::<Hasher, E>(&hashed_disclosures)?;
+                let cbor_paths = traverse_all_cbor_paths_in_salted_array::<Hasher, E>(&hashed_disclosures)?;
                 cbor_paths
                     .into_iter()
                     .filter_map(|(path, salted, ..)| f(&path).then_some(salted.into()))
