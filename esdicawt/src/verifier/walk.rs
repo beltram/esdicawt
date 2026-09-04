@@ -2,15 +2,16 @@ use crate::{
     SdCwtVerifierError, SdCwtVerifierResult,
     spec::{
         CwtAny,
-        blinded_claims::{SaltedArrayToVerify, SaltedClaim, SaltedElement, SaltedEntry},
+        blinded_claims::{SaltedClaim, SaltedElement, SaltedEntry},
         redacted_claims::{RedactedClaimElement, RedactedClaimKeys},
     },
 };
 use ciborium::Value;
+use esdicawt_spec::blinded_claims::SaltedArrayHashing;
 use std::rc::Rc;
 
 // wrapping "_walk" is required for fallible recursion
-pub fn walk_payload<E>(hasher: Rc<dyn digest::DynDigest>, payload: &mut Value, disclosures: &mut SaltedArrayToVerify) -> SdCwtVerifierResult<(), E>
+pub fn walk_payload<E>(hasher: Rc<dyn digest::DynDigest>, payload: &mut Value, disclosures: &mut SaltedArrayHashing) -> SdCwtVerifierResult<(), E>
 where
     E: core::error::Error + Send + Sync,
 {
@@ -18,7 +19,7 @@ where
 }
 
 #[tailcall::tailcall]
-fn _walk<E>(hasher: Rc<dyn digest::DynDigest>, payload: &mut Value, disclosures: &mut SaltedArrayToVerify) -> SdCwtVerifierResult<(), E>
+fn _walk<E>(hasher: Rc<dyn digest::DynDigest>, payload: &mut Value, disclosures: &mut SaltedArrayHashing) -> SdCwtVerifierResult<(), E>
 where
     E: core::error::Error + Send + Sync,
 {
@@ -30,11 +31,7 @@ where
                 let (_, rcks) = mapping.swap_remove(pos);
                 let rcks = rcks.deserialized::<RedactedClaimKeys>()?;
                 for rck in rcks {
-                    if let Some(pos) = disclosures.iter().position(|(salted, redacted)| {
-                        redacted.or_init_detached_hasher(salted.as_ref(), &hasher);
-                        *redacted == rck
-                    }) {
-                        let (mut found, _) = disclosures.swap_remove(pos);
+                    if let Some(mut found) = disclosures.remove_lazy(&rck, &hasher) {
                         match found.to_mut() {
                             SaltedEntry::Claim(SaltedClaim { name, value, .. }) => {
                                 if value.is_map() || value.is_array() {
@@ -65,11 +62,7 @@ where
                     continue;
                 };
 
-                if let Some(pos) = disclosures.iter().position(|(salted, redacted)| {
-                    redacted.or_init_detached_hasher(salted.as_ref(), &hasher);
-                    *redacted == redacted_element
-                }) {
-                    let (mut found, _) = disclosures.swap_remove(pos);
+                if let Some(mut found) = disclosures.remove_lazy(&redacted_element, &hasher) {
                     match found.to_mut() {
                         SaltedEntry::Element(SaltedElement { value, .. }) => {
                             if value.is_map() || value.is_array() {

@@ -2,6 +2,7 @@ use super::{CwtAny, EsdicawtSpecError, Salt, SdCwtClaim};
 use crate::{EsdicawtSpecResult, inlined_cbor::InlinedCbor, redacted_claims::ToRedacted};
 use ciborium::Value;
 use serde::ser::SerializeSeq;
+use std::rc::Rc;
 use std::{borrow::Cow, collections::HashMap};
 
 mod lazy_redacted;
@@ -252,9 +253,6 @@ impl<'a, T: CwtAny> From<&'a SaltedEntry<T>> for SaltedEntryRef<'a, T> {
     }
 }
 
-pub type SaltedArrayWithDigests<'a> = HashMap<Vec<u8>, Cow<'a, SaltedEntry<Value>>>;
-pub type SaltedArrayToVerify<'a> = Vec<(Cow<'a, SaltedEntry<Value>>, LazyRedacted)>;
-
 #[derive(Default, Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct SaltedArray(Vec<InlinedCbor<SaltedEntry<Value>>>);
 
@@ -294,7 +292,7 @@ impl SaltedArray {
     }
 
     /// Returns a salted with all the digests already computed to avoid doing it many times
-    pub fn digested<H: digest::Digest>(&self) -> EsdicawtSpecResult<SaltedArrayWithDigests<'_>> {
+    pub fn digested<H: digest::Digest>(&self) -> EsdicawtSpecResult<SaltedArrayHashing<'_>> {
         #[cfg(not(feature = "backward"))]
         fn salted_redacted<H: digest::Digest>(salted_entry: &InlinedCbor<SaltedEntry<Value>>) -> EsdicawtSpecResult<impl Iterator<Item = (Vec<u8>, Cow<'_, SaltedEntry<Value>>)>> {
             let value = salted_entry.as_value()?;
@@ -327,17 +325,62 @@ impl SaltedArray {
         if size * 2 != digested.len() {
             return Err(EsdicawtSpecError::DuplicateDisclosure);
         }
-        Ok(digested)
+        Ok(SaltedArrayHashing::SaltedArrayWithDigests(digested))
+    }
+
+    /// Returns a salted with all the digests already computed to avoid doing it many times
+    pub fn digested_detached_hasher(&self, hasher: &Rc<dyn digest::DynDigest>) -> EsdicawtSpecResult<SaltedArrayHashing<'_>> {
+        #[cfg(not(feature = "backward"))]
+        fn salted_redacted<'a>(
+            salted_entry: &'a InlinedCbor<SaltedEntry<Value>>,
+            hasher: &Rc<dyn digest::DynDigest>,
+        ) -> EsdicawtSpecResult<impl Iterator<Item = (Vec<u8>, Cow<'a, SaltedEntry<Value>>)>> {
+            let value = salted_entry.as_value()?;
+            let digest = value.as_ref().to_redacted_detached_hasher(hasher.clone())?;
+            Ok(std::iter::once((digest, value)))
+        }
+
+        #[cfg(feature = "backward")]
+        fn salted_redacted<'a>(
+            salted_entry: &'a InlinedCbor<SaltedEntry<Value>>,
+            hasher: &Rc<dyn digest::DynDigest>,
+        ) -> EsdicawtSpecResult<impl Iterator<Item = (Vec<u8>, Cow<'a, SaltedEntry<Value>>)>> {
+            let value = salted_entry.as_value()?;
+            let digest = value.as_ref().to_redacted_detached_hasher(hasher.clone())?.to_vec();
+            let old_digest = value.as_ref().old_to_redacted_detached_hasher(hasher.clone())?.to_vec();
+            Ok(std::iter::chain(std::iter::once((digest, value.clone())), std::iter::once((old_digest, value))))
+        }
+
+        let size = self.0.len();
+        let digested = self
+            .0
+            .iter()
+            .map(|salted_entry| salted_redacted(salted_entry, hasher))
+            .collect::<EsdicawtSpecResult<Vec<_>>>()?
+            .into_iter()
+            .flatten()
+            .collect::<HashMap<_, _>>();
+        #[cfg(not(feature = "backward"))]
+        if size != digested.len() {
+            return Err(EsdicawtSpecError::DuplicateDisclosure);
+        }
+        #[cfg(feature = "backward")]
+        if size * 2 != digested.len() {
+            return Err(EsdicawtSpecError::DuplicateDisclosure);
+        }
+        Ok(SaltedArrayHashing::SaltedArrayWithDigests(digested))
     }
 
     /// Returns a salted array with room to dynamically insert the digest of each salted to cache it
-    pub fn to_verify(&self) -> EsdicawtSpecResult<SaltedArrayToVerify<'_>> {
-        self.as_iter()
-            .map(|d| match d {
-                Ok(salted) => Ok((salted, Default::default())),
-                Err(e) => Err(e),
-            })
-            .collect::<EsdicawtSpecResult<Vec<_>>>()
+    pub fn to_verify(&self) -> EsdicawtSpecResult<SaltedArrayHashing<'_>> {
+        Ok(SaltedArrayHashing::SaltedArrayToVerify(
+            self.as_iter()
+                .map(|d| match d {
+                    Ok(salted) => Ok((Default::default(), salted)),
+                    Err(e) => Err(e),
+                })
+                .collect::<EsdicawtSpecResult<Vec<_>>>()?,
+        ))
     }
 
     pub fn is_empty(&self) -> bool {
@@ -366,6 +409,135 @@ impl std::ops::Deref for SaltedArray {
 impl std::ops::DerefMut for SaltedArray {
     fn deref_mut(&mut self) -> &mut Self::Target {
         &mut self.0
+    }
+}
+
+pub type SaltedArrayWithDigests<'a> = HashMap<Vec<u8>, GenericSaltedEntry<'a>>;
+pub type SaltedArrayToVerify<'a> = Vec<(GenericSaltedEntry<'a>, LazyRedacted)>;
+
+#[derive(Debug, Clone)]
+pub enum SaltedArrayHashing<'a> {
+    SaltedArrayWithDigests(HashMap<Vec<u8>, GenericSaltedEntry<'a>>),
+    SaltedArrayToVerify(Vec<(LazyRedacted, GenericSaltedEntry<'a>)>),
+}
+
+type GenericSaltedEntry<'a> = Cow<'a, SaltedEntry<Value>>;
+
+impl<'a> SaltedArrayHashing<'a> {
+    pub fn len(&self) -> usize {
+        match self {
+            Self::SaltedArrayWithDigests(m) => m.len(),
+            Self::SaltedArrayToVerify(v) => v.len(),
+        }
+    }
+    pub fn is_empty(&self) -> bool {
+        self.len() == 0
+    }
+
+    pub fn values(&'a self) -> Box<dyn Iterator<Item = &'a GenericSaltedEntry<'a>> + 'a> {
+        match self {
+            Self::SaltedArrayWithDigests(m) => Box::new(m.values()),
+            Self::SaltedArrayToVerify(v) => Box::new(v.iter().map(|(_, v)| v)),
+        }
+    }
+
+    pub fn get_unchecked(&'a self, k: &[u8]) -> Option<&'a GenericSaltedEntry<'a>> {
+        match self {
+            Self::SaltedArrayWithDigests(m) => m.get(k),
+            Self::SaltedArrayToVerify(v) => v.iter().find_map(|(r, se)| {
+                #[cfg(feature = "backward")]
+                {
+                    r.get().and_then(|(new, old)| if new == k || old == k { Some(se) } else { None })
+                }
+
+                #[cfg(not(feature = "backward"))]
+                {
+                    r.get().and_then(|b| if b == k { Some(se) } else { None })
+                }
+            }),
+        }
+    }
+
+    pub fn get<H: digest::Digest>(&'a self, k: &[u8]) -> Option<&'a GenericSaltedEntry<'a>> {
+        match self {
+            Self::SaltedArrayWithDigests(m) => m.get(k),
+            Self::SaltedArrayToVerify(v) => v.iter().find_map(|(r, se)| {
+                r.or_init::<H>(se.as_ref());
+
+                #[cfg(feature = "backward")]
+                {
+                    r.get().and_then(|(new, old)| if new == k || old == k { Some(se) } else { None })
+                }
+
+                #[cfg(not(feature = "backward"))]
+                {
+                    r.get().and_then(|b| if b == k { Some(se) } else { None })
+                }
+            }),
+        }
+    }
+
+    #[allow(dead_code)]
+    pub fn remove(&mut self, key: &[u8]) -> Option<GenericSaltedEntry<'a>> {
+        match self {
+            Self::SaltedArrayWithDigests(m) => m.remove(key),
+            Self::SaltedArrayToVerify(v) => v
+                .iter()
+                .position(|(r, _)| {
+                    #[cfg(feature = "backward")]
+                    {
+                        r.get().map(|(new, old)| new == key || old == key).unwrap_or_default()
+                    }
+                    #[cfg(not(feature = "backward"))]
+                    {
+                        r.get().map(|k| k == key).unwrap_or_default()
+                    }
+                })
+                .map(|pos| v.swap_remove(pos))
+                .map(|(_, se)| se),
+        }
+    }
+
+    pub fn remove_if<H: digest::Digest>(&mut self, condition: impl Fn(&[u8], &GenericSaltedEntry<'a>) -> bool) -> Option<GenericSaltedEntry<'a>> {
+        match self {
+            Self::SaltedArrayWithDigests(m) => m.iter().find_map(|(k, v)| condition(k, v).then_some(k)).cloned().and_then(|k| m.remove(&k)),
+            Self::SaltedArrayToVerify(v) => v
+                .iter()
+                .position(|(r, v)| {
+                    r.or_init::<H>(v.as_ref());
+                    #[cfg(feature = "backward")]
+                    {
+                        r.get().map(|(new, old)| condition(new, v) || condition(old, v)).unwrap_or_default()
+                    }
+                    #[cfg(not(feature = "backward"))]
+                    {
+                        r.get().map(|k| condition(k, v)).unwrap_or_default()
+                    }
+                })
+                .map(|pos| v.swap_remove(pos))
+                .map(|(_, se)| se),
+        }
+    }
+
+    pub fn remove_lazy(&mut self, key: &[u8], hasher: &Rc<dyn digest::DynDigest>) -> Option<GenericSaltedEntry<'a>> {
+        match self {
+            Self::SaltedArrayWithDigests(m) => m.remove(key),
+            Self::SaltedArrayToVerify(v) => v
+                .iter()
+                .position(|(r, se)| {
+                    r.or_init_detached_hasher(se.as_ref(), hasher);
+                    #[cfg(feature = "backward")]
+                    {
+                        r.get().map(|(new, old)| new == key || old == key).unwrap_or_default()
+                    }
+                    #[cfg(not(feature = "backward"))]
+                    {
+                        r.get().map(|k| k == key).unwrap_or_default()
+                    }
+                })
+                .map(|pos| v.swap_remove(pos))
+                .map(|(_, se)| se),
+        }
     }
 }
 

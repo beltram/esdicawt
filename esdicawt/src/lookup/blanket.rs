@@ -5,6 +5,7 @@ use crate::{
     spec::{CustomClaims, EsdicawtSpecResult, Select, issuance::SdCwtIssued, key_binding::KbtCwt, verified::KbtCwtVerified},
 };
 use ciborium::Value;
+use esdicawt_spec::blinded_claims::SaltedArrayHashing;
 
 impl<PayloadClaims: Select, Hasher: digest::Digest + digest::FixedOutputReset + Clone + 'static, ProtectedClaims: CustomClaims, UnprotectedClaims: CustomClaims> TokenQuery
     for SdCwtIssued<PayloadClaims, Hasher, ProtectedClaims, UnprotectedClaims>
@@ -50,7 +51,7 @@ impl<
 {
     fn query(&self, token_query: Query) -> EsdicawtSpecResult<Option<Value>> {
         if let Some(Ok(claimset)) = self.claimset.as_ref().map(|cs| cs.to_cbor_value()) {
-            query::<AnyDigest>(&mut Default::default(), &claimset, token_query)
+            query::<AnyDigest>(&mut SaltedArrayHashing::SaltedArrayToVerify(Default::default()), &claimset, token_query)
         } else {
             Ok(None)
         }

@@ -42,6 +42,7 @@ pub enum SdCwtVerifierError<CustomError: Send + Sync> {
     UnsupportedKeyConfirmation,
     #[error("The Key Confirmation in the SD-KBT is not the expected one")]
     UnexpectedKeyConfirmation,
+    // FIXME: have tests enforcing this
     #[error("Disclosure hash collision")]
     DisclosureHashCollision,
     #[error("OrphanDisclosure")]

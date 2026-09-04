@@ -183,19 +183,23 @@ pub trait Verifier {
 
         // now verifying the disclosures
         if let Some(disclosures) = kbt_protected.kcwt.disclosures_mut() {
-            let disclosures_size = disclosures.len();
             // compute the hash of all disclosures
-            let mut disclosures = disclosures.to_verify()?;
+            let hasher = self.digest(sd_alg);
+            let mut disclosures = disclosures.digested_detached_hasher(&hasher)?;
+            #[cfg(feature = "backward")]
+            let disclosures_size = disclosures.len();
 
-            // FIXME: this does actually look for collisions
-            if disclosures.len() != disclosures_size {
-                return Err(SdCwtVerifierError::DisclosureHashCollision);
-            }
-
-            walk::walk_payload(self.digest(sd_alg), &mut generic_sd_cwt_payload, &mut disclosures)?;
+            walk::walk_payload(hasher, &mut generic_sd_cwt_payload, &mut disclosures)?;
 
             // disclosures not found in the SD-CWT payload => invalid
             let orphan_disclosures = disclosures;
+            #[cfg(feature = "backward")]
+            if disclosures_size != orphan_disclosures.len() * 2 {
+                dbg!(&orphan_disclosures.len());
+                return Err(SdCwtVerifierError::OrphanDisclosure);
+            }
+
+            #[cfg(not(feature = "backward"))]
             if !orphan_disclosures.is_empty() {
                 return Err(SdCwtVerifierError::OrphanDisclosure);
             }

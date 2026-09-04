@@ -1,5 +1,5 @@
 use crate::{
-    SdCwtVerifierError, SdCwtVerifierResult,
+    SdCwtVerifierResult,
     spec::{CWT_CLAIM_KEY_CONFIRMATION, CustomClaims, Select, issuance::SdInnerPayload, key_binding::KbtCwt},
     verifier::walk::walk_payload,
 };
@@ -30,14 +30,8 @@ impl<
         let mut sd_cwt = self.generic_sd_cwt()?;
         let mut payload = sd_cwt.payload.upcast_value()?;
         if let Some(disclosures) = sd_cwt.disclosures_mut() {
-            let disclosures_size = disclosures.len();
-
             // compute the hash of all disclosures
-            let mut disclosures = disclosures.to_verify()?;
-
-            if disclosures.len() != disclosures_size {
-                return Err(SdCwtVerifierError::DisclosureHashCollision);
-            }
+            let mut disclosures = disclosures.digested::<Hasher>()?;
 
             walk_payload(Rc::new(Hasher::new()), &mut payload, &mut disclosures)?;
         }

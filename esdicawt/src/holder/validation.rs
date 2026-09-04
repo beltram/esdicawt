@@ -1,8 +1,9 @@
 use crate::{
-    spec::{REDACTED_CLAIM_ELEMENT_TAG, blinded_claims::SaltedArrayWithDigests, redacted_claims::RedactedClaimKeys},
+    spec::{REDACTED_CLAIM_ELEMENT_TAG, redacted_claims::RedactedClaimKeys},
     time::TimeVerification,
 };
 use ciborium::Value;
+use esdicawt_spec::blinded_claims::SaltedArrayHashing;
 
 #[derive(Default, Debug, Clone)]
 pub struct HolderValidationParams<'a> {
@@ -52,7 +53,7 @@ pub enum SdCwtHolderValidationError<CustomError: Send + Sync> {
 }
 
 // wrapping "_validate" is required for fallible recursion
-pub fn validate_disclosures<E>(payload: &Value, disclosures: &SaltedArrayWithDigests<'_>) -> Result<usize, SdCwtHolderValidationError<E>>
+pub fn validate_disclosures<E>(payload: &Value, disclosures: &SaltedArrayHashing<'_>) -> Result<usize, SdCwtHolderValidationError<E>>
 where
     E: core::error::Error + Send + Sync,
 {
@@ -60,7 +61,7 @@ where
 }
 
 #[tailcall::tailcall]
-fn _validate<E>(payload: &Value, disclosures: &SaltedArrayWithDigests<'_>) -> Result<usize, SdCwtHolderValidationError<E>>
+fn _validate<E>(payload: &Value, disclosures: &SaltedArrayHashing<'_>) -> Result<usize, SdCwtHolderValidationError<E>>
 where
     E: core::error::Error + Send + Sync,
 {
@@ -73,7 +74,7 @@ where
                         let rcks = rcks.deserialized::<RedactedClaimKeys>()?;
                         count += rcks.len();
                         for rck in rcks {
-                            let Some(d) = disclosures.get(rck.as_ref()) else {
+                            let Some(d) = disclosures.get_unchecked(rck.as_ref()) else {
                                 return Err(SdCwtHolderValidationError::DisclosureNotFound);
                             };
                             if let Some(v) = d.as_ref().value().filter(|v| v.is_map() || v.is_array()) {
@@ -91,7 +92,7 @@ where
                 match element {
                     Value::Tag(REDACTED_CLAIM_ELEMENT_TAG, rce) => {
                         let rce = rce.as_bytes().ok_or(SdCwtHolderValidationError::SpecError("RedactedClaimElement should be a bstr"))?;
-                        let Some(d) = disclosures.get(rce) else {
+                        let Some(d) = disclosures.get_unchecked(rce) else {
                             return Err(SdCwtHolderValidationError::DisclosureNotFound);
                         };
                         count += 1;
