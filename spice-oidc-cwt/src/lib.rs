@@ -2,7 +2,7 @@
 
 use enum_variants_strings::EnumVariantsStrings;
 use esdicawt::{
-    EsdicawtReadResult, SdCwtVerified, TokenQuery, cwt_label,
+    EsdicawtReadResult, TokenQuery, cwt_label,
     spec::{CustomClaims, SdCwtClaim, Select, Value, issuance::SdCwtIssued, key_binding::KbtCwt},
 };
 use serde::ser::SerializeMap;
@@ -471,88 +471,6 @@ where
 
     fn updated_at(&mut self) -> EsdicawtReadResult<Option<u64>> {
         Ok(self.query(vec![CwtOidcLabel::UpdatedAt.into()].into())?.as_ref().map(Value::deserialized).transpose()?)
-    }
-}
-
-impl<PayloadClaims: Select, Hasher: digest::Digest + digest::FixedOutputReset + Clone + 'static, IssuerProtectedClaims: CustomClaims, IssuerUnprotectedClaims: CustomClaims>
-    SpiceOidcSdCwtRead for SdCwtVerified<PayloadClaims, Hasher, IssuerProtectedClaims, IssuerUnprotectedClaims>
-where
-    for<'a> &'a PayloadClaims: Into<&'a SpiceOidcClaims>,
-{
-    fn name(&mut self) -> EsdicawtReadResult<Option<Cow<'_, str>>> {
-        self.0.name()
-    }
-
-    fn given_name(&mut self) -> EsdicawtReadResult<Option<Cow<'_, str>>> {
-        self.0.given_name()
-    }
-
-    fn family_name(&mut self) -> EsdicawtReadResult<Option<Cow<'_, str>>> {
-        self.0.family_name()
-    }
-
-    fn middle_name(&mut self) -> EsdicawtReadResult<Option<Cow<'_, str>>> {
-        self.0.middle_name()
-    }
-
-    fn nickname(&mut self) -> EsdicawtReadResult<Option<Cow<'_, str>>> {
-        self.0.nickname()
-    }
-
-    fn preferred_username(&mut self) -> EsdicawtReadResult<Option<Cow<'_, str>>> {
-        self.0.preferred_username()
-    }
-
-    fn profile(&mut self) -> EsdicawtReadResult<Option<Url>> {
-        self.0.profile()
-    }
-
-    fn picture(&mut self) -> EsdicawtReadResult<Option<Url>> {
-        self.0.picture()
-    }
-
-    fn website(&mut self) -> EsdicawtReadResult<Option<Url>> {
-        self.0.website()
-    }
-
-    fn email(&mut self) -> EsdicawtReadResult<Option<Cow<'_, str>>> {
-        self.0.email()
-    }
-
-    fn email_verified(&mut self) -> EsdicawtReadResult<Option<bool>> {
-        self.0.email_verified()
-    }
-
-    fn gender(&mut self) -> EsdicawtReadResult<Option<Cow<'_, str>>> {
-        self.0.gender()
-    }
-
-    fn birthdate(&mut self) -> EsdicawtReadResult<Option<Cow<'_, str>>> {
-        self.0.birthdate()
-    }
-
-    fn zoneinfo(&mut self) -> EsdicawtReadResult<Option<Cow<'_, str>>> {
-        self.0.zoneinfo()
-    }
-
-    fn locale(&mut self) -> EsdicawtReadResult<Option<Cow<'_, str>>> {
-        self.0.locale()
-    }
-
-    fn phone_number(&mut self) -> EsdicawtReadResult<Option<Cow<'_, str>>> {
-        self.0.phone_number()
-    }
-
-    fn phone_number_verified(&mut self) -> EsdicawtReadResult<Option<bool>> {
-        self.0.phone_number_verified()
-    }
-
-    fn address(&mut self) -> EsdicawtReadResult<Option<OidcAddressClaim>> {
-        self.0.address()
-    }
-
-    fn updated_at(&mut self) -> EsdicawtReadResult<Option<u64>> {
-        self.0.updated_at()
     }
 }
 
