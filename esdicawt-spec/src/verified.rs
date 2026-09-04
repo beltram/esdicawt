@@ -55,7 +55,7 @@ impl<IssuerPayloadClaims: Select, Hasher: digest::Digest + Clone, IssuerProtecte
     fn try_from(v: KbtProtected<IssuerPayloadClaims, Hasher, IssuerProtectedClaims, IssuerUnprotectedClaims, Extra>) -> Result<Self, Self::Error> {
         Ok(Self {
             alg: v.alg,
-            issuer_sd_cwt: v.kcwt.0.try_into()?,
+            issuer_sd_cwt: v.kcwt.try_into()?,
             claims: v.extra,
         })
     }

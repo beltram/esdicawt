@@ -1,8 +1,4 @@
-use crate::{
-    COSE_HEADER_KCWT, CustomClaims, EsdicawtSpecError, EsdicawtSpecResult, Select,
-    issuance::{SdCwtIssued, SdCwtIssuedTagged},
-    key_binding::KbtCwt,
-};
+use crate::{COSE_HEADER_KCWT, CustomClaims, EsdicawtSpecError, EsdicawtSpecResult, Select, issuance::SdCwtIssued, key_binding::KbtCwt};
 use ciborium::Value;
 
 impl<
@@ -17,7 +13,7 @@ impl<
 {
     /// Get the SD-CWT wrapped by this SD-KBT
     pub fn sd_cwt(&mut self) -> EsdicawtSpecResult<&SdCwtIssued<IssuerPayloadClaims, Hasher, IssuerProtectedClaims, IssuerUnprotectedClaims>> {
-        Ok(&self.protected.to_value_mut()?.kcwt.0)
+        Ok(&self.protected.to_value_mut()?.kcwt)
     }
 
     /// Get the SD-CWT wrapped by this SD-KBT
@@ -29,20 +25,20 @@ impl<
             .find_map(|(k, v)| matches!(k, Value::Integer(i) if i == COSE_HEADER_KCWT.into()).then_some(v))
             .ok_or(EsdicawtSpecError::ImplementationError("Invalid SD-KBT, missing kcwt"))?;
 
-        let sd_cwt = kcwt.deserialized::<SdCwtIssuedTagged<Value, Hasher, IssuerProtectedClaims, IssuerUnprotectedClaims>>();
+        let sd_cwt = kcwt.deserialized::<SdCwtIssued<Value, Hasher, IssuerProtectedClaims, IssuerUnprotectedClaims>>();
 
         #[cfg(feature = "backward")]
         let sd_cwt = sd_cwt.or_else(|_| {
-            kcwt.deserialized::<crate::key_binding::InlinedCbor<SdCwtIssuedTagged<Value, Hasher, IssuerProtectedClaims, IssuerUnprotectedClaims>>>()?
+            kcwt.deserialized::<crate::key_binding::InlinedCbor<SdCwtIssued<Value, Hasher, IssuerProtectedClaims, IssuerUnprotectedClaims>>>()?
                 .try_into_value()
         });
 
-        Ok(sd_cwt?.0)
+        Ok(sd_cwt?)
     }
 
     /// Get the SD-CWT wrapped by this SD-KBT
     pub fn sd_cwt_mut(&mut self) -> EsdicawtSpecResult<&mut SdCwtIssued<IssuerPayloadClaims, Hasher, IssuerProtectedClaims, IssuerUnprotectedClaims>> {
-        Ok(&mut self.protected.to_value_mut()?.kcwt.0)
+        Ok(&mut self.protected.to_value_mut()?.kcwt)
     }
 
     /// SD-KBT expiration, different from SD-CWT one !!!

@@ -4,20 +4,12 @@ use crate::{
     query,
     spec::{
         CustomClaims, EsdicawtSpecResult, Select,
-        issuance::{SdCwtIssued, SdCwtIssuedTagged},
+        issuance::SdCwtIssued,
         key_binding::{KbtCwt, KbtCwtTagged},
         verified::KbtCwtVerified,
     },
 };
 use ciborium::Value;
-
-impl<PayloadClaims: Select, Hasher: digest::Digest + digest::FixedOutputReset + Clone + 'static, ProtectedClaims: CustomClaims, UnprotectedClaims: CustomClaims> TokenQuery
-    for SdCwtIssuedTagged<PayloadClaims, Hasher, ProtectedClaims, UnprotectedClaims>
-{
-    fn query(&self, token_query: Query) -> EsdicawtSpecResult<Option<Value>> {
-        self.0.query(token_query)
-    }
-}
 
 impl<PayloadClaims: Select, Hasher: digest::Digest + digest::FixedOutputReset + Clone + 'static, ProtectedClaims: CustomClaims, UnprotectedClaims: CustomClaims> TokenQuery
     for SdCwtIssued<PayloadClaims, Hasher, ProtectedClaims, UnprotectedClaims>
@@ -32,9 +24,8 @@ impl<PayloadClaims: Select, Hasher: digest::Digest + digest::FixedOutputReset + 
     for SdCwtVerified<PayloadClaims, Hasher, ProtectedClaims, UnprotectedClaims>
 {
     fn query(&self, token_query: Query) -> EsdicawtSpecResult<Option<Value>> {
-        let payload = self.0.0.payload.upcast_value()?;
+        let payload = self.0.payload.upcast_value()?;
         self.0
-            .0
             .disclosures()
             .map(|d| query::<Hasher>(&mut d.to_verify()?, &payload, token_query))
             .unwrap_or(Ok(None))

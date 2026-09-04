@@ -75,8 +75,8 @@ pub struct SdInnerPayload<Extra: CwtAny> {
     pub extra: Option<Extra>,
 }
 
-pub type SdCwtIssuedTagged<PayloadClaims, Hasher, ProtectedClaims = NoClaims, UnprotectedClaims = NoClaims> =
-    ciborium::tag::RequireExact<SdCwtIssued<PayloadClaims, Hasher, ProtectedClaims, UnprotectedClaims>, { <coset::CoseSign1 as coset::TaggedCborSerializable>::TAG }>;
+/*pub type SdCwtIssuedTagged<PayloadClaims, Hasher, ProtectedClaims = NoClaims, UnprotectedClaims = NoClaims> =
+ciborium::tag::RequireExact<SdCwtIssued<PayloadClaims, Hasher, ProtectedClaims, UnprotectedClaims>, { <coset::CoseSign1 as coset::TaggedCborSerializable>::TAG }>;*/
 
 impl<PayloadClaims: Select, Hasher: digest::Digest + Clone, ProtectedClaims: CustomClaims, UnprotectedClaims: CustomClaims>
     SdCwtIssued<PayloadClaims, Hasher, ProtectedClaims, UnprotectedClaims>
@@ -100,8 +100,8 @@ mod tests {
 
     #[allow(dead_code)]
     fn should_be_comparable<PayloadClaims: Select, Hasher: digest::Digest + Clone, ProtectedClaims: CustomClaims, UnprotectedClaims: CustomClaims>(
-        a: SdCwtIssuedTagged<PayloadClaims, Hasher, ProtectedClaims, UnprotectedClaims>,
-        b: SdCwtIssuedTagged<PayloadClaims, Hasher, ProtectedClaims, UnprotectedClaims>,
+        a: SdCwtIssued<PayloadClaims, Hasher, ProtectedClaims, UnprotectedClaims>,
+        b: SdCwtIssued<PayloadClaims, Hasher, ProtectedClaims, UnprotectedClaims>,
     ) -> bool {
         a == b
     }

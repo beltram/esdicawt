@@ -3,7 +3,7 @@ use crate::{
     lookup::TokenQuery,
     spec::{
         CustomClaims, Select,
-        issuance::{SdCwtIssued, SdCwtIssuedTagged},
+        issuance::SdCwtIssued,
         key_binding::{KbtCwt, KbtCwtTagged},
         reexports::{coset, coset::iana::EnumI64},
     },
@@ -51,11 +51,6 @@ pub enum EsdicawtReadError {
     CborIntError(#[from] std::num::TryFromIntError),
     #[error(transparent)]
     CustomError(#[from] Box<dyn core::error::Error + Send + Sync>),
-}
-
-impl<IssuerPayloadClaims: Select, Hasher: digest::Digest + digest::FixedOutputReset + Clone + 'static, IssuerProtectedClaims: CustomClaims, IssuerUnprotectedClaims: CustomClaims>
-    SdCwtRead for SdCwtIssuedTagged<IssuerPayloadClaims, Hasher, IssuerProtectedClaims, IssuerUnprotectedClaims>
-{
 }
 
 impl<IssuerPayloadClaims: Select, Hasher: digest::Digest + digest::FixedOutputReset + Clone + 'static, IssuerProtectedClaims: CustomClaims, IssuerUnprotectedClaims: CustomClaims>
