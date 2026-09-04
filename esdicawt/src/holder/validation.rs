@@ -1,9 +1,8 @@
 use crate::{
-    spec::{REDACTED_CLAIM_ELEMENT_TAG, redacted_claims::RedactedClaimKeys},
+    spec::{REDACTED_CLAIM_ELEMENT_TAG, blinded_claims::SaltedArrayWithDigests, redacted_claims::RedactedClaimKeys},
     time::TimeVerification,
 };
 use ciborium::Value;
-use esdicawt_spec::blinded_claims::SaltedArrayWithDigests;
 
 #[derive(Default, Debug, Clone)]
 pub struct HolderValidationParams<'a> {
@@ -120,13 +119,13 @@ mod tests {
         spec::{
             CwtAny, EsdicawtSpecError, NoClaims, Salt, SdCwtClaim,
             blinded_claims::{Decoy, SaltedElement, SaltedEntry},
+            issuance::SdCwtIssued,
             sd,
         },
         test_utils::{Ed25519Holder, Ed25519Issuer},
     };
     use ciborium::{Value, cbor};
     use cose_key::keyset::CoseKeySet;
-    use esdicawt_spec::issuance::SdCwtIssued;
     use std::ops::DerefMut;
 
     #[test]

@@ -2,12 +2,14 @@
 
 use ciborium::{Value, value::Integer};
 use cose_key::keyset::CoseKeySet;
-use esdicawt::spec::{
-    CwtAny, EsdicawtSpecError, NoClaims, SdHashAlg, Select,
-    reexports::{coset, coset::iana::Algorithm},
-    sd,
+use esdicawt::{
+    Holder, HolderParams, Issuer, IssuerParams, StatusParams, TimeArg, cwt_label,
+    spec::{
+        CwtAny, EsdicawtSpecError, NoClaims, SdHashAlg, Select,
+        reexports::{coset, coset::iana::Algorithm},
+        sd,
+    },
 };
-use esdicawt::{Holder, HolderParams, Issuer, IssuerParams, StatusParams, TimeArg, cwt_label};
 use pkcs8::DecodePrivateKey;
 use rand_core::{CryptoRng, Error, RngCore};
 use serde::ser::SerializeMap;

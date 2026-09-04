@@ -6,9 +6,9 @@ pub use {
     verifier::{VerifiedStatusListToken, VerifierWithStatus, params::StatusListVerifierParams},
 };
 
+pub use crate::spec::reexports::coset;
 pub use cose_key;
 pub use esdicawt_spec as spec;
-pub use esdicawt_spec::reexports::coset;
 pub use holder::{
     Holder, SdCwtVerified,
     accessor::ClaimSetExt,

@@ -4,15 +4,15 @@ use crate::{
     signature_verifier::validate_cose_sign1_signature,
     spec::{
         CustomClaims, CwtAny, NoClaims, Select,
-        key_binding::{KbtCwtTagged, KbtPayload, KbtProtected, KbtUnprotected},
+        key_binding::{KbtPayload, KbtProtected, KbtUnprotected},
         reexports::coset,
     },
 };
 use coset::{AsCborValue, TaggedCborSerializable};
 
+use crate::spec::{issuance::SdCwtIssued, key_binding::KbtCwt};
 use ciborium::Value;
 use cose_key::confirmation::{CoseKeyConfirmationError, KeyConfirmation};
-use esdicawt_spec::issuance::SdCwtIssued;
 
 pub mod accessor;
 pub mod error;
@@ -254,7 +254,7 @@ pub trait Holder {
         sd_cwt: SdCwtVerified<Self::IssuerPayloadClaims, Self::Hasher, Self::IssuerProtectedClaims, Self::IssuerUnprotectedClaims>,
         params: HolderParams<Self::KbtPayloadClaims, Self::KbtProtectedClaims, Self::KbtUnprotectedClaims>,
     ) -> Result<
-        KbtCwtTagged<
+        KbtCwt<
             Self::IssuerPayloadClaims,
             Self::Hasher,
             Self::KbtPayloadClaims,
@@ -266,7 +266,7 @@ pub trait Holder {
         SdCwtHolderError<Self::Error>,
     > {
         let sign1 = self.new_presentation_raw(sd_cwt, params)?;
-        Ok(KbtCwtTagged::from_cbor_bytes(&sign1)?)
+        Ok(KbtCwt::from_cbor_bytes(&sign1)?)
     }
 }
 
@@ -291,7 +291,10 @@ mod tests {
         holder::{accessor::ClaimSetExt, params::CborPath},
         issuer::test_utils::Ed25519Issuer,
         lookup::TokenQuery,
-        spec::{NoClaims, SdCwtClaim, blinded_claims::SaltedClaim, blinded_claims::SaltedEntry},
+        spec::{
+            NoClaims, SdCwtClaim,
+            blinded_claims::{SaltedClaim, SaltedEntry},
+        },
     };
     use ciborium::cbor;
     use cose_key::keyset::CoseKeySet;
@@ -375,16 +378,16 @@ mod tests {
         assert_eq!(sd_kbt.query(vec!["array".into()].into()).unwrap().unwrap(), cbor!(["a", "b"]).unwrap());
 
         let sd_kbt_2 = sd_kbt.to_cbor_bytes().unwrap();
-        let sd_kbt_2 = KbtCwtTagged::<CustomTokenClaims, sha2::Sha256>::from_cbor_bytes(&sd_kbt_2).unwrap();
+        let sd_kbt_2 = KbtCwt::<CustomTokenClaims, sha2::Sha256>::from_cbor_bytes(&sd_kbt_2).unwrap();
         assert_eq!(sd_kbt.to_cbor_bytes().unwrap(), sd_kbt_2.to_cbor_bytes().unwrap());
 
-        let disclosable_claims = sd_kbt.0.walk_disclosed_claims().unwrap().collect::<Vec<_>>();
+        let disclosable_claims = sd_kbt.walk_disclosed_claims().unwrap().collect::<Vec<_>>();
         assert_eq!(disclosable_claims.len(), 3);
         let is_alice = |sc: &SaltedClaim<Value>| sc.name == SdCwtClaim::Tstr("name".into()) && sc.value == cbor!("Alice Smith").unwrap();
 
         assert!(disclosable_claims.into_iter().any(|c| { matches!(c.unwrap(), SaltedEntry::Claim(sc) if is_alice(sc)) }));
 
-        let claimset = sd_kbt.0.claimset_unchecked().unwrap().unwrap();
+        let claimset = sd_kbt.claimset_unchecked().unwrap().unwrap();
         assert_eq!(&claimset.name.unwrap(), "Alice Smith");
         assert_eq!(&claimset.array, &["a".to_string(), "b".to_string()]);
     }

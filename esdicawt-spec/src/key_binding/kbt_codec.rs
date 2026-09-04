@@ -1,8 +1,7 @@
 use ciborium::Value;
-use serde::ser::SerializeSeq;
 
 use super::{KbtCwt, KbtCwtBuilder};
-use crate::{CustomClaims, Select};
+use crate::{CustomClaims, CwtAny, Select};
 
 impl<
     IssuerPayloadClaims: Select,
@@ -15,12 +14,13 @@ impl<
 > serde::Serialize for KbtCwt<IssuerPayloadClaims, Hasher, PayloadClaims, IssuerProtectedClaims, IssuerUnprotectedClaims, ProtectedClaims, UnprotectedClaims>
 {
     fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
-        let mut seq = serializer.serialize_seq(Some(4))?;
-        seq.serialize_element(&self.protected)?;
-        seq.serialize_element(&self.unprotected)?;
-        seq.serialize_element(&self.payload)?;
-        seq.serialize_element(&serde_bytes::Bytes::new(&self.signature))?;
-        seq.end()
+        ciborium::tag::RequireExact::<_, { <coset::CoseSign1 as coset::TaggedCborSerializable>::TAG }>(&[
+            self.protected.to_cbor_value().map_err(serde::ser::Error::custom)?,
+            self.unprotected.to_cbor_value().map_err(serde::ser::Error::custom)?,
+            self.payload.to_cbor_value().map_err(serde::ser::Error::custom)?,
+            self.signature.to_cbor_value().map_err(serde::ser::Error::custom)?,
+        ])
+        .serialize(serializer)
     }
 }
 
@@ -36,86 +36,38 @@ impl<
 > serde::Deserialize<'de> for KbtCwt<IssuerPayloadClaims, Hasher, PayloadClaims, IssuerProtectedClaims, IssuerUnprotectedClaims, ProtectedClaims, UnprotectedClaims>
 {
     fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-        struct KbtVisitor<
-            IssuerPayloadClaims: Select,
-            Hasher: digest::Digest + Clone,
-            IssuerProtectedClaims: CustomClaims,
-            IssuerUnprotectedClaims: CustomClaims,
-            ProtectedClaims: CustomClaims,
-            UnprotectedClaims: CustomClaims,
-            PayloadClaims: CustomClaims,
-        >(
-            std::marker::PhantomData<(
-                IssuerPayloadClaims,
-                Hasher,
-                IssuerProtectedClaims,
-                IssuerUnprotectedClaims,
-                ProtectedClaims,
-                UnprotectedClaims,
-                PayloadClaims,
-            )>,
-        );
+        use serde::de::Error as _;
 
-        impl<
-            'de,
-            IssuerPayloadClaims: Select,
-            Hasher: digest::Digest + Clone,
-            IssuerProtectedClaims: CustomClaims,
-            IssuerUnprotectedClaims: CustomClaims,
-            ProtectedClaims: CustomClaims,
-            UnprotectedClaims: CustomClaims,
-            PayloadClaims: CustomClaims,
-        > serde::de::Visitor<'de> for KbtVisitor<IssuerPayloadClaims, Hasher, IssuerProtectedClaims, IssuerUnprotectedClaims, PayloadClaims, ProtectedClaims, UnprotectedClaims>
-        {
-            type Value = KbtCwt<IssuerPayloadClaims, Hasher, PayloadClaims, IssuerProtectedClaims, IssuerUnprotectedClaims, ProtectedClaims, UnprotectedClaims>;
-
-            fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
-                write!(formatter, "a kbt payload")
-            }
-
-            fn visit_seq<A>(self, mut seq: A) -> Result<Self::Value, A::Error>
-            where
-                A: serde::de::SeqAccess<'de>,
-            {
-                use serde::de::Error as _;
-
-                let mut kbt_builder = KbtCwtBuilder::default();
-                let mut index = 0u8;
-                while let Some(element) = seq.next_element::<Value>()? {
-                    match index {
-                        0 => {
-                            kbt_builder.protected(
-                                element
-                                    .deserialized()
-                                    .map_err(|e| A::Error::custom(format!("Cannot deserialize element `protected`: {e}")))?,
-                            );
-                        }
-                        1 => {
-                            kbt_builder.unprotected(
-                                element
-                                    .deserialized()
-                                    .map_err(|e| A::Error::custom(format!("Cannot deserialize element `unprotected`: {e}")))?,
-                            );
-                        }
-                        2 => {
-                            kbt_builder.payload(element.deserialized().map_err(|e| A::Error::custom(format!("Cannot deserialize element `payload`: {e}")))?);
-                        }
-                        3 => {
-                            let bytes: serde_bytes::ByteBuf = element
-                                .deserialized()
-                                .map_err(|e| A::Error::custom(format!("Cannot deserialize element `signature`: {e}")))?;
-
-                            kbt_builder.signature(bytes);
-                        }
-                        _ => break,
-                    }
-                    index += 1;
+        let tagged = <ciborium::tag::RequireExact<Value, { <coset::CoseSign1 as coset::TaggedCborSerializable>::TAG }> as serde::Deserialize>::deserialize(deserializer)?;
+        let array = tagged.0.into_array().map_err(|e| D::Error::custom(format!("Invalid CoseSign1 structure: {e:?}")))?;
+        let mut builder = KbtCwtBuilder::default();
+        for (index, element) in array.into_iter().enumerate() {
+            match index {
+                0 => {
+                    let protected = element
+                        .deserialized()
+                        .map_err(|e| D::Error::custom(format!("Cannot deserialize element `protected`: {e}")))?;
+                    builder.protected(protected);
                 }
-
-                kbt_builder.build().map_err(|e| A::Error::custom(format!("Cannot build kbt: {e}")))
+                1 => {
+                    let unprotected = element
+                        .deserialized()
+                        .map_err(|e| D::Error::custom(format!("Cannot deserialize element `sd_unprotected`: {e}")))?;
+                    builder.unprotected(unprotected);
+                }
+                2 => {
+                    let payload = element.deserialized().map_err(|e| D::Error::custom(format!("Cannot deserialize element `payload`: {e}")))?;
+                    builder.payload(payload);
+                }
+                3 => {
+                    let bytes: serde_bytes::ByteBuf = element
+                        .deserialized()
+                        .map_err(|e| D::Error::custom(format!("Cannot deserialize element `signature`: {e}")))?;
+                    builder.signature(bytes);
+                }
+                _ => return Err(D::Error::custom("Invalid SD-KBT, contains more parts than expected")),
             }
         }
-
-        deserializer.deserialize_seq(KbtVisitor(Default::default()))
+        builder.build().map_err(|e| D::Error::custom(format!("Cannot build kbt: {e}")))
     }
 }

@@ -124,12 +124,11 @@ mod tests {
     use super::*;
     use crate::{
         Holder, HolderParams, Issuer, IssuerParams, Presentation, StatusParams, Verifier,
-        spec::{CustomClaims, NoClaims, SdCwtClaim, Select, SelectExt, key_binding::KbtCwtTagged, sd, verified::KbtCwtVerified},
+        spec::{CustomClaims, NoClaims, SdCwtClaim, Select, SelectExt, issuance::SdCwtIssued, key_binding::KbtCwt, sd, verified::KbtCwtVerified},
         test_utils::{Ed25519Holder, Ed25519Issuer},
     };
     use ciborium::cbor;
     use cose_key::keyset::CoseKeySet;
-    use esdicawt_spec::issuance::SdCwtIssued;
 
     #[test]
     fn can_query_top_level_claim() {
@@ -198,7 +197,7 @@ mod tests {
             sd_cwt.disclosures_mut().unwrap().clear();
             assert_eq!(sd_cwt.query(query.to_vec().into()).unwrap(), None);
 
-            sd_kbt.0.clear_disclosures().unwrap();
+            sd_kbt.clear_disclosures().unwrap();
             assert_eq!(sd_kbt.query(query.to_vec().into()).unwrap(), None);
         }
     }
@@ -247,7 +246,7 @@ mod tests {
         (sd_cwt, holder_signing_key, *issuer_signing_key.as_ref())
     }
 
-    fn present_sd_kbt<T: Select>(sd_cwt: &[u8], holder_signing_key: ed25519_dalek::SigningKey, issuer_verifying_key: ed25519_dalek::VerifyingKey) -> KbtCwtTagged<T, sha2::Sha256> {
+    fn present_sd_kbt<T: Select>(sd_cwt: &[u8], holder_signing_key: ed25519_dalek::SigningKey, issuer_verifying_key: ed25519_dalek::VerifyingKey) -> KbtCwt<T, sha2::Sha256> {
         let holder = Ed25519Holder::new(holder_signing_key);
 
         let holder_params = HolderParams {
@@ -304,16 +303,15 @@ mod backward {
     use super::*;
     use crate::{
         snapshots::{SdCwtSnapshots, SdKbtSnapshots},
-        spec::key_binding::KbtCwtTagged,
+        spec::{issuance::SdCwtIssued, key_binding::KbtCwt},
         verifier::claims::CustomTokenClaims,
     };
-    use esdicawt_spec::issuance::SdCwtIssued;
     use strum::IntoEnumIterator as _;
 
     #[test]
     fn should_work_with_snapshots() {
         for snapshot in SdKbtSnapshots::iter() {
-            let sd_kbt = KbtCwtTagged::<CustomTokenClaims, sha2::Sha256>::from_cbor_bytes(&snapshot.sd_kbt()).unwrap();
+            let sd_kbt = KbtCwt::<CustomTokenClaims, sha2::Sha256>::from_cbor_bytes(&snapshot.sd_kbt()).unwrap();
             match snapshot {
                 #[cfg(feature = "backward")]
                 SdKbtSnapshots::FullDraft08 => sd_kbt_queries(&sd_kbt),
