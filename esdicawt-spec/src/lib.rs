@@ -30,7 +30,7 @@ pub const REDACTED_CLAIM_ELEMENT_TAG: u64 = 60;
 pub const TO_BE_REDACTED_TAG: u64 = 58;
 
 #[allow(dead_code)]
-pub const TO_BE_DECOY_TAG: u64 = 61;
+pub const TO_BE_DECOY_TAG: u64 = 62;
 pub const CWT_CLAIM_ALG: i64 = 1;
 #[allow(dead_code)]
 pub const CWT_CLAIM_VCT: i64 = 11;
