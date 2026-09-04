@@ -1,9 +1,10 @@
+use crate::issuance::SdCwtIssued;
 use crate::{
     CustomClaims, EsdicawtSpecResult, NoClaims, Select,
     alg::Algorithm,
     blinded_claims::{SaltedArray, SaltedEntry},
     inlined_cbor::InlinedCbor,
-    issuance::{SdCwtIssuedTagged, SdPayload},
+    issuance::SdPayload,
 };
 
 mod accessors;
@@ -55,7 +56,7 @@ pub struct KbtProtected<
 > {
     pub alg: Algorithm,
     /// See https://datatracker.ietf.org/doc/html/rfc9528#section-3.5.3.1
-    pub kcwt: SdCwtIssuedTagged<IssuerPayloadClaims, Hasher, IssuerProtectedClaims, IssuerUnprotectedClaims>,
+    pub kcwt: SdCwtIssued<IssuerPayloadClaims, Hasher, IssuerProtectedClaims, IssuerUnprotectedClaims>,
     #[builder(default)]
     pub extra: Option<Extra>,
 }
@@ -103,18 +104,18 @@ impl<
 {
     pub fn sd_cwt_payload(&mut self) -> EsdicawtSpecResult<&SdPayload<IssuerPayloadClaims>> {
         let protected = self.protected.to_value_mut()?;
-        let payload = protected.kcwt.0.payload.to_value()?;
+        let payload = protected.kcwt.payload.to_value()?;
         Ok(payload)
     }
 
     pub fn disclosures(&mut self) -> EsdicawtSpecResult<Option<&SaltedArray>> {
         let protected = self.protected.to_value_mut()?;
-        Ok(protected.kcwt.0.disclosures())
+        Ok(protected.kcwt.disclosures())
     }
 
     pub fn clear_disclosures(&mut self) -> EsdicawtSpecResult<()> {
         let protected = self.protected.to_value_mut()?;
-        if let Some(s) = protected.kcwt.0.disclosures_mut() {
+        if let Some(s) = protected.kcwt.disclosures_mut() {
             s.0.clear()
         }
         self.protected.update_from_value()?;
@@ -150,7 +151,7 @@ impl<
         let protected = self.protected.to_value_mut()?;
 
         #[allow(clippy::option_if_let_else)]
-        if let Some(sd_claims) = protected.kcwt.0.disclosures_mut() {
+        if let Some(sd_claims) = protected.kcwt.disclosures_mut() {
             Ok(Box::new(sd_claims.iter()))
         } else {
             Ok(Box::new(core::iter::empty()))

@@ -179,10 +179,10 @@ pub trait Verifier {
             }
         }
 
-        let sd_alg = kbt_protected.kcwt.0.protected.to_value_mut()?.sd_alg;
+        let sd_alg = kbt_protected.kcwt.protected.to_value_mut()?.sd_alg;
 
         // now verifying the disclosures
-        if let Some(disclosures) = kbt_protected.kcwt.0.disclosures_mut() {
+        if let Some(disclosures) = kbt_protected.kcwt.disclosures_mut() {
             let disclosures_size = disclosures.len();
             // compute the hash of all disclosures
             let mut disclosures = disclosures.to_verify()?;
@@ -406,7 +406,7 @@ pub trait VerifierWithStatus: Verifier {
         let mut kbt = self.shallow_verify_sd_kbt(raw_sd_kbt, params.shallow(), holder_verifier, cks)?;
 
         let kbt_protected = kbt.0.protected.to_value_mut()?;
-        let sd_cwt_payload = kbt_protected.kcwt.0.payload.to_value_mut()?;
+        let sd_cwt_payload = kbt_protected.kcwt.payload.to_value_mut()?;
 
         // Read the StatusClaim from the SD-CWT to know where to fetch the Status from
         // Note: no StatusList for the SD-KBT as it is self-issued by a Holder
@@ -844,7 +844,7 @@ mod tests {
             salt: Salt::empty(),
             value: Stuff { foo: "baz".into() }.to_cbor_value().unwrap(),
         });
-        sd_cwt.0.0.sd_unprotected.sd_claims.as_mut().unwrap().0.push(orphan.into());
+        sd_cwt.0.sd_unprotected.sd_claims.as_mut().unwrap().0.push(orphan.into());
 
         let holder_params = default_holder_params::<NoClaims>();
         let sd_kbt = holder.new_presentation(sd_cwt, holder_params).unwrap().to_cbor_bytes().unwrap();

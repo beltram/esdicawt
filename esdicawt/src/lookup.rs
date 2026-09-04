@@ -124,11 +124,12 @@ mod tests {
     use super::*;
     use crate::{
         Holder, HolderParams, Issuer, IssuerParams, Presentation, StatusParams, Verifier,
-        spec::{CustomClaims, NoClaims, SdCwtClaim, Select, SelectExt, issuance::SdCwtIssuedTagged, key_binding::KbtCwtTagged, sd, verified::KbtCwtVerified},
+        spec::{CustomClaims, NoClaims, SdCwtClaim, Select, SelectExt, key_binding::KbtCwtTagged, sd, verified::KbtCwtVerified},
         test_utils::{Ed25519Holder, Ed25519Issuer},
     };
     use ciborium::cbor;
     use cose_key::keyset::CoseKeySet;
+    use esdicawt_spec::issuance::SdCwtIssued;
 
     #[test]
     fn can_query_top_level_claim() {
@@ -194,7 +195,7 @@ mod tests {
         if !contains_redacted {
             assert_eq!(sd_kbt_verified.query(query.to_vec().into()).unwrap(), expected.clone());
         } else if simple_matching {
-            sd_cwt.0.disclosures_mut().unwrap().0.clear();
+            sd_cwt.disclosures_mut().unwrap().0.clear();
             assert_eq!(sd_cwt.query(query.to_vec().into()).unwrap(), None);
 
             sd_kbt.0.clear_disclosures().unwrap();
@@ -215,7 +216,7 @@ mod tests {
         }
     }
 
-    fn new_sd_cwt<T: Select>(payload: T) -> (SdCwtIssuedTagged<T, sha2::Sha256>, ed25519_dalek::SigningKey, ed25519_dalek::VerifyingKey) {
+    fn new_sd_cwt<T: Select>(payload: T) -> (SdCwtIssued<T, sha2::Sha256>, ed25519_dalek::SigningKey, ed25519_dalek::VerifyingKey) {
         let issuer_signing_key = ed25519_dalek::SigningKey::generate(&mut rand::thread_rng());
         let holder_signing_key = ed25519_dalek::SigningKey::generate(&mut rand::thread_rng());
 
@@ -306,7 +307,7 @@ mod backward {
         spec::key_binding::KbtCwtTagged,
         verifier::claims::CustomTokenClaims,
     };
-    use esdicawt_spec::issuance::SdCwtIssuedTagged;
+    use esdicawt_spec::issuance::SdCwtIssued;
     use strum::IntoEnumIterator as _;
 
     #[test]
@@ -323,7 +324,7 @@ mod backward {
             .unwrap();
         }
         for snapshot in SdCwtSnapshots::iter() {
-            let sd_cwt = SdCwtIssuedTagged::<CustomTokenClaims, sha2::Sha256>::from_cbor_bytes(&snapshot.sd_cwt()).unwrap();
+            let sd_cwt = SdCwtIssued::<CustomTokenClaims, sha2::Sha256>::from_cbor_bytes(&snapshot.sd_cwt()).unwrap();
             match snapshot {
                 #[cfg(feature = "backward")]
                 SdCwtSnapshots::FullDraft08 => sd_cwt_queries(&sd_cwt),

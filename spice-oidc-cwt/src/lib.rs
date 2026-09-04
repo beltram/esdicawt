@@ -5,7 +5,7 @@ use esdicawt::{
     EsdicawtReadResult, SdCwtVerified, TokenQuery, cwt_label,
     spec::{
         CustomClaims, SdCwtClaim, Select, Value,
-        issuance::{SdCwtIssued, SdCwtIssuedTagged},
+        issuance::SdCwtIssued,
         key_binding::{KbtCwt, KbtCwtTagged},
     },
 };
@@ -479,7 +479,7 @@ where
 }
 
 impl<PayloadClaims: Select, Hasher: digest::Digest + digest::FixedOutputReset + Clone + 'static, IssuerProtectedClaims: CustomClaims, IssuerUnprotectedClaims: CustomClaims>
-    SpiceOidcSdCwtRead for SdCwtIssuedTagged<PayloadClaims, Hasher, IssuerProtectedClaims, IssuerUnprotectedClaims>
+    SpiceOidcSdCwtRead for SdCwtVerified<PayloadClaims, Hasher, IssuerProtectedClaims, IssuerUnprotectedClaims>
 where
     for<'a> &'a PayloadClaims: Into<&'a SpiceOidcClaims>,
 {
@@ -557,88 +557,6 @@ where
 
     fn updated_at(&mut self) -> EsdicawtReadResult<Option<u64>> {
         self.0.updated_at()
-    }
-}
-
-impl<PayloadClaims: Select, Hasher: digest::Digest + digest::FixedOutputReset + Clone + 'static, IssuerProtectedClaims: CustomClaims, IssuerUnprotectedClaims: CustomClaims>
-    SpiceOidcSdCwtRead for SdCwtVerified<PayloadClaims, Hasher, IssuerProtectedClaims, IssuerUnprotectedClaims>
-where
-    for<'a> &'a PayloadClaims: Into<&'a SpiceOidcClaims>,
-{
-    fn name(&mut self) -> EsdicawtReadResult<Option<Cow<'_, str>>> {
-        self.0.0.name()
-    }
-
-    fn given_name(&mut self) -> EsdicawtReadResult<Option<Cow<'_, str>>> {
-        self.0.0.given_name()
-    }
-
-    fn family_name(&mut self) -> EsdicawtReadResult<Option<Cow<'_, str>>> {
-        self.0.0.family_name()
-    }
-
-    fn middle_name(&mut self) -> EsdicawtReadResult<Option<Cow<'_, str>>> {
-        self.0.0.middle_name()
-    }
-
-    fn nickname(&mut self) -> EsdicawtReadResult<Option<Cow<'_, str>>> {
-        self.0.0.nickname()
-    }
-
-    fn preferred_username(&mut self) -> EsdicawtReadResult<Option<Cow<'_, str>>> {
-        self.0.0.preferred_username()
-    }
-
-    fn profile(&mut self) -> EsdicawtReadResult<Option<Url>> {
-        self.0.0.profile()
-    }
-
-    fn picture(&mut self) -> EsdicawtReadResult<Option<Url>> {
-        self.0.0.picture()
-    }
-
-    fn website(&mut self) -> EsdicawtReadResult<Option<Url>> {
-        self.0.0.website()
-    }
-
-    fn email(&mut self) -> EsdicawtReadResult<Option<Cow<'_, str>>> {
-        self.0.0.email()
-    }
-
-    fn email_verified(&mut self) -> EsdicawtReadResult<Option<bool>> {
-        self.0.0.email_verified()
-    }
-
-    fn gender(&mut self) -> EsdicawtReadResult<Option<Cow<'_, str>>> {
-        self.0.0.gender()
-    }
-
-    fn birthdate(&mut self) -> EsdicawtReadResult<Option<Cow<'_, str>>> {
-        self.0.0.birthdate()
-    }
-
-    fn zoneinfo(&mut self) -> EsdicawtReadResult<Option<Cow<'_, str>>> {
-        self.0.0.zoneinfo()
-    }
-
-    fn locale(&mut self) -> EsdicawtReadResult<Option<Cow<'_, str>>> {
-        self.0.0.locale()
-    }
-
-    fn phone_number(&mut self) -> EsdicawtReadResult<Option<Cow<'_, str>>> {
-        self.0.0.phone_number()
-    }
-
-    fn phone_number_verified(&mut self) -> EsdicawtReadResult<Option<bool>> {
-        self.0.0.phone_number_verified()
-    }
-
-    fn address(&mut self) -> EsdicawtReadResult<Option<OidcAddressClaim>> {
-        self.0.0.address()
-    }
-
-    fn updated_at(&mut self) -> EsdicawtReadResult<Option<u64>> {
-        self.0.0.updated_at()
     }
 }
 
@@ -833,11 +751,7 @@ mod tests {
     use std::time::Duration;
 
     use super::{ed25519::*, *};
-    use esdicawt::{
-        CborPath, Holder, Issuer, Presentation, StatusParams, TimeArg,
-        cose_key::keyset::CoseKeySet,
-        spec::{CwtAny, issuance::SdCwtIssuedTagged},
-    };
+    use esdicawt::{CborPath, Holder, Issuer, Presentation, StatusParams, TimeArg, cose_key::keyset::CoseKeySet, spec::CwtAny};
 
     wasm_bindgen_test::wasm_bindgen_test_configure!(run_in_browser);
 
@@ -965,12 +879,7 @@ mod tests {
         assert_eq!(updated_at, alice.updated_at.unwrap());
     }
 
-    fn issue_oidc_claim(
-        issuer: &Ed25519Issuer,
-        claims: SpiceOidcClaims,
-        holder_pk: &ed25519_dalek::VerifyingKey,
-        subject: &str,
-    ) -> SdCwtIssuedTagged<SpiceOidcClaims, sha2::Sha256> {
+    fn issue_oidc_claim(issuer: &Ed25519Issuer, claims: SpiceOidcClaims, holder_pk: &ed25519_dalek::VerifyingKey, subject: &str) -> SdCwtIssued<SpiceOidcClaims, sha2::Sha256> {
         issuer
             .issue_cwt(
                 &mut rand::thread_rng(),

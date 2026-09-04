@@ -4,7 +4,6 @@ use crate::{
     signature_verifier::validate_cose_sign1_signature,
     spec::{
         CustomClaims, CwtAny, NoClaims, Select,
-        issuance::SdCwtIssuedTagged,
         key_binding::{KbtCwtTagged, KbtPayload, KbtProtected, KbtUnprotected},
         reexports::coset,
     },
@@ -13,6 +12,7 @@ use coset::{AsCborValue, TaggedCborSerializable};
 
 use ciborium::Value;
 use cose_key::confirmation::{CoseKeyConfirmationError, KeyConfirmation};
+use esdicawt_spec::issuance::SdCwtIssued;
 
 pub mod accessor;
 pub mod error;
@@ -87,8 +87,8 @@ pub trait Holder {
 
         validate_cose_sign1_signature(&cose_sign1_sd_cwt, keyset)?;
 
-        let mut sd_cwt = SdCwtIssuedTagged::from_cbor_bytes(sd_cwt)?;
-        let payload = sd_cwt.0.payload.to_value()?;
+        let mut sd_cwt = SdCwtIssued::from_cbor_bytes(sd_cwt)?;
+        let payload = sd_cwt.payload.to_value()?;
 
         // verify time claims
         #[cfg(not(feature = "test-vectors"))] // FIXME: draft samples are expired
@@ -149,7 +149,7 @@ pub trait Holder {
         }
 
         // validate disclosure
-        let disclosures = sd_cwt.0.disclosures();
+        let disclosures = sd_cwt.disclosures();
         if let Some((raw_payload, disclosures)) = cose_sign1_sd_cwt.payload.as_deref().map(Value::from_cbor_bytes).transpose()?.zip(disclosures) {
             let actual_disclosures = disclosures.digested::<Self::Hasher>()?;
             let expected_nb_disclosures = validate_disclosures(&raw_payload, &actual_disclosures)?;
@@ -182,7 +182,7 @@ pub trait Holder {
         params: HolderParams<Self::KbtPayloadClaims, Self::KbtProtectedClaims, Self::KbtUnprotectedClaims>,
     ) -> Result<Vec<u8>, SdCwtHolderError<Self::Error>> {
         // verify again the time claims of the SD-CWT as time could have gone by between the last 'verify_sd_cwt'
-        let payload = sd_cwt.0.0.payload.to_value()?;
+        let payload = sd_cwt.0.payload.to_value()?;
         let now = params.artificial_time.unwrap_or_else(crate::elapsed_since_epoch);
         let iat = payload.inner.issued_at;
         let exp = payload.inner.expiration;
@@ -198,11 +198,11 @@ pub trait Holder {
 
         // --- redaction of claims ---
         // select the claims to disclose
-        if let Some(sd_claims) = sd_cwt.0.0.sd_unprotected.sd_claims {
+        if let Some(sd_claims) = sd_cwt.0.sd_unprotected.sd_claims {
             let sd_claims = params.presentation.try_select_disclosures::<Self::Hasher, Self::Error>(sd_claims)?;
 
             // then replace them in the issued sd-cwt
-            sd_cwt.0.0.sd_unprotected.sd_claims = Some(sd_claims);
+            sd_cwt.0.sd_unprotected.sd_claims = Some(sd_claims);
         }
 
         // --- protected ---
@@ -272,7 +272,7 @@ pub trait Holder {
 
 #[derive(Debug, Clone)]
 pub struct SdCwtVerified<PayloadClaims: Select, Hasher: digest::Digest + Clone, ProtectedClaims: CustomClaims = NoClaims, UnprotectedClaims: CustomClaims = NoClaims>(
-    pub SdCwtIssuedTagged<PayloadClaims, Hasher, ProtectedClaims, UnprotectedClaims>,
+    pub SdCwtIssued<PayloadClaims, Hasher, ProtectedClaims, UnprotectedClaims>,
 );
 
 impl<PayloadClaims: Select, Hasher: digest::Digest + Clone, ProtectedClaims: CustomClaims, UnprotectedClaims: CustomClaims> PartialEq

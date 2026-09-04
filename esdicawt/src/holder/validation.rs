@@ -120,13 +120,13 @@ mod tests {
         spec::{
             CwtAny, EsdicawtSpecError, NoClaims, Salt, SdCwtClaim,
             blinded_claims::{Decoy, SaltedElement, SaltedEntry},
-            issuance::SdCwtIssuedTagged,
             sd,
         },
         test_utils::{Ed25519Holder, Ed25519Issuer},
     };
     use ciborium::{Value, cbor};
     use cose_key::keyset::CoseKeySet;
+    use esdicawt_spec::issuance::SdCwtIssued;
 
     #[test]
     fn should_fail_when_std_claims_mismatch() {
@@ -226,12 +226,11 @@ mod tests {
         let issuer_params = default_issuer_params(&holder_signing_key, Some(payload));
         let sd_cwt = issuer.issue_cwt(&mut rand::thread_rng(), issuer_params.clone()).unwrap().to_cbor_bytes().unwrap();
 
-        let sd_cwt_tagged = SdCwtIssuedTagged::<Value, sha2::Sha256>::from_cbor_bytes(&sd_cwt).unwrap();
+        let sd_cwt_tagged = SdCwtIssued::<Value, sha2::Sha256>::from_cbor_bytes(&sd_cwt).unwrap();
 
         // remove disclosure of the map
         let mut sd_cwt = sd_cwt_tagged.clone();
         sd_cwt
-            .0
             .disclosures_mut()
             .unwrap()
             .0
@@ -244,7 +243,6 @@ mod tests {
         // remove disclosure of the inner map
         let mut sd_cwt = sd_cwt_tagged.clone();
         sd_cwt
-            .0
             .disclosures_mut()
             .unwrap()
             .0
@@ -257,7 +255,6 @@ mod tests {
         // remove disclosure of the array element
         let mut sd_cwt = sd_cwt_tagged.clone();
         sd_cwt
-            .0
             .disclosures_mut()
             .unwrap()
             .0
@@ -270,7 +267,6 @@ mod tests {
         // remove disclosure of the nested array element
         let mut sd_cwt = sd_cwt_tagged.clone();
         sd_cwt
-            .0
             .disclosures_mut()
             .unwrap()
             .0
@@ -286,7 +282,7 @@ mod tests {
             value: cbor!("a").unwrap(),
             salt: Salt::empty(),
         });
-        sd_cwt.0.disclosures_mut().unwrap().0.push(extra.into());
+        sd_cwt.disclosures_mut().unwrap().0.push(extra.into());
         assert!(matches!(
             holder.verify_sd_cwt(&sd_cwt.to_cbor_bytes().unwrap(), Default::default(), &issuer_verifying_key),
             Err(SdCwtHolderError::ValidationError(SdCwtHolderValidationError::OrphanDisclosure { expected, actual }))
@@ -296,7 +292,7 @@ mod tests {
         // adding extra decoy disclosure
         let mut sd_cwt = sd_cwt_tagged.clone();
         let extra = SaltedEntry::Decoy(Decoy { salt: (Salt::empty(),) });
-        sd_cwt.0.disclosures_mut().unwrap().0.push(extra.into());
+        sd_cwt.disclosures_mut().unwrap().0.push(extra.into());
         assert!(matches!(
             holder.verify_sd_cwt(&sd_cwt.to_cbor_bytes().unwrap(), Default::default(), &issuer_verifying_key),
             Err(SdCwtHolderError::ValidationError(SdCwtHolderValidationError::OrphanDisclosure { expected, actual }))
@@ -305,7 +301,7 @@ mod tests {
 
         // alter disclosure of the map element
         let mut sd_cwt = sd_cwt_tagged.clone();
-        for d in &mut sd_cwt.0.disclosures_mut().unwrap().0 {
+        for d in &mut sd_cwt.disclosures_mut().unwrap().0 {
             if let SaltedEntry::Claim(c) = d.to_value_mut().unwrap() {
                 c.salt = Salt::empty()
             }
@@ -318,7 +314,7 @@ mod tests {
         // alter disclosure of the array element
         #[allow(clippy::redundant_clone)]
         let mut sd_cwt = sd_cwt_tagged.clone();
-        for d in &mut sd_cwt.0.disclosures_mut().unwrap().0 {
+        for d in &mut sd_cwt.disclosures_mut().unwrap().0 {
             if let SaltedEntry::Element(c) = d.to_value_mut().unwrap() {
                 c.salt = Salt::empty()
             }
@@ -343,10 +339,10 @@ mod tests {
         let issuer_params = default_issuer_params(&holder_signing_key, Some(payload));
         let sd_cwt = issuer.issue_cwt(&mut rand::thread_rng(), issuer_params).unwrap().to_cbor_bytes().unwrap();
 
-        let mut sd_cwt_tagged = SdCwtIssuedTagged::<Value, sha2::Sha256>::from_cbor_bytes(&sd_cwt).unwrap();
+        let mut sd_cwt_tagged = SdCwtIssued::<Value, sha2::Sha256>::from_cbor_bytes(&sd_cwt).unwrap();
 
         // duplicate a disclosure
-        let disclosures = sd_cwt_tagged.0.disclosures_mut().unwrap();
+        let disclosures = sd_cwt_tagged.disclosures_mut().unwrap();
         #[allow(clippy::indexing_slicing)]
         let duplicate = disclosures.0[0].clone();
         disclosures.0.push(duplicate);

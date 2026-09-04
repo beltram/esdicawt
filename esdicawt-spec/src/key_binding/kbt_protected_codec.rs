@@ -3,7 +3,8 @@ use coset::AsCborValue;
 use serde::ser::SerializeMap;
 
 use super::KbtProtected;
-use crate::{COSE_HEADER_KCWT, CWT_CLAIM_ALG, CWT_MEDIA_TYPE, CustomClaims, CwtAny, MEDIA_TYPE_KB_CWT, Select, issuance::SdCwtIssuedTagged, key_binding::KbtProtectedBuilder};
+use crate::issuance::SdCwtIssued;
+use crate::{COSE_HEADER_KCWT, CWT_CLAIM_ALG, CWT_MEDIA_TYPE, CustomClaims, CwtAny, MEDIA_TYPE_KB_CWT, Select, key_binding::KbtProtectedBuilder};
 
 impl<IssuerPayloadClaims: Select, Hasher: digest::Digest + Clone, IssuerProtectedClaims: CustomClaims, IssuerUnprotectedClaims: CustomClaims, Extra: CustomClaims> serde::Serialize
     for KbtProtected<IssuerPayloadClaims, Hasher, IssuerProtectedClaims, IssuerUnprotectedClaims, Extra>
@@ -72,12 +73,12 @@ impl<'de, IssuerPayloadClaims: Select, Hasher: digest::Digest + Clone, IssuerPro
                             }
                             Ok(COSE_HEADER_KCWT) => {
                                 let issuer_sd_cwt = v
-                                    .deserialized::<SdCwtIssuedTagged<_, _, _, _>>()
+                                    .deserialized::<SdCwtIssued<_, _, _, _>>()
                                     .map_err(|value| A::Error::custom(format!("'issuer-sd-cwt' is not a sd-cwt-presentation: {value:?}")));
 
                                 #[cfg(feature = "backward")]
                                 let issuer_sd_cwt = issuer_sd_cwt.or_else(|_| {
-                                    v.deserialized::<crate::inlined_cbor::InlinedCbor<SdCwtIssuedTagged<_, _, _, _>>>()
+                                    v.deserialized::<crate::inlined_cbor::InlinedCbor<SdCwtIssued<_, _, _, _>>>()
                                         .map_err(|value| A::Error::custom(format!("'issuer-sd-cwt' is not a sd-cwt-presentation: {value:?}")))?
                                         .try_into_value()
                                         .map_err(A::Error::custom)
