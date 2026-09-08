@@ -423,7 +423,7 @@ pub trait VerifierWithStatus: Verifier {
                 return Err(SdCwtStatusVerifierError::IndexOutOfBounds(status_url.clone()).into());
             }
 
-            let Some(status) = status_token.status_list.lst().get(idx) else {
+            let Some(status) = self.get_status(&status_token, idx, status_url.as_str(), validation_time) else {
                 return Err(SdCwtStatusVerifierError::StatusIndexNotFound(idx, status_url.clone()).into());
             };
 
@@ -438,6 +438,12 @@ pub trait VerifierWithStatus: Verifier {
         };
 
         self.verify_sd_kbt(raw_sd_kbt, params, holder_verifier, cks)
+    }
+
+    /// Let's a consumer cache individual non-revoked statuses
+    // the last 2 args are there to compute a cache key.
+    fn get_status(&self, status_token: &VerifiedStatusListToken<Self::Status>, bit_index: status_list::BitIndex, _status_url: &str, _validation_time: u64) -> Option<Self::Status> {
+        status_token.status_list.lst().get(bit_index)
     }
 
     #[allow(clippy::type_complexity)]
