@@ -30,6 +30,27 @@ pub trait Status: From<u8> + Into<u8> + std::fmt::Debug + Clone + Eq + PartialEq
     fn is_undefined(&self) -> bool {
         false
     }
+
+    fn from_byte(byte: u8) -> impl ExactSizeIterator<Item = Self> {
+        let per_byte = Self::status_per_byte();
+        (0..per_byte).map(move |i| {
+            let bit_offset = i * Self::BITS.size();
+            let bits = byte.overflowing_shr(bit_offset as u32).0 & Self::BITS.mask();
+            Self::from(bits)
+        })
+    }
+
+    fn status_per_byte() -> u8 {
+        8 / Self::BITS.size()
+    }
+
+    /// Iterator over all the values
+    fn iter() -> impl Iterator<Item = Self>;
+
+    /// Iterator over all the non-default values
+    fn non_default_iter() -> impl Iterator<Item = Self> {
+        Self::iter().filter(|s| s != &Self::default())
+    }
 }
 
 /// see https://datatracker.ietf.org/doc/html/draft-ietf-oauth-status-list-11#section-4.3

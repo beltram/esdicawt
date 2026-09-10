@@ -68,9 +68,18 @@ pub fn get<S: Status>(status_list: &[u8], index: BitIndex) -> Option<S> {
 /// Highest bit index possible with the current list
 #[inline(always)]
 pub fn max_index<S: Status>(bytes: &[u8]) -> BitIndex {
-    let ratio = (8 / S::BITS.size()) as BitIndex;
+    let ratio = S::status_per_byte() as BitIndex;
     let byte_len = bytes.len() as BitIndex;
     byte_len.wrapping_mul(ratio)
+}
+
+/// The byte value corresponding to a byte fully packed with [Status::default] statuses.
+/// Used to fast forward over runs of default statuses without decoding them one by one.
+#[inline(always)]
+pub fn default_byte<S: Status>() -> u8 {
+    let per_byte = S::status_per_byte();
+    let default_bits = Into::<u8>::into(S::default()) & S::BITS.mask();
+    (0..per_byte).fold(0u8, |acc, i| acc | (default_bits << (i * S::BITS.size())))
 }
 
 #[inline(always)]
