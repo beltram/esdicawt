@@ -1,7 +1,7 @@
 use crate::{Status, StatusBits};
 
 /// Just an u8 with the right bounds for representing a Status
-#[derive(Debug, Copy, Clone, Eq, PartialEq, Hash)]
+#[derive(Default, Debug, Copy, Clone, Eq, PartialEq, Hash)]
 pub struct RawStatus<const B: usize>(pub u8);
 
 impl<const B: usize> Status for RawStatus<B> {
@@ -23,9 +23,10 @@ impl<const B: usize> From<u8> for RawStatus<B> {
 }
 
 /// see https://datatracker.ietf.org/doc/html/draft-ietf-oauth-status-list-12#section-7.1
-#[derive(Debug, Copy, Clone, Eq, PartialEq, Hash)]
+#[derive(Default, Debug, Copy, Clone, Eq, PartialEq, Hash)]
 #[repr(u8)]
 pub enum OauthStatus {
+    #[default]
     Valid = 0x00,
     Invalid = 0x01,
     Suspended = 0x02,
