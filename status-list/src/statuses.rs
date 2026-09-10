@@ -10,6 +10,10 @@ impl<const B: usize> Status for RawStatus<B> {
     fn is_valid(&self) -> bool {
         self.0 == 0
     }
+
+    fn iter() -> impl Iterator<Item = Self> {
+        (0..=Self::BITS.mask()).map(Self)
+    }
 }
 impl<const B: usize> From<RawStatus<B>> for u8 {
     fn from(s: RawStatus<B>) -> Self {
@@ -39,6 +43,10 @@ impl Status for OauthStatus {
     fn is_valid(&self) -> bool {
         matches!(self, Self::Valid)
     }
+
+    fn iter() -> impl Iterator<Item = Self> {
+        [Self::Valid, Self::Invalid, Self::Suspended, Self::Unknown].into_iter()
+    }
 }
 
 impl From<OauthStatus> for u8 {
@@ -63,5 +71,9 @@ impl Status for u8 {
 
     fn is_valid(&self) -> bool {
         *self == 0
+    }
+
+    fn iter() -> impl Iterator<Item = Self> {
+        [0, 1].into_iter()
     }
 }

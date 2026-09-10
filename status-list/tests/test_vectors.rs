@@ -27,6 +27,10 @@ ba00bd93f002beb7a2a2010000a91e09000000000000000000000000000000807296
         fn is_valid(&self) -> bool {
             matches!(self, Self::Valid)
         }
+
+        fn iter() -> impl Iterator<Item = Self> {
+            [Self::Valid, Self::Revoked].into_iter()
+        }
     }
     impl From<Status> for u8 {
         fn from(s: Status) -> Self {
@@ -95,6 +99,10 @@ fn two_bit_status_list() {
 
         fn is_valid(&self) -> bool {
             matches!(self, Self::Valid)
+        }
+
+        fn iter() -> impl Iterator<Item = Self> {
+            [Self::Valid, Self::Revoked, Self::Suspended, Self::Undefined].into_iter()
         }
     }
     impl From<Status> for u8 {
