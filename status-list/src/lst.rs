@@ -64,15 +64,48 @@ impl<S: Status> Lst<S> {
         crate::inner::max_index::<S>(self.0.as_ref())
     }
 
-    /// Iterates all the bytes in the StatusList and returns all the Statuses in there
-    pub fn iter_statuses(&self) -> impl Iterator<Item = S> + '_ {
-        let per_byte = 8 / S::BITS.size();
-        self.status_list().iter().flat_map(move |&byte| {
-            (0..per_byte).map(move |i| {
-                let bit_offset = i * S::BITS.size();
-                let bits = byte.overflowing_shr(bit_offset as u32).0 & S::BITS.mask();
-                S::from(bits)
-            })
+    /// Iterates all the bytes in the StatusList and returns all the Statuses in there, alongside their [BitIndex]
+    pub fn iter_statuses(&self) -> impl Iterator<Item = (BitIndex, S)> + '_ {
+        let per_byte = S::status_per_byte() as usize;
+        self.status_list().iter().enumerate().flat_map(move |(byte_idx, &byte)| {
+            let base = byte_idx * per_byte;
+            S::from_byte(byte).enumerate().map(move |(i, s)| ((base + i) as BitIndex, s))
+        })
+    }
+
+    /// Iterates all the bytes in the StatusList and returns all the Statuses that are not the default Status
+    /// (usually the valid one), alongside their [BitIndex].
+    /// This is faster than [Self::iter_statuses] because runs of consecutive bytes that only encode default statuses
+    /// (the overwhelming majority of a StatusList in practice) are skipped as a whole byte slice scan instead of
+    /// being decoded status by status.
+    pub fn iter_non_default_statuses(&self) -> impl Iterator<Item = (BitIndex, S)> + '_ {
+        let bytes = self.status_list();
+        let per_byte = S::status_per_byte() as usize;
+        let default_byte = crate::inner::default_byte::<S>();
+        let mut pos = 0usize;
+        let mut pending = std::collections::VecDeque::with_capacity(S::status_per_byte() as usize);
+
+        std::iter::from_fn(move || {
+            loop {
+                if let Some(entry) = pending.pop_front() {
+                    return Some(entry);
+                }
+
+                // fast forward over the run of default-only bytes starting at `pos`
+                pos += bytes.get(pos..).unwrap_or_default().iter().take_while(|&&b| b == default_byte).count();
+
+                // the byte that is different
+                let byte_idx = pos;
+                let non_default_byte = *bytes.get(pos)?;
+                pos += 1;
+
+                let base = byte_idx * per_byte;
+                for (i, s) in S::from_byte(non_default_byte).enumerate() {
+                    if s != S::default() {
+                        pending.push_back(((base + i) as BitIndex, s));
+                    }
+                }
+            }
         })
     }
 }
@@ -151,21 +184,60 @@ mod tests {
 
     #[test]
     #[wasm_bindgen_test::wasm_bindgen_test]
-    fn iter_statuses_should_match_get_unchecked() {
+    fn iter_statuses_should_work() {
         let status = Lst::<RawStatus<1>>::from_vec(vec![0xB9, 0xA3]);
-        let expected: Vec<_> = (0..status.max_index()).map(|i| status.get_unchecked(i)).collect();
-        let actual: Vec<_> = status.iter_statuses().collect();
-        assert!(!expected.is_empty());
-        assert!(!actual.is_empty());
-        assert_eq!(actual, expected);
-        dbg!(&actual);
+        assert_eq!(
+            status.iter_statuses().collect::<Vec<_>>(),
+            vec![
+                (0, RawStatus(1)),
+                (1, RawStatus(0)),
+                (2, RawStatus(0)),
+                (3, RawStatus(1)),
+                (4, RawStatus(1)),
+                (5, RawStatus(1)),
+                (6, RawStatus(0)),
+                (7, RawStatus(1)),
+                (8, RawStatus(1)),
+                (9, RawStatus(1)),
+                (10, RawStatus(0)),
+                (11, RawStatus(0)),
+                (12, RawStatus(0)),
+                (13, RawStatus(1)),
+                (14, RawStatus(0)),
+                (15, RawStatus(1)),
+            ]
+        );
+    }
 
-        let status = Lst::<OauthStatus>::from_vec(vec![0xC9, 0x44, 0xF9]);
-        let expected: Vec<_> = (0..status.max_index()).map(|i| status.get_unchecked(i)).collect();
-        let actual: Vec<_> = status.iter_statuses().collect();
-        assert!(!expected.is_empty());
-        assert!(!actual.is_empty());
-        assert_eq!(actual, expected);
+    #[test]
+    #[wasm_bindgen_test::wasm_bindgen_test]
+    fn iter_non_default_statuses_should_match_iter_statuses_filtered() {
+        let status = Lst::<RawStatus<1>>::from_vec(vec![0xB9, 0xA3]);
+        assert_eq!(
+            status.iter_non_default_statuses().collect::<Vec<_>>(),
+            vec![
+                (0, RawStatus(1)),
+                (3, RawStatus(1)),
+                (4, RawStatus(1)),
+                (5, RawStatus(1)),
+                (7, RawStatus(1)),
+                (8, RawStatus(1)),
+                (9, RawStatus(1)),
+                (13, RawStatus(1)),
+                (15, RawStatus(1)),
+            ]
+        );
+
+        // a StatusList made of nothing but default (Valid) statuses should yield nothing
+        let all_default = Lst::<OauthStatus>::from_vec(vec![0x00; 1_000]);
+        assert_eq!(all_default.iter_non_default_statuses().count(), 0);
+
+        // default-only runs surrounding a single non-default byte should still be found, with the correct BitIndex
+        let mut bytes = vec![0x00; 1_000];
+        *bytes.get_mut(500).unwrap() = 0b0000_1001; // Invalid + Suspended packed in one byte
+        let mixed = Lst::<OauthStatus>::from_vec(bytes);
+        let actual: Vec<_> = mixed.iter_non_default_statuses().collect();
+        assert_eq!(actual, vec![(2000, OauthStatus::Invalid), (2001, OauthStatus::Suspended)]);
     }
 
     #[test]
@@ -198,6 +270,9 @@ mod tests {
             }
             fn is_undefined(&self) -> bool {
                 self == &Self::Undefined
+            }
+            fn iter() -> impl Iterator<Item = Self> {
+                [Self::Valid, Self::Revoked, Self::Suspended, Self::Undefined].into_iter()
             }
         }
         impl From<u8> for Status {
