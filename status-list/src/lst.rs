@@ -63,6 +63,18 @@ impl<S: Status> Lst<S> {
     pub fn max_index(&self) -> BitIndex {
         crate::inner::max_index::<S>(self.0.as_ref())
     }
+
+    /// Iterates all the bytes in the StatusList and returns all the Statuses in there
+    pub fn iter_statuses(&self) -> impl Iterator<Item = S> + '_ {
+        let per_byte = 8 / S::BITS.size();
+        self.status_list().iter().flat_map(move |&byte| {
+            (0..per_byte).map(move |i| {
+                let bit_offset = i * S::BITS.size();
+                let bits = byte.overflowing_shr(bit_offset as u32).0 & S::BITS.mask();
+                S::from(bits)
+            })
+        })
+    }
 }
 
 impl<S: Status> Lst<S> {
@@ -91,7 +103,7 @@ impl<S: Status> std::fmt::Debug for Lst<S> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{RawStatus, StatusBits, issuer::LstMut};
+    use crate::{OauthStatus, RawStatus, StatusBits, issuer::LstMut};
 
     wasm_bindgen_test::wasm_bindgen_test_configure!(run_in_browser);
 
@@ -135,6 +147,25 @@ mod tests {
         assert_eq!(status.get_unchecked(9), RawStatus(2));
         assert_eq!(status.get_unchecked(10), RawStatus(3));
         assert_eq!(status.get_unchecked(11), RawStatus(3));
+    }
+
+    #[test]
+    #[wasm_bindgen_test::wasm_bindgen_test]
+    fn iter_statuses_should_match_get_unchecked() {
+        let status = Lst::<RawStatus<1>>::from_vec(vec![0xB9, 0xA3]);
+        let expected: Vec<_> = (0..status.max_index()).map(|i| status.get_unchecked(i)).collect();
+        let actual: Vec<_> = status.iter_statuses().collect();
+        assert!(!expected.is_empty());
+        assert!(!actual.is_empty());
+        assert_eq!(actual, expected);
+        dbg!(&actual);
+
+        let status = Lst::<OauthStatus>::from_vec(vec![0xC9, 0x44, 0xF9]);
+        let expected: Vec<_> = (0..status.max_index()).map(|i| status.get_unchecked(i)).collect();
+        let actual: Vec<_> = status.iter_statuses().collect();
+        assert!(!expected.is_empty());
+        assert!(!actual.is_empty());
+        assert_eq!(actual, expected);
     }
 
     #[test]
