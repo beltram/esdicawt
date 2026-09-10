@@ -19,7 +19,9 @@ pub use statuses::{OauthStatus, RawStatus};
 
 pub type BitIndex = u64;
 
-pub trait Status: From<u8> + Into<u8> + std::fmt::Debug + Clone + Eq + PartialEq + Hash {
+/// Trait for marking any struct or enum representing a status going in to a StatusList
+pub trait Status: From<u8> + Into<u8> + std::fmt::Debug + Clone + Eq + PartialEq + Hash + Default {
+    /// Number of bits used to represent that status
     const BITS: StatusBits;
 
     fn is_valid(&self) -> bool;

@@ -149,9 +149,10 @@ mod tests {
     #[test]
     #[wasm_bindgen_test::wasm_bindgen_test]
     fn should_find_next_vacant() {
-        #[derive(Debug, Clone, Eq, PartialEq, Hash)]
+        #[derive(Default, Debug, Clone, Eq, PartialEq, Hash)]
         #[repr(u8)]
         enum Status {
+            #[default]
             Valid = 0x00,
             Revoked = 0x01,
             Suspended = 0x02,
