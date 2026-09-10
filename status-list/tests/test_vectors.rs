@@ -13,9 +13,10 @@ ba00bd93f002beb7a2a2010000a91e09000000000000000000000000000000807296
         .lines()
         .collect::<String>();
 
-    #[derive(Debug, Copy, Clone, Eq, PartialEq, Hash)]
+    #[derive(Default, Debug, Copy, Clone, Eq, PartialEq, Hash)]
     #[repr(u8)]
     enum Status {
+        #[default]
         Valid = 0x00,
         Revoked = 0x01,
     }
@@ -79,9 +80,10 @@ fn two_bit_status_list() {
         .lines()
         .collect::<String>();
 
-    #[derive(Debug, Copy, Clone, Eq, PartialEq, Hash)]
+    #[derive(Default, Debug, Copy, Clone, Eq, PartialEq, Hash)]
     #[repr(u8)]
     enum Status {
+        #[default]
         Valid = 0x00,
         Revoked = 0x01,
         Suspended = 0x02,
