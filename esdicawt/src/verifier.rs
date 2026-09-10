@@ -423,7 +423,7 @@ pub trait VerifierWithStatus: Verifier {
                 return Err(SdCwtStatusVerifierError::IndexOutOfBounds(status_url.clone()).into());
             }
 
-            let Some(status) = self.get_status(&status_token, idx, status_url.as_str(), validation_time) else {
+            let Some(status) = self.get_status(&status_token, idx, status_url.as_str(), validation_time).await else {
                 return Err(SdCwtStatusVerifierError::StatusIndexNotFound(idx, status_url.clone()).into());
             };
 
@@ -442,8 +442,15 @@ pub trait VerifierWithStatus: Verifier {
 
     /// Let's a consumer cache individual non-revoked statuses
     // the last 2 args are there to compute a cache key.
-    fn get_status(&self, status_token: &VerifiedStatusListToken<Self::Status>, bit_index: status_list::BitIndex, _status_url: &str, _validation_time: u64) -> Option<Self::Status> {
-        status_token.status_list.lst().get(bit_index)
+    // it returns a future in case the status is behind an async cache
+    fn get_status(
+        &self,
+        status_token: &VerifiedStatusListToken<Self::Status>,
+        bit_index: status_list::BitIndex,
+        _status_url: &str,
+        _validation_time: u64,
+    ) -> impl Future<Output = Option<Self::Status>> {
+        std::future::ready(status_token.status_list.lst().get(bit_index))
     }
 
     #[allow(clippy::type_complexity)]
