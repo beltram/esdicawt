@@ -84,9 +84,12 @@ pub fn default_byte<S: Status>() -> u8 {
 
 #[inline(always)]
 pub fn byte_capacity<S: Status>(nb_statuses: usize) -> usize {
+    if nb_statuses == 0 {
+        return 0;
+    }
     // multiply by S::BITS first in case nb_statuses < 8
     // max in case 'nb_statuses * S::BITS' is < 8
-    core::cmp::max(nb_statuses * S::BITS.size() as usize / 8usize, 1)
+    core::cmp::max((nb_statuses * S::BITS.size() as usize).div_ceil(8), 1)
 }
 
 /// Finds an empty entry in the StatusList
