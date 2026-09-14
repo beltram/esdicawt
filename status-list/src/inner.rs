@@ -70,7 +70,8 @@ pub fn get<S: Status>(status_list: &[u8], index: BitIndex) -> Option<S> {
 pub fn max_index<S: Status>(bytes: &[u8]) -> BitIndex {
     let ratio = S::status_per_byte() as BitIndex;
     let byte_len = bytes.len() as BitIndex;
-    byte_len.wrapping_mul(ratio)
+    // we sub 1 because we want the max index and not the number of entries
+    byte_len.wrapping_mul(ratio).saturating_sub(1)
 }
 
 /// The byte value corresponding to a byte fully packed with [Status::default] statuses.
@@ -105,10 +106,33 @@ pub fn next_vacant_bit_index<S: Status>(bytes: &[u8], rng: &mut dyn rand_core::C
         if i > TRIES {
             return None;
         }
-        let proposed_index = rng.gen_range(0..max);
+        let proposed_index = rng.gen_range(0..=max);
         match get::<S>(bytes, proposed_index) {
             Some(s) if s.is_undefined() => return Some(proposed_index),
             _ => i += 1,
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::RawStatus;
+
+    wasm_bindgen_test::wasm_bindgen_test_configure!(run_in_browser);
+
+    #[test]
+    #[wasm_bindgen_test::wasm_bindgen_test]
+    fn max_index_should_be_the_last_valid_index() {
+        // 1 byte, 1-bit statuses: 8 slots -> valid indices 0..=7
+        assert_eq!(max_index::<RawStatus<1>>(&[0x00]), 7);
+        // 2 bytes, 1-bit statuses: 16 slots -> valid indices 0..=15
+        assert_eq!(max_index::<RawStatus<1>>(&[0x00, 0x00]), 15);
+        // 1 byte, 2-bit statuses: 4 slots -> valid indices 0..=3
+        assert_eq!(max_index::<RawStatus<2>>(&[0x00]), 3);
+        // 1 byte, 8-bit statuses: 1 slot -> valid index 0
+        assert_eq!(max_index::<RawStatus<8>>(&[0x00]), 0);
+        // empty list: no valid index at all; saturates to 0 instead of underflowing
+        assert_eq!(max_index::<RawStatus<1>>(&[]), 0);
     }
 }
