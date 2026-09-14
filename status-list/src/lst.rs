@@ -136,6 +136,7 @@ impl<S: Status> std::fmt::Debug for Lst<S> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::inner::byte_capacity;
     use crate::{OauthStatus, RawStatus, StatusBits, issuer::LstMut};
 
     wasm_bindgen_test::wasm_bindgen_test_configure!(run_in_browser);
@@ -238,6 +239,18 @@ mod tests {
         let mixed = Lst::<OauthStatus>::from_vec(bytes);
         let actual: Vec<_> = mixed.iter_non_default_statuses().collect();
         assert_eq!(actual, vec![(2000, OauthStatus::Invalid), (2001, OauthStatus::Suspended)]);
+    }
+
+    #[test]
+    #[wasm_bindgen_test::wasm_bindgen_test]
+    fn new_should_have_capacity_for_all_requested_statuses() {
+        assert_eq!(byte_capacity::<RawStatus<1>>(0), 0);
+        assert_eq!(byte_capacity::<RawStatus<1>>(1), 1);
+        assert_eq!(byte_capacity::<RawStatus<1>>(8), 1);
+        assert_eq!(byte_capacity::<RawStatus<1>>(9), 2);
+
+        assert_eq!(byte_capacity::<RawStatus<2>>(4), 1);
+        assert_eq!(byte_capacity::<RawStatus<2>>(5), 2);
     }
 
     #[test]
