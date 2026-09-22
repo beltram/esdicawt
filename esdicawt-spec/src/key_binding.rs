@@ -104,10 +104,9 @@ impl<
     PayloadClaims: CustomClaims,
 > KbtCwt<IssuerPayloadClaims, Hasher, PayloadClaims, IssuerProtectedClaims, IssuerUnprotectedClaims, ProtectedClaims, UnprotectedClaims>
 {
-    pub fn sd_cwt_payload(&mut self) -> EsdicawtSpecResult<&SdPayload<IssuerPayloadClaims>> {
-        let protected = self.protected.to_value_mut()?;
-        let payload = protected.kcwt.payload.to_value()?;
-        Ok(payload)
+    pub fn sd_cwt_payload(&mut self) -> EsdicawtSpecResult<Cow<'_, SdPayload<IssuerPayloadClaims>>> {
+        let protected = self.protected.to_value()?;
+        protected.kcwt.payload.as_value()
     }
 
     pub fn disclosures(&mut self) -> EsdicawtSpecResult<Option<&SaltedArray>> {
@@ -115,13 +114,13 @@ impl<
         Ok(protected.kcwt.disclosures())
     }
 
+    #[cfg(test)]
     pub fn clear_disclosures(&mut self) -> EsdicawtSpecResult<()> {
-        let protected = self.protected.to_value_mut()?;
-        if let Some(s) = protected.kcwt.disclosures_mut() {
-            s.clear()
-        }
-        self.protected.update_from_value()?;
-        Ok(())
+        self.protected.modify(|protected| {
+            if let Some(s) = protected.kcwt.disclosures_mut() {
+                s.clear()
+            }
+        })
     }
 }
 

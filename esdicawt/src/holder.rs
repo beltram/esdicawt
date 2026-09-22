@@ -411,7 +411,11 @@ mod tests {
         assert_eq!(disclosable_claims.len(), 3);
         let is_alice = |sc: &SaltedClaim<Value>| sc.name == SdCwtClaim::Tstr("name".into()) && sc.value == cbor!("Alice Smith").unwrap();
 
-        assert!(disclosable_claims.into_iter().any(|c| { matches!(c.unwrap().as_ref(), SaltedEntry::Claim(sc) if is_alice(sc)) }));
+        assert!(
+            disclosable_claims
+                .into_iter()
+                .any(|c| matches!(c.unwrap().as_ref(), SaltedEntry::Claim(sc) if is_alice(sc)))
+        );
 
         let claimset = sd_kbt.claimset_unchecked().unwrap().unwrap();
         assert_eq!(&claimset.name.unwrap(), "Alice Smith");
