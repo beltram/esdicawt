@@ -5,9 +5,7 @@ use crate::{
     inlined_cbor::InlinedCbor,
     issuance::{SdCwtIssued, SdPayload},
 };
-use std::borrow::Cow;
-
-type DisclosedClaims<'a> = Box<dyn Iterator<Item = EsdicawtSpecResult<Cow<'a, SaltedEntry<ciborium::Value>>>> + 'a>;
+type DisclosedClaims<'a> = Box<dyn Iterator<Item = EsdicawtSpecResult<&'a SaltedEntry<ciborium::Value>>> + 'a>;
 
 mod accessors;
 mod kbt_codec;
@@ -104,17 +102,16 @@ impl<
     PayloadClaims: CustomClaims,
 > KbtCwt<IssuerPayloadClaims, Hasher, PayloadClaims, IssuerProtectedClaims, IssuerUnprotectedClaims, ProtectedClaims, UnprotectedClaims>
 {
-    pub fn sd_cwt_payload(&mut self) -> EsdicawtSpecResult<Cow<'_, SdPayload<IssuerPayloadClaims>>> {
-        let protected = self.protected.to_value()?;
-        protected.kcwt.payload.as_value()
+    pub fn sd_cwt_payload(&self) -> EsdicawtSpecResult<&SdPayload<IssuerPayloadClaims>> {
+        self.protected.to_value()?.kcwt.payload.to_value()
     }
 
-    pub fn disclosures(&mut self) -> EsdicawtSpecResult<Option<&SaltedArray>> {
+    pub fn disclosures(&self) -> EsdicawtSpecResult<Option<&SaltedArray>> {
         let protected = self.protected.to_value()?;
         Ok(protected.kcwt.disclosures())
     }
 
-    #[cfg(test)]
+    #[cfg(any(test, feature = "test-utils"))]
     pub fn clear_disclosures(&mut self) -> EsdicawtSpecResult<()> {
         self.protected.modify(|protected| {
             if let Some(s) = protected.kcwt.disclosures_mut() {
@@ -135,12 +132,12 @@ impl<
 > KbtCwt<IssuerPayloadClaims, Hasher, PayloadClaims, IssuerProtectedClaims, IssuerUnprotectedClaims, ProtectedClaims, UnprotectedClaims>
 {
     /// Iterates through all the disclosed claims in this SD-KBT
-    pub fn walk_disclosed_claims(&mut self) -> EsdicawtSpecResult<DisclosedClaims<'_>> {
+    pub fn walk_disclosed_claims(&self) -> EsdicawtSpecResult<DisclosedClaims<'_>> {
         let protected = self.protected.to_value()?;
 
         #[allow(clippy::option_if_let_else)]
         if let Some(sd_claims) = protected.kcwt.disclosures() {
-            Ok(Box::new(sd_claims.as_iter()))
+            Ok(Box::new(sd_claims.iter()))
         } else {
             Ok(Box::new(core::iter::empty()))
         }

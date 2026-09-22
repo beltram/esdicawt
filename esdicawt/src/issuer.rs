@@ -219,7 +219,7 @@ mod tests {
     #[wasm_bindgen_test::wasm_bindgen_test]
     fn should_generate_sd_cwt() {
         let payload = CustomTokenClaims { name: Some("Alice Smith".into()) };
-        let (mut sd_cwt, _) = issue(Some(payload));
+        let (sd_cwt, _) = issue(Some(payload));
 
         let sd_cwt_bytes = sd_cwt.to_cbor_bytes().unwrap();
         let sd_cwt_2 = SdCwtIssued::<CustomTokenClaims, sha2::Sha256>::from_cbor_bytes(&sd_cwt_bytes).unwrap();
@@ -229,13 +229,12 @@ mod tests {
         CoseSign1::from_tagged_slice(&sd_cwt_bytes).unwrap();
 
         // should have 'redacted_claim_keys' in the payload
-        let mut payload = sd_cwt.payload.clone();
-        let payload = payload.to_value().unwrap();
+        let payload = sd_cwt.payload.to_value().unwrap();
         let rck = payload.redacted_claim_keys.as_ref().unwrap();
         assert_eq!(rck.len(), 1);
         let rck_name = rck.0.first().unwrap();
 
-        let payload = sd_cwt.disclosures_mut().unwrap().iter().collect::<Result<Vec<_>, _>>().unwrap();
+        let payload = sd_cwt.disclosures().unwrap().iter().collect::<Result<Vec<_>, _>>().unwrap();
         assert_eq!(payload.len(), 1);
         let d0 = payload.first().unwrap();
         let SaltedEntry::Claim(SaltedClaim { name, value, .. }) = d0 else { unreachable!() };
@@ -370,9 +369,7 @@ mod tests {
         assert_eq!(sd_cwt.query(vec!["age".into()].into()).unwrap().unwrap(), cbor!(42).unwrap());
         assert_eq!(sd_cwt.query(vec!["numbers".into()].into()).unwrap().unwrap(), cbor!([0, 1, 2]).unwrap());
 
-        let mut payload = sd_cwt.payload.clone();
-        let payload = payload.to_value().unwrap().clone();
-        let model = payload.inner.extra.unwrap();
+        let model = sd_cwt.payload.to_value().unwrap().inner.extra.clone().unwrap();
 
         // name has been redacted but not age
         assert_eq!(model.age, Some(42));
@@ -418,9 +415,7 @@ mod tests {
         };
         let (mut sd_cwt, _) = issue(Some(model));
 
-        let mut payload = sd_cwt.payload.clone();
-        let payload = payload.to_value().unwrap().clone();
-        let model = payload.inner.extra.unwrap();
+        let model = sd_cwt.payload.to_value().unwrap().inner.extra.clone().unwrap();
 
         // nothing redacted
         assert!(model.age.is_some());
@@ -440,7 +435,7 @@ mod tests {
     #[wasm_bindgen_test::wasm_bindgen_test]
     fn should_read_cnf() {
         let payload = CustomTokenClaims { name: Some("Alice Smith".into()) };
-        let (mut sd_cwt, holder_sk) = issue(Some(payload));
+        let (sd_cwt, holder_sk) = issue(Some(payload));
         let cnf = sd_cwt.cnf::<ed25519_dalek::VerifyingKey>().unwrap();
         assert_eq!(cnf, holder_sk.verifying_key());
     }

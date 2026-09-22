@@ -87,7 +87,7 @@ pub trait Holder {
 
         validate_cose_sign1_signature(&cose_sign1_sd_cwt, keyset)?;
 
-        let mut sd_cwt = SdCwtIssued::from_cbor_bytes(sd_cwt)?;
+        let sd_cwt = SdCwtIssued::from_cbor_bytes(sd_cwt)?;
         let payload = sd_cwt.payload.to_value()?;
 
         // verify time claims
@@ -411,11 +411,7 @@ mod tests {
         assert_eq!(disclosable_claims.len(), 3);
         let is_alice = |sc: &SaltedClaim<Value>| sc.name == SdCwtClaim::Tstr("name".into()) && sc.value == cbor!("Alice Smith").unwrap();
 
-        assert!(
-            disclosable_claims
-                .into_iter()
-                .any(|c| matches!(c.unwrap().as_ref(), SaltedEntry::Claim(sc) if is_alice(sc)))
-        );
+        assert!(disclosable_claims.into_iter().any(|c| matches!(c.unwrap(), SaltedEntry::Claim(sc) if is_alice(sc))));
 
         let claimset = sd_kbt.claimset_unchecked().unwrap().unwrap();
         assert_eq!(&claimset.name.unwrap(), "Alice Smith");
