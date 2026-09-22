@@ -5,6 +5,9 @@ use crate::{
     inlined_cbor::InlinedCbor,
     issuance::{SdCwtIssued, SdPayload},
 };
+use std::borrow::Cow;
+
+type DisclosedClaims<'a> = Box<dyn Iterator<Item = EsdicawtSpecResult<Cow<'a, SaltedEntry<ciborium::Value>>>> + 'a>;
 
 mod accessors;
 mod kbt_codec;
@@ -108,7 +111,7 @@ impl<
     }
 
     pub fn disclosures(&mut self) -> EsdicawtSpecResult<Option<&SaltedArray>> {
-        let protected = self.protected.to_value_mut()?;
+        let protected = self.protected.to_value()?;
         Ok(protected.kcwt.disclosures())
     }
 
@@ -133,12 +136,12 @@ impl<
 > KbtCwt<IssuerPayloadClaims, Hasher, PayloadClaims, IssuerProtectedClaims, IssuerUnprotectedClaims, ProtectedClaims, UnprotectedClaims>
 {
     /// Iterates through all the disclosed claims in this SD-KBT
-    pub fn walk_disclosed_claims(&mut self) -> EsdicawtSpecResult<Box<dyn Iterator<Item = EsdicawtSpecResult<&SaltedEntry<ciborium::Value>>> + '_>> {
-        let protected = self.protected.to_value_mut()?;
+    pub fn walk_disclosed_claims(&mut self) -> EsdicawtSpecResult<DisclosedClaims<'_>> {
+        let protected = self.protected.to_value()?;
 
         #[allow(clippy::option_if_let_else)]
-        if let Some(sd_claims) = protected.kcwt.disclosures_mut() {
-            Ok(Box::new(sd_claims.iter()))
+        if let Some(sd_claims) = protected.kcwt.disclosures() {
+            Ok(Box::new(sd_claims.as_iter()))
         } else {
             Ok(Box::new(core::iter::empty()))
         }

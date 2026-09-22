@@ -21,7 +21,7 @@ impl<PayloadClaims: Select, Hasher: digest::Digest + Clone, ProtectedClaims: Cus
     }
 
     #[cfg(feature = "status")]
-    pub fn status(&mut self) -> Option<status_list::StatusClaim> {
+    pub fn status(&self) -> Option<status_list::StatusClaim> {
         Some(self.payload.as_value().ok()?.inner.status.clone())
     }
 }
