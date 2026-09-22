@@ -271,16 +271,8 @@ impl SaltedArray {
         Ok(())
     }
 
-    pub fn as_iter(&self) -> impl Iterator<Item = EsdicawtSpecResult<Cow<'_, SaltedEntry<Value>>>> + '_ {
-        self.0.iter().map(InlinedCbor::as_value)
-    }
-
-    pub fn iter_clone(&self) -> impl Iterator<Item = EsdicawtSpecResult<SaltedEntry<Value>>> {
-        self.0.iter().map(InlinedCbor::clone_value)
-    }
-
-    pub fn iter(&mut self) -> impl Iterator<Item = EsdicawtSpecResult<&SaltedEntry<Value>>> + '_ {
-        self.0.iter_mut().map(InlinedCbor::to_value)
+    pub fn iter(&self) -> impl Iterator<Item = EsdicawtSpecResult<&SaltedEntry<Value>>> + '_ {
+        self.0.iter().map(InlinedCbor::to_value)
     }
 
     pub fn take_into_iter(self) -> impl Iterator<Item = EsdicawtSpecResult<SaltedEntry<Value>>> {
@@ -291,17 +283,20 @@ impl SaltedArray {
     pub fn digested<H: digest::Digest>(&self) -> EsdicawtSpecResult<SaltedArrayHashing<'_>> {
         #[cfg(not(feature = "backward"))]
         fn salted_redacted<H: digest::Digest>(salted_entry: &InlinedCbor<SaltedEntry<Value>>) -> EsdicawtSpecResult<impl Iterator<Item = (Vec<u8>, Cow<'_, SaltedEntry<Value>>)>> {
-            let value = salted_entry.as_value()?;
-            let digest = value.as_ref().to_redacted::<H>()?.to_vec();
-            Ok(std::iter::once((digest, value)))
+            let value = salted_entry.to_value()?;
+            let digest = value.to_redacted::<H>()?.to_vec();
+            Ok(std::iter::once((digest, Cow::Borrowed(value))))
         }
 
         #[cfg(feature = "backward")]
         fn salted_redacted<H: digest::Digest>(salted_entry: &InlinedCbor<SaltedEntry<Value>>) -> EsdicawtSpecResult<impl Iterator<Item = (Vec<u8>, Cow<'_, SaltedEntry<Value>>)>> {
-            let value = salted_entry.as_value()?;
-            let digest = value.as_ref().to_redacted::<H>()?.to_vec();
-            let old_digest = value.as_ref().old_to_redacted::<H>()?.to_vec();
-            Ok(std::iter::chain(std::iter::once((digest, value.clone())), std::iter::once((old_digest, value))))
+            let value = salted_entry.to_value()?;
+            let digest = value.to_redacted::<H>()?.to_vec();
+            let old_digest = value.old_to_redacted::<H>()?.to_vec();
+            Ok(std::iter::chain(
+                std::iter::once((digest, Cow::Borrowed(value))),
+                std::iter::once((old_digest, Cow::Borrowed(value))),
+            ))
         }
 
         let size = self.0.len();
@@ -331,9 +326,9 @@ impl SaltedArray {
             salted_entry: &'a InlinedCbor<SaltedEntry<Value>>,
             hasher: &Rc<dyn digest::DynDigest>,
         ) -> EsdicawtSpecResult<impl Iterator<Item = (Vec<u8>, Cow<'a, SaltedEntry<Value>>)>> {
-            let value = salted_entry.as_value()?;
-            let digest = value.as_ref().to_redacted_detached_hasher(hasher.clone())?;
-            Ok(std::iter::once((digest, value)))
+            let value = salted_entry.to_value()?;
+            let digest = value.to_redacted_detached_hasher(hasher.clone())?;
+            Ok(std::iter::once((digest, Cow::Borrowed(value))))
         }
 
         #[cfg(feature = "backward")]
@@ -341,10 +336,13 @@ impl SaltedArray {
             salted_entry: &'a InlinedCbor<SaltedEntry<Value>>,
             hasher: &Rc<dyn digest::DynDigest>,
         ) -> EsdicawtSpecResult<impl Iterator<Item = (Vec<u8>, Cow<'a, SaltedEntry<Value>>)>> {
-            let value = salted_entry.as_value()?;
-            let digest = value.as_ref().to_redacted_detached_hasher(hasher.clone())?.to_vec();
-            let old_digest = value.as_ref().old_to_redacted_detached_hasher(hasher.clone())?.to_vec();
-            Ok(std::iter::chain(std::iter::once((digest, value.clone())), std::iter::once((old_digest, value))))
+            let value = salted_entry.to_value()?;
+            let digest = value.to_redacted_detached_hasher(hasher.clone())?.to_vec();
+            let old_digest = value.old_to_redacted_detached_hasher(hasher.clone())?.to_vec();
+            Ok(std::iter::chain(
+                std::iter::once((digest, Cow::Borrowed(value))),
+                std::iter::once((old_digest, Cow::Borrowed(value))),
+            ))
         }
 
         let size = self.0.len();
@@ -370,9 +368,9 @@ impl SaltedArray {
     /// Returns a salted array with room to dynamically insert the digest of each salted to cache it
     pub fn to_verify(&self) -> EsdicawtSpecResult<SaltedArrayHashing<'_>> {
         Ok(SaltedArrayHashing::SaltedArrayToVerify(
-            self.as_iter()
+            self.iter()
                 .map(|d| match d {
-                    Ok(salted) => Ok((Default::default(), salted)),
+                    Ok(salted) => Ok((Default::default(), Cow::Borrowed(salted))),
                     Err(e) => Err(e),
                 })
                 .collect::<EsdicawtSpecResult<Vec<_>>>()?,

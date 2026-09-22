@@ -234,7 +234,7 @@ mod tests {
         sd_cwt
             .disclosures_mut()
             .unwrap()
-            .retain(|d| !matches!(d.clone_value().unwrap(), c if c.name() == Some(&SdCwtClaim::Int(42))));
+            .retain(|d| !matches!(d.to_value().unwrap(), c if c.name() == Some(&SdCwtClaim::Int(42))));
         assert!(matches!(
             holder.verify_sd_cwt(&sd_cwt.to_cbor_bytes().unwrap(), Default::default(), &issuer_verifying_key),
             Err(SdCwtHolderError::ValidationError(SdCwtHolderValidationError::DisclosureNotFound))
@@ -245,7 +245,7 @@ mod tests {
         sd_cwt
             .disclosures_mut()
             .unwrap()
-            .retain(|d| !matches!(d.clone_value().unwrap(), c if c.name() == Some(&SdCwtClaim::Int(44))));
+            .retain(|d| !matches!(d.to_value().unwrap(), c if c.name() == Some(&SdCwtClaim::Int(44))));
         assert!(matches!(
             holder.verify_sd_cwt(&sd_cwt.to_cbor_bytes().unwrap(), Default::default(), &issuer_verifying_key),
             Err(SdCwtHolderError::ValidationError(SdCwtHolderValidationError::DisclosureNotFound))
@@ -256,7 +256,7 @@ mod tests {
         sd_cwt
             .disclosures_mut()
             .unwrap()
-            .retain(|d| !matches!(d.clone_value().unwrap(), c if c.value() == Some(&cbor!(46).unwrap())));
+            .retain(|d| !matches!(d.to_value().unwrap(), c if c.value() == Some(&cbor!(46).unwrap())));
         assert!(matches!(
             holder.verify_sd_cwt(&sd_cwt.to_cbor_bytes().unwrap(), Default::default(), &issuer_verifying_key),
             Err(SdCwtHolderError::ValidationError(SdCwtHolderValidationError::DisclosureNotFound))
@@ -267,7 +267,7 @@ mod tests {
         sd_cwt
             .disclosures_mut()
             .unwrap()
-            .retain(|d| !matches!(d.clone_value().unwrap(), c if c.value() == Some(&cbor!(48).unwrap())));
+            .retain(|d| !matches!(d.to_value().unwrap(), c if c.value() == Some(&cbor!(48).unwrap())));
         assert!(matches!(
             holder.verify_sd_cwt(&sd_cwt.to_cbor_bytes().unwrap(), Default::default(), &issuer_verifying_key),
             Err(SdCwtHolderError::ValidationError(SdCwtHolderValidationError::DisclosureNotFound))

@@ -12,7 +12,7 @@ impl<
 > KbtCwt<IssuerPayloadClaims, Hasher, PayloadClaims, IssuerProtectedClaims, IssuerUnprotectedClaims, ProtectedClaims, UnprotectedClaims>
 {
     /// Get the SD-CWT wrapped by this SD-KBT
-    pub fn sd_cwt(&mut self) -> EsdicawtSpecResult<&SdCwtIssued<IssuerPayloadClaims, Hasher, IssuerProtectedClaims, IssuerUnprotectedClaims>> {
+    pub fn sd_cwt(&self) -> EsdicawtSpecResult<&SdCwtIssued<IssuerPayloadClaims, Hasher, IssuerProtectedClaims, IssuerUnprotectedClaims>> {
         Ok(&self.protected.to_value()?.kcwt)
     }
 
@@ -37,32 +37,32 @@ impl<
     }
 
     /// SD-KBT expiration, different from SD-CWT one !!!
-    pub fn exp(&mut self) -> EsdicawtSpecResult<Option<u64>> {
+    pub fn exp(&self) -> EsdicawtSpecResult<Option<u64>> {
         Ok(self.payload.to_value()?.expiration.map(|e| e as u64))
     }
 
     /// SD-KBT issued at, different from SD-CWT one !!!
-    pub fn iat(&mut self) -> EsdicawtSpecResult<u64> {
+    pub fn iat(&self) -> EsdicawtSpecResult<u64> {
         Ok(self.payload.to_value()?.issued_at as u64)
     }
 
     /// SD-KBT not before, different from SD-CWT one !!!
-    pub fn nbf(&mut self) -> EsdicawtSpecResult<Option<u64>> {
+    pub fn nbf(&self) -> EsdicawtSpecResult<Option<u64>> {
         Ok(self.payload.to_value()?.not_before.map(|e| e as u64))
     }
 
     /// SD-KBT audience, different from SD-CWT one !!!
-    pub fn audience(&mut self) -> EsdicawtSpecResult<&str> {
+    pub fn audience(&self) -> EsdicawtSpecResult<&str> {
         Ok(&self.payload.to_value()?.audience)
     }
 
     /// SD-KBT client nonce, different from SD-CWT one !!!
-    pub fn client_nonce(&mut self) -> EsdicawtSpecResult<Option<&[u8]>> {
+    pub fn client_nonce(&self) -> EsdicawtSpecResult<Option<&[u8]>> {
         Ok(self.payload.to_value()?.cnonce.as_deref().map(|b| &b[..]))
     }
 
     /// Signature algorithm of the SD-KBT, not the SD-CWT one !!!
-    pub fn alg(&mut self) -> Option<coset::iana::Algorithm> {
+    pub fn alg(&self) -> Option<coset::iana::Algorithm> {
         match *self.protected.to_value().ok()?.alg {
             coset::Algorithm::Assigned(alg) => Some(alg),
             _ => None,
@@ -70,7 +70,7 @@ impl<
     }
 
     #[cfg(feature = "status")]
-    pub fn status(&mut self) -> EsdicawtSpecResult<Option<status_list::StatusClaim>> {
+    pub fn status(&self) -> EsdicawtSpecResult<Option<status_list::StatusClaim>> {
         Ok(self.sd_cwt()?.status())
     }
 }

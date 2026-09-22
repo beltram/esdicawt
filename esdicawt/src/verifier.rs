@@ -88,7 +88,7 @@ pub trait Verifier {
         >,
         SdCwtVerifierError<Self::Error>,
     > {
-        let (mut kbt, mut generic_sd_cwt_payload) = __shallow_verify_sd_kbt(raw_sd_kbt, params.shallow(), holder_verifier, cks)?;
+        let (kbt, mut generic_sd_cwt_payload) = __shallow_verify_sd_kbt(raw_sd_kbt, params.shallow(), holder_verifier, cks)?;
         let generic_sd_cwt_payload_map = generic_sd_cwt_payload.as_map().ok_or(SdCwtVerifierError::InvalidSdCwt)?;
 
         let kbt_protected = kbt.protected.to_value()?;
@@ -179,7 +179,7 @@ pub trait Verifier {
             }
         }
 
-        let sd_alg = kbt_protected.kcwt.protected.as_value()?.sd_alg;
+        let sd_alg = kbt_protected.kcwt.protected.to_value()?.sd_alg;
 
         // now verifying the disclosures
         if let Some(disclosures) = kbt_protected.kcwt.disclosures() {
@@ -250,7 +250,7 @@ fn __shallow_verify_sd_kbt<
     ),
     SdCwtVerifierError<Error>,
 > {
-    let mut kbt =
+    let kbt =
         KbtCwt::<IssuerPayloadClaims, AnyDigest, KbtPayloadClaims, IssuerProtectedClaims, IssuerUnprotectedClaims, KbtProtectedClaims, KbtUnprotectedClaims>::from_cbor_bytes(
             raw_sd_kbt,
         )?;
@@ -402,10 +402,10 @@ pub trait VerifierWithStatus: Verifier {
     > {
         use crate::verifier::error::SdCwtStatusVerifierError;
 
-        let mut kbt = self.shallow_verify_sd_kbt(raw_sd_kbt, params.shallow(), holder_verifier, cks)?;
+        let kbt = self.shallow_verify_sd_kbt(raw_sd_kbt, params.shallow(), holder_verifier, cks)?;
 
         let kbt_protected = kbt.protected.to_value()?;
-        let sd_cwt_payload = kbt_protected.kcwt.payload.as_value()?;
+        let sd_cwt_payload = kbt_protected.kcwt.payload.to_value()?;
 
         // Read the StatusClaim from the SD-CWT to know where to fetch the Status from
         // Note: no StatusList for the SD-KBT as it is self-issued by a Holder
