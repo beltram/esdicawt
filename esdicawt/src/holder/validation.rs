@@ -299,9 +299,12 @@ mod tests {
         // alter disclosure of the map element
         let mut sd_cwt = sd_cwt_tagged.clone();
         for d in sd_cwt.disclosures_mut().unwrap().deref_mut() {
-            if let SaltedEntry::Claim(c) = d.to_value_mut().unwrap() {
-                c.salt = Salt::empty()
-            }
+            d.modify(|d| {
+                if let SaltedEntry::Claim(c) = d {
+                    c.salt = Salt::empty()
+                }
+            })
+            .unwrap();
         }
         assert!(matches!(
             holder.verify_sd_cwt(&sd_cwt.to_cbor_bytes().unwrap(), Default::default(), &issuer_verifying_key),
@@ -312,9 +315,12 @@ mod tests {
         #[allow(clippy::redundant_clone)]
         let mut sd_cwt = sd_cwt_tagged.clone();
         for d in sd_cwt.disclosures_mut().unwrap().deref_mut() {
-            if let SaltedEntry::Element(c) = d.to_value_mut().unwrap() {
-                c.salt = Salt::empty()
-            }
+            d.modify(|d| {
+                if let SaltedEntry::Element(c) = d {
+                    c.salt = Salt::empty()
+                }
+            })
+            .unwrap();
         }
         assert!(matches!(
             holder.verify_sd_cwt(&sd_cwt.to_cbor_bytes().unwrap(), Default::default(), &issuer_verifying_key),
