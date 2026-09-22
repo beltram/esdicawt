@@ -163,27 +163,6 @@ impl<T: CwtAny> InlinedCbor<T> {
         })
     }
 
-    pub fn to_pair_mut(&mut self) -> EsdicawtSpecResult<(&mut T, &[u8])> {
-        match self {
-            Self::Value(v, Some(b), modified) | Self::Bytes(b, Some(v), modified) => {
-                *modified = true;
-                Ok((v, b))
-            }
-            Self::Value(v, b, modified) => {
-                *modified = true;
-                b.replace(v.to_cbor_bytes()?);
-                // SAFETY: we just replaced the value so we can safely unwrap it
-                Ok((v, b.as_ref().unwrap()))
-            }
-            Self::Bytes(b, v, modified) => {
-                *modified = true;
-                v.replace(T::from_cbor_bytes(b)?);
-                // SAFETY: we just replaced the value so we can safely unwrap it
-                Ok((v.as_mut().unwrap(), b))
-            }
-        }
-    }
-
     // conflicting with `impl From<T>`
     pub fn from_bytes(b: Vec<u8>) -> Self {
         Self::Bytes(b, None, false)
@@ -230,8 +209,7 @@ mod tests {
         let deser = Value::from_cbor_bytes(&value.to_cbor_bytes().unwrap()).unwrap();
         assert_eq!(deser.into_bytes().unwrap(), vec![1]);
 
-        let (v, _) = value.to_pair_mut().unwrap();
-        *v = 2;
+        *value.to_value_mut().unwrap() = 2;
         let deser = Value::from_cbor_bytes(&value.to_cbor_bytes().unwrap()).unwrap();
         assert_eq!(deser.into_bytes().unwrap(), vec![2]);
 

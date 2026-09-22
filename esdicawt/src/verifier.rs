@@ -91,7 +91,7 @@ pub trait Verifier {
         let (mut kbt, mut generic_sd_cwt_payload) = __shallow_verify_sd_kbt(raw_sd_kbt, params.shallow(), holder_verifier, cks)?;
         let generic_sd_cwt_payload_map = generic_sd_cwt_payload.as_map().ok_or(SdCwtVerifierError::InvalidSdCwt)?;
 
-        let kbt_protected = kbt.protected.to_value_mut()?;
+        let kbt_protected = kbt.protected.to_value()?;
 
         let (mut sub, mut iss, mut aud) = (None, None, None);
 
@@ -179,10 +179,10 @@ pub trait Verifier {
             }
         }
 
-        let sd_alg = kbt_protected.kcwt.protected.to_value_mut()?.sd_alg;
+        let sd_alg = kbt_protected.kcwt.protected.as_value()?.sd_alg;
 
         // now verifying the disclosures
-        if let Some(disclosures) = kbt_protected.kcwt.disclosures_mut() {
+        if let Some(disclosures) = kbt_protected.kcwt.disclosures() {
             // compute the hash of all disclosures
             let hasher = self.digest(sd_alg);
             let mut disclosures = disclosures.digested_detached_hasher(&hasher)?;
@@ -256,7 +256,7 @@ fn __shallow_verify_sd_kbt<
         )?;
 
     let generic_sd_cwt = kbt.generic_sd_cwt()?;
-    let kbt_protected = kbt.protected.to_value_mut()?;
+    let kbt_protected = kbt.protected.to_value()?;
 
     let generic_sd_cwt_payload = generic_sd_cwt.payload.upcast_value()?;
     let generic_sd_cwt_payload_map = generic_sd_cwt_payload.as_map().ok_or(SdCwtVerifierError::InvalidSdCwt)?;
@@ -404,8 +404,8 @@ pub trait VerifierWithStatus: Verifier {
 
         let mut kbt = self.shallow_verify_sd_kbt(raw_sd_kbt, params.shallow(), holder_verifier, cks)?;
 
-        let kbt_protected = kbt.protected.to_value_mut()?;
-        let sd_cwt_payload = kbt_protected.kcwt.payload.to_value_mut()?;
+        let kbt_protected = kbt.protected.to_value()?;
+        let sd_cwt_payload = kbt_protected.kcwt.payload.as_value()?;
 
         // Read the StatusClaim from the SD-CWT to know where to fetch the Status from
         // Note: no StatusList for the SD-KBT as it is self-issued by a Holder

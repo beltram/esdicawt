@@ -287,10 +287,6 @@ impl SaltedArray {
         self.0.into_iter().map(InlinedCbor::try_into_value)
     }
 
-    pub fn iter_mut(&mut self) -> impl Iterator<Item = EsdicawtSpecResult<&mut SaltedEntry<Value>>> + '_ {
-        self.0.iter_mut().map(InlinedCbor::to_value_mut)
-    }
-
     /// Returns a salted with all the digests already computed to avoid doing it many times
     pub fn digested<H: digest::Digest>(&self) -> EsdicawtSpecResult<SaltedArrayHashing<'_>> {
         #[cfg(not(feature = "backward"))]

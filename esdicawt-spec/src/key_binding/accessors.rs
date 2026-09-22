@@ -13,7 +13,7 @@ impl<
 {
     /// Get the SD-CWT wrapped by this SD-KBT
     pub fn sd_cwt(&mut self) -> EsdicawtSpecResult<&SdCwtIssued<IssuerPayloadClaims, Hasher, IssuerProtectedClaims, IssuerUnprotectedClaims>> {
-        Ok(&self.protected.to_value_mut()?.kcwt)
+        Ok(&self.protected.to_value()?.kcwt)
     }
 
     /// Get the SD-CWT wrapped by this SD-KBT
@@ -34,11 +34,6 @@ impl<
         });
 
         Ok(sd_cwt?)
-    }
-
-    /// Get the SD-CWT wrapped by this SD-KBT
-    pub fn sd_cwt_mut(&mut self) -> EsdicawtSpecResult<&mut SdCwtIssued<IssuerPayloadClaims, Hasher, IssuerProtectedClaims, IssuerUnprotectedClaims>> {
-        Ok(&mut self.protected.to_value_mut()?.kcwt)
     }
 
     /// SD-KBT expiration, different from SD-CWT one !!!
@@ -76,6 +71,6 @@ impl<
 
     #[cfg(feature = "status")]
     pub fn status(&mut self) -> EsdicawtSpecResult<Option<status_list::StatusClaim>> {
-        Ok(self.sd_cwt_mut()?.status())
+        Ok(self.sd_cwt()?.status())
     }
 }
