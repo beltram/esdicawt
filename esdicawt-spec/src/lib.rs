@@ -73,6 +73,10 @@ pub enum EsdicawtSpecError {
     #[error(transparent)]
     CborSerializationError(#[from] ciborium::ser::Error<core::convert::Infallible>),
     #[error(transparent)]
+    SeaboredSerializationError(#[from] seabored::error::SeaboredSerError),
+    #[error(transparent)]
+    SeaboredDeserializationError(#[from] seabored::error::SeaboredDeError),
+    #[error(transparent)]
     CborIoSerializationError(#[from] ciborium::ser::Error<std::io::Error>),
     #[error(transparent)]
     CborValueError(#[from] ciborium::value::Error),
@@ -280,11 +284,19 @@ pub trait CwtAny: serde::Serialize + for<'de> serde::Deserialize<'de> + Clone {
         Ok(buf)
     }
 
+    fn to_seabored_bytes(&self) -> EsdicawtSpecResult<Vec<u8>> {
+        Ok(seabored::serde::to_vec(self)?)
+    }
+
     /// Uses CBOR Canonical encoding (CDE)
     fn to_cbor_cde_bytes(&self) -> EsdicawtSpecResult<Vec<u8>> {
         let mut buf = vec![];
         ciborium::value::canonical_into_writer(self, &mut buf)?;
         Ok(buf)
+    }
+
+    fn from_seabored_bytes(bytes: &[u8]) -> EsdicawtSpecResult<Self> {
+        Ok(seabored::serde::from_slice(bytes)?)
     }
 
     fn from_cbor_bytes(bytes: &[u8]) -> EsdicawtSpecResult<Self>
