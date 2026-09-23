@@ -926,6 +926,12 @@ mod tests {
         let issuer_params = default_issuer_params(Some(payload), &holder_signing_key);
         let err = verify(issuer_params, default_holder_params::<NoClaims>(), &holder_signing_key).unwrap_err();
         std::assert_matches!(err, SdCwtVerifierError::DuplicateMapKeys);
+
+        // also when a disclosed claim collides with a non-redacted one
+        let payload = cbor!({"dup" => "a", sd!("dup") => "b"}).unwrap();
+        let issuer_params = default_issuer_params(Some(payload), &holder_signing_key);
+        let err = verify(issuer_params, default_holder_params::<NoClaims>(), &holder_signing_key).unwrap_err();
+        std::assert_matches!(err, SdCwtVerifierError::DuplicateMapKeys);
     }
 
     mod expected_claims {

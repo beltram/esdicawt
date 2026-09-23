@@ -123,7 +123,7 @@ fn verifier_batch_bench(c: &mut Criterion) {
             b.iter_batched(
                 || verifier_batch::<sha2::Sha256>(i),
                 |(verifier, sd_kbts, params, cks, ..)| {
-                    let batch = sd_kbts.iter().map(|sd_kbt| (sd_kbt.as_slice(), params, None)).collect::<Vec<_>>();
+                    let batch = sd_kbts.iter().map(|sd_kbt| (sd_kbt.as_slice(), &params, None)).collect::<Vec<_>>();
                     black_box(verifier.verify_sd_kbt_batch(&batch, &cks).into_iter().collect::<Result<Vec<_>, _>>().unwrap())
                 },
                 BatchSize::LargeInput,
@@ -161,28 +161,28 @@ fn shallow_verifier_bench(c: &mut Criterion) {
         group.bench_with_input(BenchmarkId::new("SHA-256", i), &i, |b, i| {
             b.iter_batched(
                 || shallow_verifier::<sha2::Sha256>(i),
-                |(verifier, sd_kbt, params, cks, ..)| black_box(verifier.shallow_verify_sd_kbt(&sd_kbt, params, None, &cks).unwrap()),
+                |(verifier, sd_kbt, params, cks, ..)| black_box(verifier.shallow_verify_sd_kbt(&sd_kbt, &params, None, &cks).unwrap()),
                 BatchSize::LargeInput,
             )
         });
         /*group.bench_with_input(BenchmarkId::new("SHA-384", i), &i, |b, i| {
             b.iter_batched(
                 || shallow_verifier::<sha2::Sha384>(i),
-                |(verifier, sd_kbt, params, cks, ..)| black_box(verifier.shallow_verify_sd_kbt(&sd_kbt, params, None, &cks).unwrap()),
+                |(verifier, sd_kbt, params, cks, ..)| black_box(verifier.shallow_verify_sd_kbt(&sd_kbt, &params, None, &cks).unwrap()),
                 BatchSize::LargeInput,
             )
         });
         group.bench_with_input(BenchmarkId::new("SHA-512", i), &i, |b, i| {
             b.iter_batched(
                 || shallow_verifier::<sha2::Sha512>(i),
-                |(verifier, sd_kbt, params, cks, ..)| black_box(verifier.shallow_verify_sd_kbt(&sd_kbt, params, None, &cks).unwrap()),
+                |(verifier, sd_kbt, params, cks, ..)| black_box(verifier.shallow_verify_sd_kbt(&sd_kbt, &params, None, &cks).unwrap()),
                 BatchSize::LargeInput,
             )
         });*/
         /*group.bench_with_input(BenchmarkId::new("Blake3", i), &i, |b, i| {
             b.iter_batched(
                 || shallow_verifier::<blake3::Hasher>(i),
-                |(verifier, sd_kbt, params, cks, ..)| black_box(verifier.shallow_verify_sd_kbt(&sd_kbt, params, None, &cks).unwrap()),
+                |(verifier, sd_kbt, params, cks, ..)| black_box(verifier.shallow_verify_sd_kbt(&sd_kbt, &params, None, &cks).unwrap()),
                 BatchSize::LargeInput,
             )
         });*/
