@@ -25,6 +25,7 @@ serde_tuple.workspace = true
 serde_bytes.workspace = true
 thiserror.workspace = true
 hex.workspace = true
+seabored.workspace = true
 
 [dev-dependencies]
 sha2.workspace = true
