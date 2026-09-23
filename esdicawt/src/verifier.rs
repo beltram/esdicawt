@@ -73,7 +73,7 @@ pub trait Verifier {
     fn verify_sd_kbt(
         &self,
         raw_sd_kbt: &[u8],
-        params: VerifierParams,
+        params: &VerifierParams,
         // not mandatory in case the verifier does not have access to it
         holder_verifier: Option<&Self::HolderVerifier>,
         cks: &cose_key::keyset::CoseKeySet,
@@ -223,6 +223,31 @@ pub trait Verifier {
             payload: kbt_payload,
             claimset,
         })
+    }
+
+    /// Like [self.verify_sd_kbt] but batches operations
+    #[allow(clippy::type_complexity)]
+    fn verify_sd_kbt_batch(
+        &self,
+        raw_sd_kbts: &[(&[u8], VerifierParams, Option<&Self::HolderVerifier>)],
+        cks: &cose_key::keyset::CoseKeySet,
+    ) -> Vec<
+        Result<
+            KbtCwtVerified<
+                Self::IssuerPayloadClaims,
+                Self::KbtPayloadClaims,
+                Self::IssuerProtectedClaims,
+                Self::IssuerUnprotectedClaims,
+                Self::KbtProtectedClaims,
+                Self::KbtUnprotectedClaims,
+            >,
+            SdCwtVerifierError<Self::Error>,
+        >,
+    > {
+        raw_sd_kbts
+            .iter()
+            .map(|(raw_sd_kbt, params, holder_verifier)| self.verify_sd_kbt(raw_sd_kbt, params, *holder_verifier, cks))
+            .collect()
     }
 }
 
@@ -439,7 +464,7 @@ pub trait VerifierWithStatus: Verifier {
             return Err(SdCwtStatusVerifierError::StatusNotFound(status_url.clone()).into());
         };
 
-        self.verify_sd_kbt(raw_sd_kbt, params, holder_verifier, cks)
+        self.verify_sd_kbt(raw_sd_kbt, &params, holder_verifier, cks)
     }
 
     /// Let's a consumer cache individual non-revoked statuses
@@ -540,7 +565,7 @@ mod tests {
         // verifying Holder signature
         let holder_verifying_key_bis = ed25519_dalek::SigningKey::generate(&mut rand::thread_rng()).verifying_key();
         assert!(matches!(
-            verifier.verify_sd_kbt(&sd_kbt, Default::default(), Some(&holder_verifying_key_bis), &cks),
+            verifier.verify_sd_kbt(&sd_kbt, &Default::default(), Some(&holder_verifying_key_bis), &cks),
             Err(SdCwtVerifierError::UnexpectedKeyConfirmation)
         ));
 
@@ -549,7 +574,7 @@ mod tests {
         assert!(matches!(
             verifier.verify_sd_kbt(
                 &sd_kbt,
-                Default::default(),
+                &Default::default(),
                 Some(&holder_signing_key.verifying_key()),
                 &CoseKeySet::builder().with(&issuer_verifying_key_bis).unwrap().build()
             ),
@@ -576,7 +601,7 @@ mod tests {
         let verifier = HybridVerifier::<Value, NoClaims>::default();
 
         // by default do not validate anything
-        verifier.verify_sd_kbt(&sd_kbt, Default::default(), Some(&holder_verifying_key), &cks).unwrap();
+        verifier.verify_sd_kbt(&sd_kbt, &Default::default(), Some(&holder_verifying_key), &cks).unwrap();
 
         // === verify SD-CWT subject
         // ok when same
@@ -584,14 +609,14 @@ mod tests {
             expected_subject: Some("sub-a"),
             ..Default::default()
         };
-        verifier.verify_sd_kbt(&sd_kbt, params, Some(&holder_verifying_key), &cks).unwrap();
+        verifier.verify_sd_kbt(&sd_kbt, &params, Some(&holder_verifying_key), &cks).unwrap();
         // fail when mismatch
         let params = VerifierParams {
             expected_subject: Some("sub-b"),
             ..Default::default()
         };
         assert!(matches!(
-        verifier.verify_sd_kbt(&sd_kbt, params, Some(&holder_verifying_key), &cks),
+        verifier.verify_sd_kbt(&sd_kbt, &params, Some(&holder_verifying_key), &cks),
             Err(SdCwtVerifierError::SubMismatch { expected, actual })
             if expected == "sub-b" && actual == "sub-a"
         ));
@@ -602,14 +627,14 @@ mod tests {
             expected_issuer: Some("iss-a"),
             ..Default::default()
         };
-        verifier.verify_sd_kbt(&sd_kbt, params, Some(&holder_verifying_key), &cks).unwrap();
+        verifier.verify_sd_kbt(&sd_kbt, &params, Some(&holder_verifying_key), &cks).unwrap();
         // fail when mismatch
         let params = VerifierParams {
             expected_issuer: Some("iss-b"),
             ..Default::default()
         };
         assert!(matches!(
-        verifier.verify_sd_kbt(&sd_kbt, params, Some(&holder_verifying_key), &cks),
+        verifier.verify_sd_kbt(&sd_kbt, &params, Some(&holder_verifying_key), &cks),
             Err(SdCwtVerifierError::IssuerMismatch { expected, actual })
             if expected == "iss-b" && actual == "iss-a"
         ));
@@ -620,14 +645,14 @@ mod tests {
             expected_audience: Some("aud-a"),
             ..Default::default()
         };
-        verifier.verify_sd_kbt(&sd_kbt, params, Some(&holder_verifying_key), &cks).unwrap();
+        verifier.verify_sd_kbt(&sd_kbt, &params, Some(&holder_verifying_key), &cks).unwrap();
         // fail when mismatch
         let params = VerifierParams {
             expected_audience: Some("aud-b"),
             ..Default::default()
         };
         assert!(matches!(
-        verifier.verify_sd_kbt(&sd_kbt, params, Some(&holder_verifying_key), &cks),
+        verifier.verify_sd_kbt(&sd_kbt, &params, Some(&holder_verifying_key), &cks),
             Err(SdCwtVerifierError::AudienceMismatch { expected, actual })
             if expected == "aud-b" && actual == "aud-a"
         ));
@@ -638,14 +663,14 @@ mod tests {
             expected_kbt_audience: Some("kbt-aud-a"),
             ..Default::default()
         };
-        verifier.verify_sd_kbt(&sd_kbt, params, Some(&holder_verifying_key), &cks).unwrap();
+        verifier.verify_sd_kbt(&sd_kbt, &params, Some(&holder_verifying_key), &cks).unwrap();
         // fail when mismatch
         let params = VerifierParams {
             expected_kbt_audience: Some("kbt-aud-b"),
             ..Default::default()
         };
         assert!(matches!(
-        verifier.verify_sd_kbt(&sd_kbt, params, Some(&holder_verifying_key), &cks),
+        verifier.verify_sd_kbt(&sd_kbt, &params, Some(&holder_verifying_key), &cks),
             Err(SdCwtVerifierError::KbtAudienceMismatch { expected, actual })
             if expected == "kbt-aud-b" && actual == "kbt-aud-a"
         ));
@@ -656,14 +681,14 @@ mod tests {
             expected_cnonce: Some(b"kbt-cnonce-a"),
             ..Default::default()
         };
-        verifier.verify_sd_kbt(&sd_kbt, params, Some(&holder_verifying_key), &cks).unwrap();
+        verifier.verify_sd_kbt(&sd_kbt, &params, Some(&holder_verifying_key), &cks).unwrap();
         // fail when mismatch
         let params = VerifierParams {
             expected_cnonce: Some(b"kbt-cnonce-b"),
             ..Default::default()
         };
         assert!(matches!(
-        verifier.verify_sd_kbt(&sd_kbt, params, Some(&holder_verifying_key), &cks),
+        verifier.verify_sd_kbt(&sd_kbt, &params, Some(&holder_verifying_key), &cks),
             Err(SdCwtVerifierError::CnonceMismatch { expected, actual })
             if expected == b"kbt-cnonce-b" && actual == b"kbt-cnonce-a"
         ));
@@ -863,7 +888,7 @@ mod tests {
 
         let verifier = HybridVerifier::<CustomTokenClaims, NoClaims>::default();
         let err = verifier
-            .verify_sd_kbt(&sd_kbt, Default::default(), Some(&holder_signing_key.verifying_key()), &cks)
+            .verify_sd_kbt(&sd_kbt, &Default::default(), Some(&holder_signing_key.verifying_key()), &cks)
             .unwrap_err();
         std::assert_matches!(err, SdCwtVerifierError::OrphanDisclosure);
     }
@@ -899,7 +924,7 @@ mod tests {
                 expected_cnonce: Some(b"bbb"),
                 ..Default::default()
             };
-            let err = verifier.verify_sd_kbt(&sd_kbt, params, Some(&holder_signing_key.verifying_key()), &cks).unwrap_err();
+            let err = verifier.verify_sd_kbt(&sd_kbt, &params, Some(&holder_signing_key.verifying_key()), &cks).unwrap_err();
             std::assert_matches!(err, SdCwtVerifierError::CnonceMismatch { actual, expected } if expected == b"bbb" && actual == b"aaa");
         }
 
@@ -920,7 +945,7 @@ mod tests {
                 expected_cnonce: Some(b"cnonce"),
                 ..Default::default()
             };
-            let err = verifier.verify_sd_kbt(&sd_kbt, params, Some(&holder_signing_key.verifying_key()), &cks).unwrap_err();
+            let err = verifier.verify_sd_kbt(&sd_kbt, &params, Some(&holder_signing_key.verifying_key()), &cks).unwrap_err();
             std::assert_matches!(err, SdCwtVerifierError::CnonceMismatch { actual, expected } if expected == b"cnonce" && actual.is_empty());
         }
 
@@ -938,7 +963,7 @@ mod tests {
                 expected_subject: Some("bbb"),
                 ..Default::default()
             };
-            let err = verifier.verify_sd_kbt(&sd_kbt, params, Some(&holder_signing_key.verifying_key()), &cks).unwrap_err();
+            let err = verifier.verify_sd_kbt(&sd_kbt, &params, Some(&holder_signing_key.verifying_key()), &cks).unwrap_err();
             std::assert_matches!(err, SdCwtVerifierError::SubMismatch { actual, expected } if &expected == "bbb" && &actual == "aaa");
         }
 
@@ -956,7 +981,7 @@ mod tests {
                 expected_subject: Some("bbb"),
                 ..Default::default()
             };
-            let err = verifier.verify_sd_kbt(&sd_kbt, params, Some(&holder_signing_key.verifying_key()), &cks).unwrap_err();
+            let err = verifier.verify_sd_kbt(&sd_kbt, &params, Some(&holder_signing_key.verifying_key()), &cks).unwrap_err();
             std::assert_matches!(err, SdCwtVerifierError::SubMismatch { actual, expected } if &expected == "bbb" && actual.is_empty());
         }
 
@@ -974,7 +999,7 @@ mod tests {
                 expected_audience: Some("bbb"),
                 ..Default::default()
             };
-            let err = verifier.verify_sd_kbt(&sd_kbt, params, Some(&holder_signing_key.verifying_key()), &cks).unwrap_err();
+            let err = verifier.verify_sd_kbt(&sd_kbt, &params, Some(&holder_signing_key.verifying_key()), &cks).unwrap_err();
             std::assert_matches!(err, SdCwtVerifierError::AudienceMismatch { actual, expected } if &expected == "bbb" && &actual == "aaa");
         }
 
@@ -992,7 +1017,7 @@ mod tests {
                 expected_audience: Some("bbb"),
                 ..Default::default()
             };
-            let err = verifier.verify_sd_kbt(&sd_kbt, params, Some(&holder_signing_key.verifying_key()), &cks).unwrap_err();
+            let err = verifier.verify_sd_kbt(&sd_kbt, &params, Some(&holder_signing_key.verifying_key()), &cks).unwrap_err();
             std::assert_matches!(err, SdCwtVerifierError::AudienceMismatch { actual, expected } if &expected == "bbb" && actual.is_empty());
         }
 
@@ -1012,7 +1037,7 @@ mod tests {
                 expected_kbt_audience: Some("bbb"),
                 ..Default::default()
             };
-            let err = verifier.verify_sd_kbt(&sd_kbt, params, Some(&holder_signing_key.verifying_key()), &cks).unwrap_err();
+            let err = verifier.verify_sd_kbt(&sd_kbt, &params, Some(&holder_signing_key.verifying_key()), &cks).unwrap_err();
             std::assert_matches!(err, SdCwtVerifierError::KbtAudienceMismatch { actual, expected } if &expected == "bbb" && &actual == "aaa");
         }
 
@@ -1030,7 +1055,7 @@ mod tests {
                 expected_issuer: Some("bbb"),
                 ..Default::default()
             };
-            let err = verifier.verify_sd_kbt(&sd_kbt, params, Some(&holder_signing_key.verifying_key()), &cks).unwrap_err();
+            let err = verifier.verify_sd_kbt(&sd_kbt, &params, Some(&holder_signing_key.verifying_key()), &cks).unwrap_err();
             std::assert_matches!(err, SdCwtVerifierError::IssuerMismatch { actual, expected } if &expected == "bbb" && &actual == "aaa");
         }
     }
@@ -1054,7 +1079,7 @@ mod tests {
                 artificial_time: Some(later),
                 ..Default::default()
             };
-            let err = verifier.verify_sd_kbt(&sd_kbt, params, Some(&holder_signing_key.verifying_key()), &cks).unwrap_err();
+            let err = verifier.verify_sd_kbt(&sd_kbt, &params, Some(&holder_signing_key.verifying_key()), &cks).unwrap_err();
             std::assert_matches!(err, SdCwtVerifierError::TimeError(CwtTimeError::Expired));
         }
 
@@ -1073,7 +1098,7 @@ mod tests {
                 artificial_time: Some(past),
                 ..Default::default()
             };
-            let err = verifier.verify_sd_kbt(&sd_kbt, params, Some(&holder_signing_key.verifying_key()), &cks).unwrap_err();
+            let err = verifier.verify_sd_kbt(&sd_kbt, &params, Some(&holder_signing_key.verifying_key()), &cks).unwrap_err();
             std::assert_matches!(err, SdCwtVerifierError::TimeError(CwtTimeError::ClockDrift));
         }
 
@@ -1092,7 +1117,7 @@ mod tests {
                 artificial_time: Some(past),
                 ..Default::default()
             };
-            let err = verifier.verify_sd_kbt(&sd_kbt, params, Some(&holder_signing_key.verifying_key()), &cks).unwrap_err();
+            let err = verifier.verify_sd_kbt(&sd_kbt, &params, Some(&holder_signing_key.verifying_key()), &cks).unwrap_err();
             std::assert_matches!(err, SdCwtVerifierError::TimeError(CwtTimeError::NotValidYet));
         }
 
@@ -1113,7 +1138,7 @@ mod tests {
                 artificial_time: Some(later),
                 ..Default::default()
             };
-            let err = verifier.verify_sd_kbt(&sd_kbt, params, Some(&holder_signing_key.verifying_key()), &cks).unwrap_err();
+            let err = verifier.verify_sd_kbt(&sd_kbt, &params, Some(&holder_signing_key.verifying_key()), &cks).unwrap_err();
             std::assert_matches!(err, SdCwtVerifierError::TimeError(CwtTimeError::Expired));
         }
 
@@ -1135,7 +1160,7 @@ mod tests {
                 artificial_time: Some(past),
                 ..Default::default()
             };
-            let err = verifier.verify_sd_kbt(&sd_kbt, params, Some(&holder_signing_key.verifying_key()), &cks).unwrap_err();
+            let err = verifier.verify_sd_kbt(&sd_kbt, &params, Some(&holder_signing_key.verifying_key()), &cks).unwrap_err();
             std::assert_matches!(err, SdCwtVerifierError::TimeError(CwtTimeError::NotValidYet));
         }
     }
@@ -1147,7 +1172,7 @@ mod tests {
     ) -> Result<KbtCwtVerified<T, U>, SdCwtVerifierError<Infallible>> {
         let (cks, sd_kbt, ..) = generate_sd_kbt(issuer_params.clone(), holder_params, holder_signing_key);
         let verifier = HybridVerifier::<T, U>::default();
-        verifier.verify_sd_kbt(&sd_kbt, Default::default(), Some(&holder_signing_key.verifying_key()), &cks)
+        verifier.verify_sd_kbt(&sd_kbt, &Default::default(), Some(&holder_signing_key.verifying_key()), &cks)
     }
 
     #[allow(clippy::type_complexity)]
@@ -1388,7 +1413,7 @@ mod backward {
             },
             ..Default::default()
         };
-        verifier.verify_sd_kbt(sd_kbt, params, Some(&holder_signing_key.verifying_key()), &cks)?;
+        verifier.verify_sd_kbt(sd_kbt, &params, Some(&holder_signing_key.verifying_key()), &cks)?;
 
         Ok(())
     }

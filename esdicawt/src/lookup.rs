@@ -286,7 +286,7 @@ mod tests {
         }
         let verifier = Ed25519Verifier::new();
         verifier
-            .verify_sd_kbt(sd_kbt, Default::default(), None, &CoseKeySet::builder().with(&issuer_verifying_key).unwrap().build())
+            .verify_sd_kbt(sd_kbt, &Default::default(), None, &CoseKeySet::builder().with(&issuer_verifying_key).unwrap().build())
             .unwrap()
     }
 }
