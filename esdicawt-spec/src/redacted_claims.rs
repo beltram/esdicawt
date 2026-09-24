@@ -33,7 +33,7 @@ pub trait ToRedacted: serde::Serialize {
     fn to_redacted_bstr(&self) -> EsdicawtSpecResult<Vec<u8>> {
         let mut cbor_bytes = vec![];
         ciborium::into_writer(self, &mut cbor_bytes)?;
-        Value::Bytes(cbor_bytes).to_cbor_bytes()
+        Value::Bytes(cbor_bytes).to_seabored_bytes()
     }
 
     #[cfg(feature = "backward")]
