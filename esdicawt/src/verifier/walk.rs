@@ -7,8 +7,8 @@ use crate::{
     },
 };
 use ciborium::Value;
-use esdicawt_spec::blinded_claims::SaltedArrayHashing;
-use std::rc::Rc;
+use esdicawt_spec::{SdCwtClaim, blinded_claims::SaltedArrayHashing};
+use std::{collections::HashSet, rc::Rc};
 
 // wrapping "_walk" is required for fallible recursion
 pub fn walk_payload<E>(hasher: Rc<dyn digest::DynDigest>, payload: &mut Value, disclosures: &mut SaltedArrayHashing) -> SdCwtVerifierResult<(), E>
@@ -30,6 +30,10 @@ where
             if let Some(pos) = pos {
                 let (_, rcks) = mapping.swap_remove(pos);
                 let rcks = rcks.deserialized::<RedactedClaimKeys>()?;
+
+                // prevents linear lookup when trying to catch `DuplicateMapKeys`
+                let mut keys = mapping.iter().filter_map(|(k, _)| SdCwtClaim::from_cbor_value(k).ok()).collect::<HashSet<_>>();
+
                 for rck in rcks {
                     if let Some(mut found) = disclosures.remove_lazy(&rck, &hasher) {
                         match found.to_mut() {
@@ -37,11 +41,10 @@ where
                                 if value.is_map() || value.is_array() {
                                     walk_payload(hasher.clone(), value, disclosures)?;
                                 }
-                                let key = name.to_cbor_value()?;
-                                if mapping.iter().any(|(k, _)| k == &key) {
+                                if !keys.insert(name.clone()) {
                                     return Err(SdCwtVerifierError::DuplicateMapKeys);
                                 }
-                                mapping.push((key, core::mem::replace(value, Value::Null)))
+                                mapping.push((name.to_cbor_value()?, core::mem::replace(value, Value::Null)))
                             }
                             SaltedEntry::Decoy(_) => {} // nothing to do, validity of hash already checked
                             SaltedEntry::Element(_) => return Err(SdCwtVerifierError::MalformedSdCwt("'redacted_claim_keys' must not contain redacted elements")),

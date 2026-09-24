@@ -30,8 +30,8 @@ pub trait Verifier {
     type KbtUnprotectedClaims: CustomClaims;
 
     #[cfg(any(feature = "ed25519", feature = "p256", feature = "p384"))]
-    fn digest(&self, sd_alg: SdHashAlg) -> Rc<dyn digest::DynDigest> {
-        match sd_alg {
+    fn digest(&self, sd_hash_alg: SdHashAlg) -> Rc<dyn digest::DynDigest> {
+        match sd_hash_alg {
             #[cfg(any(feature = "ed25519", feature = "p256"))]
             SdHashAlg::Sha256 => Rc::new(sha2::Sha256::default()),
             #[cfg(feature = "p384")]
@@ -41,7 +41,7 @@ pub trait Verifier {
     }
 
     #[cfg(not(any(feature = "ed25519", feature = "p256", feature = "p384")))]
-    fn digest(&self, sd_alg: SdHashAlg) -> Rc<dyn digest::DynDigest>;
+    fn digest(&self, sd_hash_alg: SdHashAlg) -> Rc<dyn digest::DynDigest>;
 
     /// Only verify the signatures and the time claims without trying to rebuild the whole ClaimSet which
     /// is expensive by requiring a lot of hashes
@@ -49,7 +49,7 @@ pub trait Verifier {
     fn shallow_verify_sd_kbt(
         &self,
         raw_sd_kbt: &[u8],
-        params: ShallowVerifierParams,
+        params: &ShallowVerifierParams,
         // not mandatory in case the verifier does not have access to it
         holder_verifier: Option<&Self::HolderVerifier>,
         cks: &cose_key::keyset::CoseKeySet,
@@ -73,7 +73,7 @@ pub trait Verifier {
     fn verify_sd_kbt(
         &self,
         raw_sd_kbt: &[u8],
-        params: VerifierParams,
+        params: &VerifierParams,
         // not mandatory in case the verifier does not have access to it
         holder_verifier: Option<&Self::HolderVerifier>,
         cks: &cose_key::keyset::CoseKeySet,
@@ -88,142 +88,191 @@ pub trait Verifier {
         >,
         SdCwtVerifierError<Self::Error>,
     > {
-        let (kbt, mut generic_sd_cwt_payload) = __shallow_verify_sd_kbt(raw_sd_kbt, params.shallow(), holder_verifier, cks)?;
-        let generic_sd_cwt_payload_map = generic_sd_cwt_payload.as_map().ok_or(SdCwtVerifierError::InvalidSdCwt)?;
-
-        let kbt_protected = kbt.protected.to_value()?;
-
-        let (mut sub, mut iss, mut aud) = (None, None, None);
-
-        for (k, value) in generic_sd_cwt_payload_map {
-            match (k.as_integer(), value) {
-                (Some(i), Value::Text(v)) if i == CwtStdLabel::Subject => {
-                    sub.replace(v);
-                }
-                (Some(i), Value::Text(v)) if i == CwtStdLabel::Issuer => {
-                    iss.replace(v);
-                }
-                (Some(i), Value::Text(v)) if i == CwtStdLabel::Audience => {
-                    aud.replace(v);
-                }
-                _ => {}
-            }
-        }
-
-        let kbt_payload = kbt.payload.try_into_value()?;
-
-        // verify SD-KBT audience
-        if let Some(expected) = params.expected_kbt_audience {
-            let actual = &kbt_payload.audience;
-            if actual != expected {
-                return Err(SdCwtVerifierError::KbtAudienceMismatch {
-                    actual: actual.to_owned(),
-                    expected: expected.to_owned(),
-                });
-            }
-        }
-
-        // verify SD-KBT cnonce
-        if let Some(expected) = params.expected_cnonce {
-            let actual = kbt_payload.cnonce.as_ref().map(|bb| bb.to_vec()).unwrap_or_default();
-            if actual != expected {
-                return Err(SdCwtVerifierError::CnonceMismatch {
-                    actual,
-                    expected: expected.to_owned(),
-                });
-            }
-        }
-
-        // verify SD-CWT subject
-        if let Some(expected) = params.expected_subject {
-            if let Some(actual) = sub {
-                if actual != expected {
-                    return Err(SdCwtVerifierError::SubMismatch {
-                        actual: actual.to_owned(),
-                        expected: expected.to_owned(),
-                    });
-                }
-            } else {
-                return Err(SdCwtVerifierError::SubMismatch {
-                    actual: Default::default(),
-                    expected: expected.to_owned(),
-                });
-            }
-        }
-
-        // verify SD-CWT issuer
-        if let Some(expected) = params.expected_issuer {
-            let actual = iss.ok_or(SdCwtVerifierError::MalformedSdCwt("Missing issuer"))?;
-            if actual != expected {
-                return Err(SdCwtVerifierError::IssuerMismatch {
-                    actual: actual.to_owned(),
-                    expected: expected.to_owned(),
-                });
-            }
-        }
-
-        // verify SD-CWT audience
-        if let Some(expected) = params.expected_audience {
-            if let Some(actual) = aud {
-                if actual != expected {
-                    return Err(SdCwtVerifierError::AudienceMismatch {
-                        actual: actual.to_owned(),
-                        expected: expected.to_owned(),
-                    });
-                }
-            } else {
-                return Err(SdCwtVerifierError::AudienceMismatch {
-                    actual: Default::default(),
-                    expected: expected.to_owned(),
-                });
-            }
-        }
-
-        let sd_alg = kbt_protected.kcwt.protected.to_value()?.sd_alg;
-
-        // now verifying the disclosures
-        if let Some(disclosures) = kbt_protected.kcwt.disclosures() {
-            // compute the hash of all disclosures
-            let hasher = self.digest(sd_alg);
-            let mut disclosures = disclosures.digested_detached_hasher(&hasher)?;
-            #[cfg(feature = "backward")]
-            let disclosures_size = disclosures.len();
-
-            walk::walk_payload(hasher, &mut generic_sd_cwt_payload, &mut disclosures)?;
-
-            // disclosures not found in the SD-CWT payload => invalid
-            let orphan_disclosures = disclosures;
-            #[cfg(feature = "backward")]
-            if disclosures_size != orphan_disclosures.len() * 2 {
-                dbg!(&orphan_disclosures.len());
-                return Err(SdCwtVerifierError::OrphanDisclosure);
-            }
-
-            #[cfg(not(feature = "backward"))]
-            if !orphan_disclosures.is_empty() {
-                return Err(SdCwtVerifierError::OrphanDisclosure);
-            }
-        }
-
-        // puncture the 'cnf' claim before deserialization
-        if let Some(map) = generic_sd_cwt_payload.as_map_mut() {
-            map.retain(|(k, _)| !matches!(k, Value::Integer(i) if *i == Integer::from(CWT_CLAIM_KEY_CONFIRMATION)));
-        }
-
-        // TODO: this might fail if `Self::IssuerPayloadClaims` does not support unknown claims (serde flatten etc..)
-        let sd_cwt_payload = generic_sd_cwt_payload.deserialized::<SdInnerPayload<Self::IssuerPayloadClaims>>()?;
-        let claimset = sd_cwt_payload.extra;
-
-        let protected = kbt.protected.try_into_value()?.try_into()?;
-        let unprotected = kbt.unprotected;
-
-        Ok(KbtCwtVerified {
-            protected,
-            unprotected,
-            payload: kbt_payload,
-            claimset,
-        })
+        __verify_sd_kbt(raw_sd_kbt, params, holder_verifier, cks, |sd_hash_alg: SdHashAlg| self.digest(sd_hash_alg))
     }
+
+    /// Like [self.verify_sd_kbt] but batches operations
+    #[allow(clippy::type_complexity)]
+    fn verify_sd_kbt_batch(
+        &self,
+        raw_sd_kbts: &[(&[u8], &VerifierParams, Option<&Self::HolderVerifier>)],
+        cks: &cose_key::keyset::CoseKeySet,
+    ) -> Vec<
+        Result<
+            KbtCwtVerified<
+                Self::IssuerPayloadClaims,
+                Self::KbtPayloadClaims,
+                Self::IssuerProtectedClaims,
+                Self::IssuerUnprotectedClaims,
+                Self::KbtProtectedClaims,
+                Self::KbtUnprotectedClaims,
+            >,
+            SdCwtVerifierError<Self::Error>,
+        >,
+    > {
+        raw_sd_kbts
+            .iter()
+            .map(|(raw_sd_kbt, params, holder_verifier)| self.verify_sd_kbt(raw_sd_kbt, params, *holder_verifier, cks))
+            .collect()
+    }
+}
+
+#[allow(clippy::type_complexity)]
+fn __verify_sd_kbt<
+    Error: core::error::Error + Send + Sync,
+    HolderSignature: signature::SignatureEncoding,
+    HolderVerifier: signature::Verifier<HolderSignature> + AsRef<[u8]> + PartialEq + for<'a> TryFrom<&'a KeyConfirmation, Error = CoseKeyConfirmationError>,
+    IssuerProtectedClaims: CustomClaims,
+    IssuerUnprotectedClaims: CustomClaims,
+    IssuerPayloadClaims: Select,
+    KbtPayloadClaims: CustomClaims,
+    KbtProtectedClaims: CustomClaims,
+    KbtUnprotectedClaims: CustomClaims,
+>(
+    raw_sd_kbt: &[u8],
+    params: &VerifierParams,
+    holder_verifier: Option<&HolderVerifier>,
+    cks: &cose_key::keyset::CoseKeySet,
+    digest: impl Fn(SdHashAlg) -> Rc<dyn digest::DynDigest>,
+) -> Result<
+    KbtCwtVerified<IssuerPayloadClaims, KbtPayloadClaims, IssuerProtectedClaims, IssuerUnprotectedClaims, KbtProtectedClaims, KbtUnprotectedClaims>,
+    SdCwtVerifierError<Error>,
+> {
+    let (kbt, mut generic_sd_cwt_payload) = __shallow_verify_sd_kbt(raw_sd_kbt, &params.shallow(), holder_verifier, cks)?;
+    let generic_sd_cwt_payload_map = generic_sd_cwt_payload.as_map().ok_or(SdCwtVerifierError::InvalidSdCwt)?;
+
+    let kbt_protected = kbt.protected.to_value()?;
+
+    let (mut sub, mut iss, mut aud) = (None, None, None);
+
+    for (k, value) in generic_sd_cwt_payload_map {
+        match (k.as_integer(), value) {
+            (Some(i), Value::Text(v)) if i == CwtStdLabel::Subject => {
+                sub.replace(v);
+            }
+            (Some(i), Value::Text(v)) if i == CwtStdLabel::Issuer => {
+                iss.replace(v);
+            }
+            (Some(i), Value::Text(v)) if i == CwtStdLabel::Audience => {
+                aud.replace(v);
+            }
+            _ => {}
+        }
+    }
+
+    let kbt_payload = kbt.payload.try_into_value()?;
+
+    // verify SD-KBT audience
+    if let Some(expected) = params.expected_kbt_audience {
+        let actual = &kbt_payload.audience;
+        if actual != expected {
+            return Err(SdCwtVerifierError::KbtAudienceMismatch {
+                actual: actual.to_owned(),
+                expected: expected.to_owned(),
+            });
+        }
+    }
+
+    // verify SD-KBT cnonce
+    if let Some(expected) = params.expected_cnonce {
+        let actual = kbt_payload.cnonce.as_ref().map(|bb| bb.to_vec()).unwrap_or_default();
+        if actual != expected {
+            return Err(SdCwtVerifierError::CnonceMismatch {
+                actual,
+                expected: expected.to_owned(),
+            });
+        }
+    }
+
+    // verify SD-CWT subject
+    if let Some(expected) = params.expected_subject {
+        if let Some(actual) = sub {
+            if actual != expected {
+                return Err(SdCwtVerifierError::SubMismatch {
+                    actual: actual.to_owned(),
+                    expected: expected.to_owned(),
+                });
+            }
+        } else {
+            return Err(SdCwtVerifierError::SubMismatch {
+                actual: Default::default(),
+                expected: expected.to_owned(),
+            });
+        }
+    }
+
+    // verify SD-CWT issuer
+    if let Some(expected) = params.expected_issuer {
+        let actual = iss.ok_or(SdCwtVerifierError::MalformedSdCwt("Missing issuer"))?;
+        if actual != expected {
+            return Err(SdCwtVerifierError::IssuerMismatch {
+                actual: actual.to_owned(),
+                expected: expected.to_owned(),
+            });
+        }
+    }
+
+    // verify SD-CWT audience
+    if let Some(expected) = params.expected_audience {
+        if let Some(actual) = aud {
+            if actual != expected {
+                return Err(SdCwtVerifierError::AudienceMismatch {
+                    actual: actual.to_owned(),
+                    expected: expected.to_owned(),
+                });
+            }
+        } else {
+            return Err(SdCwtVerifierError::AudienceMismatch {
+                actual: Default::default(),
+                expected: expected.to_owned(),
+            });
+        }
+    }
+
+    let sd_alg = kbt_protected.kcwt.protected.to_value()?.sd_alg;
+
+    // now verifying the disclosures
+    if let Some(disclosures) = kbt_protected.kcwt.disclosures() {
+        // compute the hash of all disclosures
+        let hasher = digest(sd_alg);
+        let mut disclosures = disclosures.digested_detached_hasher(&hasher)?;
+        #[cfg(feature = "backward")]
+        let disclosures_size = disclosures.len();
+
+        walk::walk_payload(hasher, &mut generic_sd_cwt_payload, &mut disclosures)?;
+
+        // disclosures not found in the SD-CWT payload => invalid
+        let orphan_disclosures = disclosures;
+        #[cfg(feature = "backward")]
+        if disclosures_size != orphan_disclosures.len() * 2 {
+            dbg!(&orphan_disclosures.len());
+            return Err(SdCwtVerifierError::OrphanDisclosure);
+        }
+
+        #[cfg(not(feature = "backward"))]
+        if !orphan_disclosures.is_empty() {
+            return Err(SdCwtVerifierError::OrphanDisclosure);
+        }
+    }
+
+    // puncture the 'cnf' claim before deserialization
+    if let Some(map) = generic_sd_cwt_payload.as_map_mut() {
+        map.retain(|(k, _)| !matches!(k, Value::Integer(i) if *i == Integer::from(CWT_CLAIM_KEY_CONFIRMATION)));
+    }
+
+    // TODO: this might fail if `Self::IssuerPayloadClaims` does not support unknown claims (serde flatten etc..)
+    let sd_cwt_payload = generic_sd_cwt_payload.deserialized::<SdInnerPayload<IssuerPayloadClaims>>()?;
+    let claimset = sd_cwt_payload.extra;
+
+    let protected = kbt.protected.try_into_value()?.try_into()?;
+    let unprotected = kbt.unprotected;
+
+    Ok(KbtCwtVerified {
+        protected,
+        unprotected,
+        payload: kbt_payload,
+        claimset,
+    })
 }
 
 #[allow(clippy::type_complexity)]
@@ -239,7 +288,7 @@ fn __shallow_verify_sd_kbt<
     KbtUnprotectedClaims: CustomClaims,
 >(
     raw_sd_kbt: &[u8],
-    params: ShallowVerifierParams,
+    params: &ShallowVerifierParams,
     // not mandatory in case the verifier does not have access to it
     holder_verifier: Option<&HolderVerifier>,
     cks: &cose_key::keyset::CoseKeySet,
@@ -402,7 +451,7 @@ pub trait VerifierWithStatus: Verifier {
     > {
         use crate::verifier::error::SdCwtStatusVerifierError;
 
-        let kbt = self.shallow_verify_sd_kbt(raw_sd_kbt, params.shallow(), holder_verifier, cks)?;
+        let kbt = self.shallow_verify_sd_kbt(raw_sd_kbt, &params.shallow(), holder_verifier, cks)?;
 
         let kbt_protected = kbt.protected.to_value()?;
         let sd_cwt_payload = kbt_protected.kcwt.payload.to_value()?;
@@ -439,7 +488,7 @@ pub trait VerifierWithStatus: Verifier {
             return Err(SdCwtStatusVerifierError::StatusNotFound(status_url.clone()).into());
         };
 
-        self.verify_sd_kbt(raw_sd_kbt, params, holder_verifier, cks)
+        self.verify_sd_kbt(raw_sd_kbt, &params, holder_verifier, cks)
     }
 
     /// Let's a consumer cache individual non-revoked statuses
@@ -540,7 +589,7 @@ mod tests {
         // verifying Holder signature
         let holder_verifying_key_bis = ed25519_dalek::SigningKey::generate(&mut rand::thread_rng()).verifying_key();
         assert!(matches!(
-            verifier.verify_sd_kbt(&sd_kbt, Default::default(), Some(&holder_verifying_key_bis), &cks),
+            verifier.verify_sd_kbt(&sd_kbt, &Default::default(), Some(&holder_verifying_key_bis), &cks),
             Err(SdCwtVerifierError::UnexpectedKeyConfirmation)
         ));
 
@@ -549,7 +598,7 @@ mod tests {
         assert!(matches!(
             verifier.verify_sd_kbt(
                 &sd_kbt,
-                Default::default(),
+                &Default::default(),
                 Some(&holder_signing_key.verifying_key()),
                 &CoseKeySet::builder().with(&issuer_verifying_key_bis).unwrap().build()
             ),
@@ -576,7 +625,7 @@ mod tests {
         let verifier = HybridVerifier::<Value, NoClaims>::default();
 
         // by default do not validate anything
-        verifier.verify_sd_kbt(&sd_kbt, Default::default(), Some(&holder_verifying_key), &cks).unwrap();
+        verifier.verify_sd_kbt(&sd_kbt, &Default::default(), Some(&holder_verifying_key), &cks).unwrap();
 
         // === verify SD-CWT subject
         // ok when same
@@ -584,14 +633,14 @@ mod tests {
             expected_subject: Some("sub-a"),
             ..Default::default()
         };
-        verifier.verify_sd_kbt(&sd_kbt, params, Some(&holder_verifying_key), &cks).unwrap();
+        verifier.verify_sd_kbt(&sd_kbt, &params, Some(&holder_verifying_key), &cks).unwrap();
         // fail when mismatch
         let params = VerifierParams {
             expected_subject: Some("sub-b"),
             ..Default::default()
         };
         assert!(matches!(
-        verifier.verify_sd_kbt(&sd_kbt, params, Some(&holder_verifying_key), &cks),
+        verifier.verify_sd_kbt(&sd_kbt, &params, Some(&holder_verifying_key), &cks),
             Err(SdCwtVerifierError::SubMismatch { expected, actual })
             if expected == "sub-b" && actual == "sub-a"
         ));
@@ -602,14 +651,14 @@ mod tests {
             expected_issuer: Some("iss-a"),
             ..Default::default()
         };
-        verifier.verify_sd_kbt(&sd_kbt, params, Some(&holder_verifying_key), &cks).unwrap();
+        verifier.verify_sd_kbt(&sd_kbt, &params, Some(&holder_verifying_key), &cks).unwrap();
         // fail when mismatch
         let params = VerifierParams {
             expected_issuer: Some("iss-b"),
             ..Default::default()
         };
         assert!(matches!(
-        verifier.verify_sd_kbt(&sd_kbt, params, Some(&holder_verifying_key), &cks),
+        verifier.verify_sd_kbt(&sd_kbt, &params, Some(&holder_verifying_key), &cks),
             Err(SdCwtVerifierError::IssuerMismatch { expected, actual })
             if expected == "iss-b" && actual == "iss-a"
         ));
@@ -620,14 +669,14 @@ mod tests {
             expected_audience: Some("aud-a"),
             ..Default::default()
         };
-        verifier.verify_sd_kbt(&sd_kbt, params, Some(&holder_verifying_key), &cks).unwrap();
+        verifier.verify_sd_kbt(&sd_kbt, &params, Some(&holder_verifying_key), &cks).unwrap();
         // fail when mismatch
         let params = VerifierParams {
             expected_audience: Some("aud-b"),
             ..Default::default()
         };
         assert!(matches!(
-        verifier.verify_sd_kbt(&sd_kbt, params, Some(&holder_verifying_key), &cks),
+        verifier.verify_sd_kbt(&sd_kbt, &params, Some(&holder_verifying_key), &cks),
             Err(SdCwtVerifierError::AudienceMismatch { expected, actual })
             if expected == "aud-b" && actual == "aud-a"
         ));
@@ -638,14 +687,14 @@ mod tests {
             expected_kbt_audience: Some("kbt-aud-a"),
             ..Default::default()
         };
-        verifier.verify_sd_kbt(&sd_kbt, params, Some(&holder_verifying_key), &cks).unwrap();
+        verifier.verify_sd_kbt(&sd_kbt, &params, Some(&holder_verifying_key), &cks).unwrap();
         // fail when mismatch
         let params = VerifierParams {
             expected_kbt_audience: Some("kbt-aud-b"),
             ..Default::default()
         };
         assert!(matches!(
-        verifier.verify_sd_kbt(&sd_kbt, params, Some(&holder_verifying_key), &cks),
+        verifier.verify_sd_kbt(&sd_kbt, &params, Some(&holder_verifying_key), &cks),
             Err(SdCwtVerifierError::KbtAudienceMismatch { expected, actual })
             if expected == "kbt-aud-b" && actual == "kbt-aud-a"
         ));
@@ -656,14 +705,14 @@ mod tests {
             expected_cnonce: Some(b"kbt-cnonce-a"),
             ..Default::default()
         };
-        verifier.verify_sd_kbt(&sd_kbt, params, Some(&holder_verifying_key), &cks).unwrap();
+        verifier.verify_sd_kbt(&sd_kbt, &params, Some(&holder_verifying_key), &cks).unwrap();
         // fail when mismatch
         let params = VerifierParams {
             expected_cnonce: Some(b"kbt-cnonce-b"),
             ..Default::default()
         };
         assert!(matches!(
-        verifier.verify_sd_kbt(&sd_kbt, params, Some(&holder_verifying_key), &cks),
+        verifier.verify_sd_kbt(&sd_kbt, &params, Some(&holder_verifying_key), &cks),
             Err(SdCwtVerifierError::CnonceMismatch { expected, actual })
             if expected == b"kbt-cnonce-b" && actual == b"kbt-cnonce-a"
         ));
@@ -863,7 +912,7 @@ mod tests {
 
         let verifier = HybridVerifier::<CustomTokenClaims, NoClaims>::default();
         let err = verifier
-            .verify_sd_kbt(&sd_kbt, Default::default(), Some(&holder_signing_key.verifying_key()), &cks)
+            .verify_sd_kbt(&sd_kbt, &Default::default(), Some(&holder_signing_key.verifying_key()), &cks)
             .unwrap_err();
         std::assert_matches!(err, SdCwtVerifierError::OrphanDisclosure);
     }
@@ -874,6 +923,12 @@ mod tests {
         let payload = cbor!({sd!("dup") => "a", sd!("dup") => "b"}).unwrap();
 
         let holder_signing_key = ed25519_dalek::SigningKey::generate(&mut rand::thread_rng());
+        let issuer_params = default_issuer_params(Some(payload), &holder_signing_key);
+        let err = verify(issuer_params, default_holder_params::<NoClaims>(), &holder_signing_key).unwrap_err();
+        std::assert_matches!(err, SdCwtVerifierError::DuplicateMapKeys);
+
+        // also when a disclosed claim collides with a non-redacted one
+        let payload = cbor!({"dup" => "a", sd!("dup") => "b"}).unwrap();
         let issuer_params = default_issuer_params(Some(payload), &holder_signing_key);
         let err = verify(issuer_params, default_holder_params::<NoClaims>(), &holder_signing_key).unwrap_err();
         std::assert_matches!(err, SdCwtVerifierError::DuplicateMapKeys);
@@ -899,7 +954,7 @@ mod tests {
                 expected_cnonce: Some(b"bbb"),
                 ..Default::default()
             };
-            let err = verifier.verify_sd_kbt(&sd_kbt, params, Some(&holder_signing_key.verifying_key()), &cks).unwrap_err();
+            let err = verifier.verify_sd_kbt(&sd_kbt, &params, Some(&holder_signing_key.verifying_key()), &cks).unwrap_err();
             std::assert_matches!(err, SdCwtVerifierError::CnonceMismatch { actual, expected } if expected == b"bbb" && actual == b"aaa");
         }
 
@@ -920,7 +975,7 @@ mod tests {
                 expected_cnonce: Some(b"cnonce"),
                 ..Default::default()
             };
-            let err = verifier.verify_sd_kbt(&sd_kbt, params, Some(&holder_signing_key.verifying_key()), &cks).unwrap_err();
+            let err = verifier.verify_sd_kbt(&sd_kbt, &params, Some(&holder_signing_key.verifying_key()), &cks).unwrap_err();
             std::assert_matches!(err, SdCwtVerifierError::CnonceMismatch { actual, expected } if expected == b"cnonce" && actual.is_empty());
         }
 
@@ -938,7 +993,7 @@ mod tests {
                 expected_subject: Some("bbb"),
                 ..Default::default()
             };
-            let err = verifier.verify_sd_kbt(&sd_kbt, params, Some(&holder_signing_key.verifying_key()), &cks).unwrap_err();
+            let err = verifier.verify_sd_kbt(&sd_kbt, &params, Some(&holder_signing_key.verifying_key()), &cks).unwrap_err();
             std::assert_matches!(err, SdCwtVerifierError::SubMismatch { actual, expected } if &expected == "bbb" && &actual == "aaa");
         }
 
@@ -956,7 +1011,7 @@ mod tests {
                 expected_subject: Some("bbb"),
                 ..Default::default()
             };
-            let err = verifier.verify_sd_kbt(&sd_kbt, params, Some(&holder_signing_key.verifying_key()), &cks).unwrap_err();
+            let err = verifier.verify_sd_kbt(&sd_kbt, &params, Some(&holder_signing_key.verifying_key()), &cks).unwrap_err();
             std::assert_matches!(err, SdCwtVerifierError::SubMismatch { actual, expected } if &expected == "bbb" && actual.is_empty());
         }
 
@@ -974,7 +1029,7 @@ mod tests {
                 expected_audience: Some("bbb"),
                 ..Default::default()
             };
-            let err = verifier.verify_sd_kbt(&sd_kbt, params, Some(&holder_signing_key.verifying_key()), &cks).unwrap_err();
+            let err = verifier.verify_sd_kbt(&sd_kbt, &params, Some(&holder_signing_key.verifying_key()), &cks).unwrap_err();
             std::assert_matches!(err, SdCwtVerifierError::AudienceMismatch { actual, expected } if &expected == "bbb" && &actual == "aaa");
         }
 
@@ -992,7 +1047,7 @@ mod tests {
                 expected_audience: Some("bbb"),
                 ..Default::default()
             };
-            let err = verifier.verify_sd_kbt(&sd_kbt, params, Some(&holder_signing_key.verifying_key()), &cks).unwrap_err();
+            let err = verifier.verify_sd_kbt(&sd_kbt, &params, Some(&holder_signing_key.verifying_key()), &cks).unwrap_err();
             std::assert_matches!(err, SdCwtVerifierError::AudienceMismatch { actual, expected } if &expected == "bbb" && actual.is_empty());
         }
 
@@ -1012,7 +1067,7 @@ mod tests {
                 expected_kbt_audience: Some("bbb"),
                 ..Default::default()
             };
-            let err = verifier.verify_sd_kbt(&sd_kbt, params, Some(&holder_signing_key.verifying_key()), &cks).unwrap_err();
+            let err = verifier.verify_sd_kbt(&sd_kbt, &params, Some(&holder_signing_key.verifying_key()), &cks).unwrap_err();
             std::assert_matches!(err, SdCwtVerifierError::KbtAudienceMismatch { actual, expected } if &expected == "bbb" && &actual == "aaa");
         }
 
@@ -1030,7 +1085,7 @@ mod tests {
                 expected_issuer: Some("bbb"),
                 ..Default::default()
             };
-            let err = verifier.verify_sd_kbt(&sd_kbt, params, Some(&holder_signing_key.verifying_key()), &cks).unwrap_err();
+            let err = verifier.verify_sd_kbt(&sd_kbt, &params, Some(&holder_signing_key.verifying_key()), &cks).unwrap_err();
             std::assert_matches!(err, SdCwtVerifierError::IssuerMismatch { actual, expected } if &expected == "bbb" && &actual == "aaa");
         }
     }
@@ -1054,7 +1109,7 @@ mod tests {
                 artificial_time: Some(later),
                 ..Default::default()
             };
-            let err = verifier.verify_sd_kbt(&sd_kbt, params, Some(&holder_signing_key.verifying_key()), &cks).unwrap_err();
+            let err = verifier.verify_sd_kbt(&sd_kbt, &params, Some(&holder_signing_key.verifying_key()), &cks).unwrap_err();
             std::assert_matches!(err, SdCwtVerifierError::TimeError(CwtTimeError::Expired));
         }
 
@@ -1073,7 +1128,7 @@ mod tests {
                 artificial_time: Some(past),
                 ..Default::default()
             };
-            let err = verifier.verify_sd_kbt(&sd_kbt, params, Some(&holder_signing_key.verifying_key()), &cks).unwrap_err();
+            let err = verifier.verify_sd_kbt(&sd_kbt, &params, Some(&holder_signing_key.verifying_key()), &cks).unwrap_err();
             std::assert_matches!(err, SdCwtVerifierError::TimeError(CwtTimeError::ClockDrift));
         }
 
@@ -1092,7 +1147,7 @@ mod tests {
                 artificial_time: Some(past),
                 ..Default::default()
             };
-            let err = verifier.verify_sd_kbt(&sd_kbt, params, Some(&holder_signing_key.verifying_key()), &cks).unwrap_err();
+            let err = verifier.verify_sd_kbt(&sd_kbt, &params, Some(&holder_signing_key.verifying_key()), &cks).unwrap_err();
             std::assert_matches!(err, SdCwtVerifierError::TimeError(CwtTimeError::NotValidYet));
         }
 
@@ -1113,7 +1168,7 @@ mod tests {
                 artificial_time: Some(later),
                 ..Default::default()
             };
-            let err = verifier.verify_sd_kbt(&sd_kbt, params, Some(&holder_signing_key.verifying_key()), &cks).unwrap_err();
+            let err = verifier.verify_sd_kbt(&sd_kbt, &params, Some(&holder_signing_key.verifying_key()), &cks).unwrap_err();
             std::assert_matches!(err, SdCwtVerifierError::TimeError(CwtTimeError::Expired));
         }
 
@@ -1135,7 +1190,7 @@ mod tests {
                 artificial_time: Some(past),
                 ..Default::default()
             };
-            let err = verifier.verify_sd_kbt(&sd_kbt, params, Some(&holder_signing_key.verifying_key()), &cks).unwrap_err();
+            let err = verifier.verify_sd_kbt(&sd_kbt, &params, Some(&holder_signing_key.verifying_key()), &cks).unwrap_err();
             std::assert_matches!(err, SdCwtVerifierError::TimeError(CwtTimeError::NotValidYet));
         }
     }
@@ -1147,7 +1202,7 @@ mod tests {
     ) -> Result<KbtCwtVerified<T, U>, SdCwtVerifierError<Infallible>> {
         let (cks, sd_kbt, ..) = generate_sd_kbt(issuer_params.clone(), holder_params, holder_signing_key);
         let verifier = HybridVerifier::<T, U>::default();
-        verifier.verify_sd_kbt(&sd_kbt, Default::default(), Some(&holder_signing_key.verifying_key()), &cks)
+        verifier.verify_sd_kbt(&sd_kbt, &Default::default(), Some(&holder_signing_key.verifying_key()), &cks)
     }
 
     #[allow(clippy::type_complexity)]
@@ -1388,7 +1443,7 @@ mod backward {
             },
             ..Default::default()
         };
-        verifier.verify_sd_kbt(sd_kbt, params, Some(&holder_signing_key.verifying_key()), &cks)?;
+        verifier.verify_sd_kbt(sd_kbt, &params, Some(&holder_signing_key.verifying_key()), &cks)?;
 
         Ok(())
     }

@@ -21,7 +21,7 @@ fn issue_bench(c: &mut Criterion) {
                 BatchSize::LargeInput,
             )
         });
-        group.bench_with_input(BenchmarkId::new("SHA-384", i), &i, |b, i| {
+        /*group.bench_with_input(BenchmarkId::new("SHA-384", i), &i, |b, i| {
             b.iter_batched(
                 || issuer::<sha2::Sha384>(i),
                 |(mut rng, issuer, params, ..)| black_box(issuer.issue_cwt(&mut rng, params).unwrap()),
@@ -34,7 +34,7 @@ fn issue_bench(c: &mut Criterion) {
                 |(mut rng, issuer, params, ..)| black_box(issuer.issue_cwt(&mut rng, params).unwrap()),
                 BatchSize::LargeInput,
             )
-        });
+        });*/
         /*group.bench_with_input(BenchmarkId::new("Blake3", i), &i, |b, i| {
             b.iter_batched(
                 || issuer::<blake3::Hasher>(i),
@@ -56,7 +56,7 @@ fn holder_bench(c: &mut Criterion) {
                 BatchSize::LargeInput,
             )
         });
-        group.bench_with_input(BenchmarkId::new("SHA-384", i), &i, |b, i| {
+        /*group.bench_with_input(BenchmarkId::new("SHA-384", i), &i, |b, i| {
             b.iter_batched(
                 || holder::<sha2::Sha384>(i),
                 |(holder, params, sd_cwt, ..)| black_box(holder.new_presentation(sd_cwt, params).unwrap()),
@@ -69,7 +69,7 @@ fn holder_bench(c: &mut Criterion) {
                 |(holder, params, sd_cwt, ..)| black_box(holder.new_presentation(sd_cwt, params).unwrap()),
                 BatchSize::LargeInput,
             )
-        });
+        });*/
         /*group.bench_with_input(BenchmarkId::new("Blake3", i), &i, |b, i| {
             b.iter_batched(
                 || holder::<blake3::Hasher>(i),
@@ -87,28 +87,28 @@ fn verifier_bench(c: &mut Criterion) {
         group.bench_with_input(BenchmarkId::new("SHA-256", i), &i, |b, i| {
             b.iter_batched(
                 || verifier::<sha2::Sha256>(i),
-                |(verifier, sd_kbt, params, cks, ..)| black_box(verifier.verify_sd_kbt(&sd_kbt, params, None, &cks).unwrap()),
+                |(verifier, sd_kbt, params, cks, ..)| black_box(verifier.verify_sd_kbt(&sd_kbt, &params, None, &cks).unwrap()),
                 BatchSize::LargeInput,
             )
         });
         /*group.bench_with_input(BenchmarkId::new("SHA-384", i), &i, |b, i| {
             b.iter_batched(
                 || verifier::<sha2::Sha384>(i),
-                |(verifier, sd_kbt, params, cks, ..)| black_box(verifier.verify_sd_kbt(&sd_kbt, params, None, &cks).unwrap()),
+                |(verifier, sd_kbt, params, cks, ..)| black_box(verifier.verify_sd_kbt(&sd_kbt, &params, None, &cks).unwrap()),
                 BatchSize::LargeInput,
             )
         });*/
         /*group.bench_with_input(BenchmarkId::new("SHA-512", i), &i, |b, i| {
             b.iter_batched(
                 || verifier::<sha2::Sha512>(i),
-                |(verifier, sd_kbt, params, cks, ..)| black_box(verifier.verify_sd_kbt(&sd_kbt, params, None, &cks).unwrap()),
+                |(verifier, sd_kbt, params, cks, ..)| black_box(verifier.verify_sd_kbt(&sd_kbt, &params, None, &cks).unwrap()),
                 BatchSize::LargeInput,
             )
         });*/
         /*group.bench_with_input(BenchmarkId::new("Blake3", i), &i, |b, i| {
             b.iter_batched(
                 || verifier::<blake3::Hasher>(i),
-                |(verifier, sd_kbt, params, cks, ..)| black_box(verifier.verify_sd_kbt(&sd_kbt, params, None, &cks).unwrap()),
+                |(verifier, sd_kbt, params, cks, ..)| black_box(verifier.verify_sd_kbt(&sd_kbt, &params, None, &cks).unwrap()),
                 BatchSize::LargeInput,
             )
         });*/
@@ -116,34 +116,73 @@ fn verifier_bench(c: &mut Criterion) {
     group.finish();
 }
 
-fn shallow_verifier_bench(c: &mut Criterion) {
-    let mut group = c.benchmark_group("Shallow Verifier");
+fn verifier_batch_bench(c: &mut Criterion) {
+    let mut group = c.benchmark_group("Verifier Batch");
     for i in (0usize..1000).step_by(300) {
         group.bench_with_input(BenchmarkId::new("SHA-256", i), &i, |b, i| {
             b.iter_batched(
-                || shallow_verifier::<sha2::Sha256>(i),
-                |(verifier, sd_kbt, params, cks, ..)| black_box(verifier.shallow_verify_sd_kbt(&sd_kbt, params, None, &cks).unwrap()),
+                || verifier_batch::<sha2::Sha256>(i),
+                |(verifier, sd_kbts, params, cks, ..)| {
+                    let batch = sd_kbts.iter().map(|sd_kbt| (sd_kbt.as_slice(), &params, None)).collect::<Vec<_>>();
+                    black_box(verifier.verify_sd_kbt_batch(&batch, &cks).into_iter().collect::<Result<Vec<_>, _>>().unwrap())
+                },
                 BatchSize::LargeInput,
             )
         });
-        group.bench_with_input(BenchmarkId::new("SHA-384", i), &i, |b, i| {
+        /*group.bench_with_input(BenchmarkId::new("SHA-384", i), &i, |b, i| {
+            b.iter_batched(
+                || verifier::<sha2::Sha384>(i),
+                |(verifier, sd_kbt, params, cks, ..)| black_box(verifier.verify_sd_kbt(&sd_kbt, &params, None, &cks).unwrap()),
+                BatchSize::LargeInput,
+            )
+        });*/
+        /*group.bench_with_input(BenchmarkId::new("SHA-512", i), &i, |b, i| {
+            b.iter_batched(
+                || verifier::<sha2::Sha512>(i),
+                |(verifier, sd_kbt, params, cks, ..)| black_box(verifier.verify_sd_kbt(&sd_kbt, &params, None, &cks).unwrap()),
+                BatchSize::LargeInput,
+            )
+        });*/
+        /*group.bench_with_input(BenchmarkId::new("Blake3", i), &i, |b, i| {
+            b.iter_batched(
+                || verifier::<blake3::Hasher>(i),
+                |(verifier, sd_kbt, params, cks, ..)| black_box(verifier.verify_sd_kbt(&sd_kbt, &params, None, &cks).unwrap()),
+                BatchSize::LargeInput,
+            )
+        });*/
+    }
+    group.finish();
+}
+
+#[allow(dead_code)]
+fn shallow_verifier_bench(c: &mut Criterion) {
+    let mut group = c.benchmark_group("Shallow Verifier");
+    for i in (1usize..1000).step_by(300) {
+        group.bench_with_input(BenchmarkId::new("SHA-256", i), &i, |b, i| {
+            b.iter_batched(
+                || shallow_verifier::<sha2::Sha256>(i),
+                |(verifier, sd_kbt, params, cks, ..)| black_box(verifier.shallow_verify_sd_kbt(&sd_kbt, &params, None, &cks).unwrap()),
+                BatchSize::LargeInput,
+            )
+        });
+        /*group.bench_with_input(BenchmarkId::new("SHA-384", i), &i, |b, i| {
             b.iter_batched(
                 || shallow_verifier::<sha2::Sha384>(i),
-                |(verifier, sd_kbt, params, cks, ..)| black_box(verifier.shallow_verify_sd_kbt(&sd_kbt, params, None, &cks).unwrap()),
+                |(verifier, sd_kbt, params, cks, ..)| black_box(verifier.shallow_verify_sd_kbt(&sd_kbt, &params, None, &cks).unwrap()),
                 BatchSize::LargeInput,
             )
         });
         group.bench_with_input(BenchmarkId::new("SHA-512", i), &i, |b, i| {
             b.iter_batched(
                 || shallow_verifier::<sha2::Sha512>(i),
-                |(verifier, sd_kbt, params, cks, ..)| black_box(verifier.shallow_verify_sd_kbt(&sd_kbt, params, None, &cks).unwrap()),
+                |(verifier, sd_kbt, params, cks, ..)| black_box(verifier.shallow_verify_sd_kbt(&sd_kbt, &params, None, &cks).unwrap()),
                 BatchSize::LargeInput,
             )
-        });
+        });*/
         /*group.bench_with_input(BenchmarkId::new("Blake3", i), &i, |b, i| {
             b.iter_batched(
                 || shallow_verifier::<blake3::Hasher>(i),
-                |(verifier, sd_kbt, params, cks, ..)| black_box(verifier.shallow_verify_sd_kbt(&sd_kbt, params, None, &cks).unwrap()),
+                |(verifier, sd_kbt, params, cks, ..)| black_box(verifier.shallow_verify_sd_kbt(&sd_kbt, &params, None, &cks).unwrap()),
                 BatchSize::LargeInput,
             )
         });*/
@@ -152,7 +191,7 @@ fn shallow_verifier_bench(c: &mut Criterion) {
 }
 
 fn issuer<H: digest::Digest + Clone>(
-    i: &usize,
+    nb_claims: &usize,
 ) -> (
     rand::rngs::OsRng,
     Ed25519Issuer<VarSizePayload, H>,
@@ -167,7 +206,7 @@ fn issuer<H: digest::Digest + Clone>(
     let issuer_params = IssuerParams {
         protected_claims: None,
         unprotected_claims: None,
-        payload: Some(VarSizePayload::new(*i)),
+        payload: Some(VarSizePayload::new(*nb_claims)),
         issuer: "",
         subject: None,
         audience: None,
@@ -188,8 +227,8 @@ fn issuer<H: digest::Digest + Clone>(
     (rng, issuer, issuer_params, cks, holder)
 }
 
-fn holder<H: digest::Digest + Clone>(i: &usize) -> (Ed25519Holder<VarSizePayload, H>, HolderParams<'_>, SdCwtVerified<VarSizePayload, H>, CoseKeySet) {
-    let (mut rng, issuer, issuer_params, cks, holder) = issuer::<H>(i);
+fn holder<H: digest::Digest + Clone>(nb_claims: &usize) -> (Ed25519Holder<VarSizePayload, H>, HolderParams<'_>, SdCwtVerified<VarSizePayload, H>, CoseKeySet) {
+    let (mut rng, issuer, issuer_params, cks, holder) = issuer::<H>(nb_claims);
     let sd_cwt = issuer.issue_cwt(&mut rng, issuer_params).unwrap();
 
     let sd_cwt = holder.verify_sd_cwt(&sd_cwt.to_cbor_bytes().unwrap(), Default::default(), &cks).unwrap();
@@ -209,8 +248,8 @@ fn holder<H: digest::Digest + Clone>(i: &usize) -> (Ed25519Holder<VarSizePayload
     (holder, holder_params, sd_cwt, cks)
 }
 
-fn verifier<H: digest::Digest + Clone>(i: &usize) -> (Ed25519Verifier<VarSizePayload>, Vec<u8>, VerifierParams<'_>, CoseKeySet) {
-    let (holder, holder_params, sd_cwt, cks) = holder::<H>(i);
+fn verifier<H: digest::Digest + Clone>(nb_claims: &usize) -> (Ed25519Verifier<VarSizePayload>, Vec<u8>, VerifierParams<'_>, CoseKeySet) {
+    let (holder, holder_params, sd_cwt, cks) = holder::<H>(nb_claims);
 
     let sd_kbt = holder.new_presentation_raw(sd_cwt, holder_params).unwrap();
 
@@ -230,6 +269,47 @@ fn verifier<H: digest::Digest + Clone>(i: &usize) -> (Ed25519Verifier<VarSizePay
     };
 
     (verifier, sd_kbt, params, cks)
+}
+
+fn verifier_batch<H: digest::Digest + Clone>(nb_sd_kbt: &usize) -> (Ed25519Verifier<VarSizePayload>, Vec<Vec<u8>>, VerifierParams<'_>, CoseKeySet) {
+    let (mut rng, issuer, issuer_params, cks, holder) = issuer::<H>(&1000);
+
+    let mut sd_kbts = Vec::with_capacity(*nb_sd_kbt);
+    for _ in 0..*nb_sd_kbt {
+        let sd_cwt = issuer.issue_cwt(&mut rng, issuer_params.clone()).unwrap();
+        let sd_cwt = holder.verify_sd_cwt(&sd_cwt.to_cbor_bytes().unwrap(), Default::default(), &cks).unwrap();
+        let holder_params = HolderParams {
+            presentation: Default::default(),
+            audience: "",
+            cnonce: None,
+            expiry: None,
+            with_not_before: false,
+            artificial_time: None,
+            time_verification: Default::default(),
+            leeway: Default::default(),
+            extra_kbt_protected: None,
+            extra_kbt_unprotected: None,
+            extra_kbt_payload: None,
+        };
+        let sd_kbt = holder.new_presentation_raw(sd_cwt, holder_params).unwrap();
+        sd_kbts.push(sd_kbt);
+    }
+
+    let verifier = Ed25519Verifier::<VarSizePayload>::new();
+    let params = VerifierParams {
+        expected_subject: None,
+        expected_issuer: None,
+        expected_audience: None,
+        expected_kbt_audience: None,
+        expected_cnonce: None,
+        sd_cwt_leeway: Default::default(),
+        sd_kbt_leeway: Default::default(),
+        sd_cwt_time_verification: Default::default(),
+        sd_kbt_time_verification: Default::default(),
+        artificial_time: None,
+    };
+
+    (verifier, sd_kbts, params, cks)
 }
 
 fn shallow_verifier<H: digest::Digest + Clone>(i: &usize) -> (Ed25519Verifier<VarSizePayload>, Vec<u8>, ShallowVerifierParams, CoseKeySet) {
@@ -275,5 +355,5 @@ fn rand_str(size: usize) -> String {
         .collect::<String>()
 }
 
-criterion_group!(benches, issue_bench, holder_bench, verifier_bench, shallow_verifier_bench);
+criterion_group!(benches, issue_bench, holder_bench, verifier_bench, verifier_batch_bench /*, shallow_verifier_bench*/);
 criterion_main!(benches);
