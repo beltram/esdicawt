@@ -56,6 +56,8 @@ pub enum SdCwtVerifierError<CustomError: Send + Sync> {
     MalformedSdCwt(&'static str),
     #[error(transparent)]
     CustomError(CustomError),
+    #[error("{0}")]
+    ImplementationError(&'static str),
 }
 
 #[cfg(feature = "status")]

@@ -65,8 +65,12 @@ pub trait Verifier {
         >,
         SdCwtVerifierError<Self::Error>,
     > {
-        let (kbt, _) = __shallow_verify_sd_kbt(raw_sd_kbt, params, holder_verifier, cks)?;
-        Ok(kbt)
+        __shallow_batch_verify_sd_kbt(&[(raw_sd_kbt, params, holder_verifier)], cks)
+            .pop()
+            .unwrap_or(Err(SdCwtVerifierError::ImplementationError(
+                "'__shallow_batch_verify_sd_kbt' should always return as much elements as given",
+            )))
+            .map(|(kbt, _)| kbt)
     }
 
     #[allow(clippy::type_complexity)]
@@ -138,7 +142,11 @@ fn __verify_sd_kbt<
     KbtCwtVerified<IssuerPayloadClaims, KbtPayloadClaims, IssuerProtectedClaims, IssuerUnprotectedClaims, KbtProtectedClaims, KbtUnprotectedClaims>,
     SdCwtVerifierError<Error>,
 > {
-    let (kbt, mut generic_sd_cwt_payload) = __shallow_verify_sd_kbt(raw_sd_kbt, &params.shallow(), holder_verifier, cks)?;
+    let (kbt, mut generic_sd_cwt_payload) = __shallow_batch_verify_sd_kbt(&[(raw_sd_kbt, &params.shallow(), holder_verifier)], cks)
+        .pop()
+        .unwrap_or(Err(SdCwtVerifierError::ImplementationError(
+            "'__shallow_batch_verify_sd_kbt' should always return as much elements as given",
+        )))?;
     let generic_sd_cwt_payload_map = generic_sd_cwt_payload.as_map().ok_or(SdCwtVerifierError::InvalidSdCwt)?;
 
     let kbt_protected = kbt.protected.to_value()?;
@@ -276,7 +284,7 @@ fn __verify_sd_kbt<
 }
 
 #[allow(clippy::type_complexity)]
-fn __shallow_verify_sd_kbt<
+fn __shallow_batch_verify_sd_kbt<
     Error: core::error::Error + Send + Sync,
     HolderSignature: signature::SignatureEncoding,
     HolderVerifier: signature::Verifier<HolderSignature> + AsRef<[u8]> + PartialEq + for<'a> TryFrom<&'a KeyConfirmation, Error = CoseKeyConfirmationError>,
@@ -287,139 +295,163 @@ fn __shallow_verify_sd_kbt<
     KbtProtectedClaims: CustomClaims,
     KbtUnprotectedClaims: CustomClaims,
 >(
-    raw_sd_kbt: &[u8],
-    params: &ShallowVerifierParams,
-    // not mandatory in case the verifier does not have access to it
-    holder_verifier: Option<&HolderVerifier>,
+    raw_sd_kbts: &[(&[u8], &ShallowVerifierParams, Option<&HolderVerifier>)],
     cks: &cose_key::keyset::CoseKeySet,
-) -> Result<
-    (
-        KbtCwt<IssuerPayloadClaims, AnyDigest, KbtPayloadClaims, IssuerProtectedClaims, IssuerUnprotectedClaims, KbtProtectedClaims, KbtUnprotectedClaims>,
-        Value,
-    ),
-    SdCwtVerifierError<Error>,
+) -> Vec<
+    Result<
+        (
+            KbtCwt<IssuerPayloadClaims, AnyDigest, KbtPayloadClaims, IssuerProtectedClaims, IssuerUnprotectedClaims, KbtProtectedClaims, KbtUnprotectedClaims>,
+            Value,
+        ),
+        SdCwtVerifierError<Error>,
+    >,
 > {
-    let kbt =
-        KbtCwt::<IssuerPayloadClaims, AnyDigest, KbtPayloadClaims, IssuerProtectedClaims, IssuerUnprotectedClaims, KbtProtectedClaims, KbtUnprotectedClaims>::from_cbor_bytes(
-            raw_sd_kbt,
-        )?;
-
-    let generic_sd_cwt = kbt.generic_sd_cwt()?;
-    let kbt_protected = kbt.protected.to_value()?;
-
-    let generic_sd_cwt_payload = generic_sd_cwt.payload.upcast_value()?;
-    let generic_sd_cwt_payload_map = generic_sd_cwt_payload.as_map().ok_or(SdCwtVerifierError::InvalidSdCwt)?;
-    let sd_cwt_bytes = kbt_protected.kcwt.to_cbor_bytes()?;
-
-    let mut key_confirmation = None;
-    let (mut iat, mut exp, mut nbf) = (None, None, None);
-
-    for (k, value) in generic_sd_cwt_payload_map {
-        match (k.as_integer(), value) {
-            (Some(i), v) if i == CwtStdLabel::KeyConfirmation => {
-                key_confirmation.replace(v);
-            }
-            (Some(i), Value::Integer(v)) if i == CwtStdLabel::IssuedAt => {
-                iat.replace(i128::from(*v) as i64);
-            }
-            (Some(i), Value::Integer(v)) if i == CwtStdLabel::ExpiresAt => {
-                exp.replace(i128::from(*v) as i64);
-            }
-            (Some(i), Value::Integer(v)) if i == CwtStdLabel::NotBefore => {
-                nbf.replace(i128::from(*v) as i64);
-            }
-            _ => {}
-        }
-    }
-
-    // verify time claims of the SD-CWT
-    let validation_time = params.artificial_time.map_or_else(|| elapsed_since_epoch().as_secs(), |t| t as u64);
-    verify_time_claims(validation_time, params.sd_cwt_leeway, iat, exp, nbf, params.sd_cwt_time_verification)?;
-
-    let key_confirmation = &key_confirmation
-        .ok_or(SdCwtVerifierError::<Error>::MalformedSdCwt("Missing KeyConfirmation"))?
-        .deserialized::<KeyConfirmation>()?;
-
-    let kbt_cose_sign1 = CoseSign1::from_tagged_slice(raw_sd_kbt)?;
-    let sd_cwt_cose_sign1 = CoseSign1::from_tagged_slice(&sd_cwt_bytes)?;
-
-    // First the Verifier must validate the SD-KBT as described in Section 7.2 of [RFC8392].
-    // verifying signature
-    let holder_verifier_key: HolderVerifier = key_confirmation.try_into()?;
-
-    // verify confirmation key advertised in the KBT matches the expected one if supplied
-    if let Some(hvk) = holder_verifier {
-        let key_confirmation: HolderVerifier = key_confirmation.try_into()?;
-        if key_confirmation != *hvk {
-            return Err(SdCwtVerifierError::UnexpectedKeyConfirmation);
-        }
-    }
-
     const ED25519_DALEK_SIGNATURE_LENGTH: usize = 64;
 
-    if cfg!(feature = "ed25519")
-        && let KeyConfirmation::CoseKey(key) = key_confirmation
-        && key.alg() == Some(coset::iana::Algorithm::EdDSA)
-        && key.crv() == Some(coset::iana::EllipticCurve::Ed25519)
-        && sd_cwt_cose_sign1.protected.header.alg == Some(coset::Algorithm::Assigned(coset::iana::Algorithm::EdDSA))
-        // only way to differentiate ed25519 from ed448 since we do not have crv
-        && sd_cwt_cose_sign1.signature.len() == ED25519_DALEK_SIGNATURE_LENGTH
-    {
-        #[cfg(feature = "ed25519")]
-        {
-            // just for the feature scoped imports
-            let kbt_tbs = &kbt_cose_sign1.tbs_data(&[]);
-            let kbt_signature = ed25519_dalek::Signature::from_slice(&kbt_cose_sign1.signature)?;
+    let mut results = Vec::with_capacity(raw_sd_kbts.len());
 
-            let sd_cwt_tbs = &sd_cwt_cose_sign1.tbs_data(&[]);
-            let sd_cwt_signature = ed25519_dalek::Signature::from_slice(&sd_cwt_cose_sign1.signature)?;
+    #[cfg(feature = "ed25519")]
+    let ed25519_tbs_cell = core::iter::repeat_with(core::cell::OnceCell::new).take(raw_sd_kbts.len()).collect::<Vec<_>>();
 
-            let holder_verifying_key = holder_verifier_key.as_ref().try_into().map_err(crate::signature_verifier::SignatureVerifierError::from)?;
-            let holder_verifier_key = ed25519_dalek::VerifyingKey::from_bytes(holder_verifying_key).map_err(crate::signature_verifier::SignatureVerifierError::from)?;
+    #[cfg(feature = "ed25519")]
+    let (mut ed25519_tbs, mut ed25519_signatures, mut ed25519_verifiers) = (
+        Vec::<&[u8]>::with_capacity(raw_sd_kbts.len() * 2),
+        Vec::with_capacity(raw_sd_kbts.len() * 2),
+        Vec::with_capacity(raw_sd_kbts.len() * 2),
+    ); // we have SD-CWT and SD-KBT signatures to verify per KBT
 
-            let mut verified = false;
-            let mut first_err = None;
-            for key in cks.find_keys(&coset::iana::Algorithm::EdDSA) {
-                if key.crv() == Some(coset::iana::EllipticCurve::Ed25519) {
-                    let sd_cwt_verifier = ed25519_dalek::VerifyingKey::try_from(key).map_err(crate::signature_verifier::SignatureVerifierError::from)?;
-                    let verification = ed25519_dalek::verify_batch(&[kbt_tbs, sd_cwt_tbs], &[kbt_signature, sd_cwt_signature], &[holder_verifier_key, sd_cwt_verifier]);
-                    match verification {
-                        Ok(_) => {
-                            verified = true;
-                            break;
-                        }
-                        Err(e) => {
-                            if first_err.is_none() {
-                                first_err.replace(e);
-                            }
+    #[cfg(feature = "ed25519")]
+    let ed25519_tbs_cells = ed25519_tbs_cell.iter();
+    #[cfg(not(feature = "ed25519"))]
+    let ed25519_tbs_cells = core::iter::empty::<core::cell::OnceCell<(Vec<u8>, Vec<u8>)>>();
+
+    #[cfg_attr(not(feature = "ed25519"), allow(unused_variables))]
+    for (&(raw_sd_kbt, params, holder_verifier), ed25519_tbs_cell) in raw_sd_kbts.iter().zip(ed25519_tbs_cells) {
+        #[allow(unused_mut)]
+        let mut verify = || -> Result<
+            (
+                KbtCwt<IssuerPayloadClaims, AnyDigest, KbtPayloadClaims, IssuerProtectedClaims, IssuerUnprotectedClaims, KbtProtectedClaims, KbtUnprotectedClaims>,
+                Value,
+            ),
+            SdCwtVerifierError<Error>,
+        > {
+            let kbt =
+                KbtCwt::<IssuerPayloadClaims, AnyDigest, KbtPayloadClaims, IssuerProtectedClaims, IssuerUnprotectedClaims, KbtProtectedClaims, KbtUnprotectedClaims>::from_cbor_bytes(
+                    raw_sd_kbt,
+                )?;
+
+            let generic_sd_cwt = kbt.generic_sd_cwt()?;
+            let kbt_protected = kbt.protected.to_value()?;
+
+            let generic_sd_cwt_payload = generic_sd_cwt.payload.upcast_value()?;
+            let generic_sd_cwt_payload_map = generic_sd_cwt_payload.as_map().ok_or(SdCwtVerifierError::InvalidSdCwt)?;
+            let sd_cwt_bytes = kbt_protected.kcwt.to_cbor_bytes()?;
+
+            let mut key_confirmation = None;
+            let (mut iat, mut exp, mut nbf) = (None, None, None);
+
+            for (k, value) in generic_sd_cwt_payload_map {
+                match (k.as_integer(), value) {
+                    (Some(i), v) if i == CwtStdLabel::KeyConfirmation => {
+                        key_confirmation.replace(v);
+                    }
+                    (Some(i), Value::Integer(v)) if i == CwtStdLabel::IssuedAt => {
+                        iat.replace(i128::from(*v) as i64);
+                    }
+                    (Some(i), Value::Integer(v)) if i == CwtStdLabel::ExpiresAt => {
+                        exp.replace(i128::from(*v) as i64);
+                    }
+                    (Some(i), Value::Integer(v)) if i == CwtStdLabel::NotBefore => {
+                        nbf.replace(i128::from(*v) as i64);
+                    }
+                    _ => {}
+                }
+            }
+
+            // verify time claims of the SD-CWT
+            let validation_time = params.artificial_time.map_or_else(|| elapsed_since_epoch().as_secs(), |t| t as u64);
+            verify_time_claims(validation_time, params.sd_cwt_leeway, iat, exp, nbf, params.sd_cwt_time_verification)?;
+
+            let key_confirmation = &key_confirmation
+                .ok_or(SdCwtVerifierError::<Error>::MalformedSdCwt("Missing KeyConfirmation"))?
+                .deserialized::<KeyConfirmation>()?;
+
+            let kbt_cose_sign1 = CoseSign1::from_tagged_slice(raw_sd_kbt)?;
+            let sd_cwt_cose_sign1 = CoseSign1::from_tagged_slice(&sd_cwt_bytes)?;
+
+            // First the Verifier must validate the SD-KBT as described in Section 7.2 of [RFC8392].
+            // verifying signature
+            let holder_verifier_key: HolderVerifier = key_confirmation.try_into()?;
+
+            // verify confirmation key advertised in the KBT matches the expected one if supplied
+            if let Some(hvk) = holder_verifier {
+                let key_confirmation: HolderVerifier = key_confirmation.try_into()?;
+                if key_confirmation != *hvk {
+                    return Err(SdCwtVerifierError::UnexpectedKeyConfirmation);
+                }
+            }
+
+            if cfg!(feature = "ed25519")
+                && let KeyConfirmation::CoseKey(key) = key_confirmation
+                && key.alg() == Some(coset::iana::Algorithm::EdDSA)
+                && key.crv() == Some(coset::iana::EllipticCurve::Ed25519)
+                && sd_cwt_cose_sign1.protected.header.alg == Some(coset::Algorithm::Assigned(coset::iana::Algorithm::EdDSA))
+                // only way to differentiate ed25519 from ed448 since we do not have crv
+                && sd_cwt_cose_sign1.signature.len() == ED25519_DALEK_SIGNATURE_LENGTH
+            {
+                #[cfg(feature = "ed25519")]
+                {
+                    // just for the feature scoped imports
+                    let kbt_signature = ed25519_dalek::Signature::from_slice(&kbt_cose_sign1.signature)?;
+                    let sd_cwt_signature = ed25519_dalek::Signature::from_slice(&sd_cwt_cose_sign1.signature)?;
+
+                    let holder_verifying_key = holder_verifier_key.as_ref().try_into().map_err(crate::signature_verifier::SignatureVerifierError::from)?;
+                    let holder_verifier_key = ed25519_dalek::VerifyingKey::from_bytes(holder_verifying_key).map_err(crate::signature_verifier::SignatureVerifierError::from)?;
+
+                    let (kbt_tbs, sd_cwt_tbs) = ed25519_tbs_cell.get_or_init(|| (kbt_cose_sign1.tbs_data(&[]), sd_cwt_cose_sign1.tbs_data(&[])));
+
+                    for key in cks.find_keys(&coset::iana::Algorithm::EdDSA) {
+                        if key.crv() == Some(coset::iana::EllipticCurve::Ed25519) {
+                            let sd_cwt_verifier = ed25519_dalek::VerifyingKey::try_from(key).map_err(crate::signature_verifier::SignatureVerifierError::from)?;
+                            ed25519_tbs.push(kbt_tbs);
+                            ed25519_tbs.push(sd_cwt_tbs);
+                            ed25519_signatures.push(kbt_signature);
+                            ed25519_signatures.push(sd_cwt_signature);
+                            ed25519_verifiers.push(holder_verifier_key);
+                            ed25519_verifiers.push(sd_cwt_verifier);
                         }
                     }
                 }
+            } else {
+                kbt_cose_sign1.verify_signature(&[], |signature, raw_data| {
+                    let signature = HolderSignature::try_from(signature).map_err(|_| SdCwtVerifierError::SignatureEncodingError)?;
+                    holder_verifier_key.verify(raw_data, &signature).map_err(SdCwtVerifierError::from)
+                })?;
+                // After validation, the SD-CWT MUST be extracted from the kcwt header, and validated as described in Section 7.2 of [RFC8392].
+                // verify signature if a verifying key supplied
+                crate::signature_verifier::validate_cose_sign1_signature(&sd_cwt_cose_sign1, cks)?;
             }
-            if !verified {
-                return first_err.map_or_else(
-                    || Err(crate::signature_verifier::SignatureVerifierError::NoSigner.into()),
-                    |e| Err(SdCwtVerifierError::SignatureError(e)),
-                );
-            }
-        }
-    } else {
-        kbt_cose_sign1.verify_signature(&[], |signature, raw_data| {
-            let signature = HolderSignature::try_from(signature).map_err(|_| SdCwtVerifierError::SignatureEncodingError)?;
-            holder_verifier_key.verify(raw_data, &signature).map_err(SdCwtVerifierError::from)
-        })?;
-        // After validation, the SD-CWT MUST be extracted from the kcwt header, and validated as described in Section 7.2 of [RFC8392].
-        // verify signature if a verifying key supplied
-        crate::signature_verifier::validate_cose_sign1_signature(&sd_cwt_cose_sign1, cks)?;
+
+            let kbt_payload = kbt.payload.to_value()?;
+
+            // verify time claims of the SD-KBT
+            let (iat, exp, nbf) = (Some(kbt_payload.issued_at), kbt_payload.expiration, kbt_payload.not_before);
+            verify_time_claims(validation_time, params.sd_kbt_leeway, iat, exp, nbf, params.sd_kbt_time_verification)?;
+
+            Ok((kbt, generic_sd_cwt_payload))
+        };
+        results.push(verify());
     }
 
-    let kbt_payload = kbt.payload.to_value()?;
+    #[cfg(feature = "ed25519")]
+    if !ed25519_tbs.is_empty() && !ed25519_signatures.is_empty() && !ed25519_verifiers.is_empty() {
+        match ed25519_dalek::verify_batch(&ed25519_tbs[..], &ed25519_signatures[..], &ed25519_verifiers[..]) {
+            Ok(_) => {}
+            Err(e) => results.push(Err(SdCwtVerifierError::SignatureError(e))),
+        }
+    }
 
-    // verify time claims of the SD-KBT
-    let (iat, exp, nbf) = (Some(kbt_payload.issued_at), kbt_payload.expiration, kbt_payload.not_before);
-    verify_time_claims(validation_time, params.sd_kbt_leeway, iat, exp, nbf, params.sd_kbt_time_verification)?;
-
-    Ok((kbt, generic_sd_cwt_payload))
+    results
 }
 
 #[cfg(feature = "status")]
