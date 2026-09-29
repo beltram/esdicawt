@@ -2,10 +2,11 @@
 
 use enum_variants_strings::EnumVariantsStrings;
 use esdicawt::{
-    EsdicawtReadResult, TokenQuery, cwt_label,
+    EsdicawtReadResult, SdCwtVerified, TokenQuery, cwt_label,
     spec::{CustomClaims, SdCwtClaim, Select, Value, issuance::SdCwtIssued, key_binding::KbtCwt},
 };
 use serde::ser::SerializeMap;
+use std::ops::Deref;
 use std::{borrow::Cow, collections::HashMap, sync::LazyLock};
 use url::Url;
 
@@ -363,25 +364,25 @@ impl<'de> serde::Deserialize<'de> for OidcAddressClaim {
 }
 
 pub trait SpiceOidcSdCwtRead {
-    fn name(&mut self) -> EsdicawtReadResult<Option<Cow<'_, str>>>;
-    fn given_name(&mut self) -> EsdicawtReadResult<Option<Cow<'_, str>>>;
-    fn family_name(&mut self) -> EsdicawtReadResult<Option<Cow<'_, str>>>;
-    fn middle_name(&mut self) -> EsdicawtReadResult<Option<Cow<'_, str>>>;
-    fn nickname(&mut self) -> EsdicawtReadResult<Option<Cow<'_, str>>>;
-    fn preferred_username(&mut self) -> EsdicawtReadResult<Option<Cow<'_, str>>>;
-    fn profile(&mut self) -> EsdicawtReadResult<Option<Url>>;
-    fn picture(&mut self) -> EsdicawtReadResult<Option<Url>>;
-    fn website(&mut self) -> EsdicawtReadResult<Option<Url>>;
-    fn email(&mut self) -> EsdicawtReadResult<Option<Cow<'_, str>>>;
-    fn email_verified(&mut self) -> EsdicawtReadResult<Option<bool>>;
-    fn gender(&mut self) -> EsdicawtReadResult<Option<Cow<'_, str>>>;
-    fn birthdate(&mut self) -> EsdicawtReadResult<Option<Cow<'_, str>>>;
-    fn zoneinfo(&mut self) -> EsdicawtReadResult<Option<Cow<'_, str>>>;
-    fn locale(&mut self) -> EsdicawtReadResult<Option<Cow<'_, str>>>;
-    fn phone_number(&mut self) -> EsdicawtReadResult<Option<Cow<'_, str>>>;
-    fn phone_number_verified(&mut self) -> EsdicawtReadResult<Option<bool>>;
-    fn address(&mut self) -> EsdicawtReadResult<Option<OidcAddressClaim>>;
-    fn updated_at(&mut self) -> EsdicawtReadResult<Option<u64>>;
+    fn name(&self) -> EsdicawtReadResult<Option<Cow<'_, str>>>;
+    fn given_name(&self) -> EsdicawtReadResult<Option<Cow<'_, str>>>;
+    fn family_name(&self) -> EsdicawtReadResult<Option<Cow<'_, str>>>;
+    fn middle_name(&self) -> EsdicawtReadResult<Option<Cow<'_, str>>>;
+    fn nickname(&self) -> EsdicawtReadResult<Option<Cow<'_, str>>>;
+    fn preferred_username(&self) -> EsdicawtReadResult<Option<Cow<'_, str>>>;
+    fn profile(&self) -> EsdicawtReadResult<Option<Url>>;
+    fn picture(&self) -> EsdicawtReadResult<Option<Url>>;
+    fn website(&self) -> EsdicawtReadResult<Option<Url>>;
+    fn email(&self) -> EsdicawtReadResult<Option<Cow<'_, str>>>;
+    fn email_verified(&self) -> EsdicawtReadResult<Option<bool>>;
+    fn gender(&self) -> EsdicawtReadResult<Option<Cow<'_, str>>>;
+    fn birthdate(&self) -> EsdicawtReadResult<Option<Cow<'_, str>>>;
+    fn zoneinfo(&self) -> EsdicawtReadResult<Option<Cow<'_, str>>>;
+    fn locale(&self) -> EsdicawtReadResult<Option<Cow<'_, str>>>;
+    fn phone_number(&self) -> EsdicawtReadResult<Option<Cow<'_, str>>>;
+    fn phone_number_verified(&self) -> EsdicawtReadResult<Option<bool>>;
+    fn address(&self) -> EsdicawtReadResult<Option<OidcAddressClaim>>;
+    fn updated_at(&self) -> EsdicawtReadResult<Option<u64>>;
 }
 
 impl<PayloadClaims: Select, Hasher: digest::Digest + digest::FixedOutputReset + Clone + 'static, IssuerProtectedClaims: CustomClaims, IssuerUnprotectedClaims: CustomClaims>
@@ -389,27 +390,27 @@ impl<PayloadClaims: Select, Hasher: digest::Digest + digest::FixedOutputReset + 
 where
     for<'a> &'a PayloadClaims: Into<&'a SpiceOidcClaims>,
 {
-    fn name(&mut self) -> EsdicawtReadResult<Option<Cow<'_, str>>> {
+    fn name(&self) -> EsdicawtReadResult<Option<Cow<'_, str>>> {
         Ok(self.query(vec![CwtOidcLabel::Name.into()].into())?.as_ref().map(Value::deserialized).transpose()?)
     }
 
-    fn given_name(&mut self) -> EsdicawtReadResult<Option<Cow<'_, str>>> {
+    fn given_name(&self) -> EsdicawtReadResult<Option<Cow<'_, str>>> {
         Ok(self.query(vec![CwtOidcLabel::GivenName.into()].into())?.as_ref().map(Value::deserialized).transpose()?)
     }
 
-    fn family_name(&mut self) -> EsdicawtReadResult<Option<Cow<'_, str>>> {
+    fn family_name(&self) -> EsdicawtReadResult<Option<Cow<'_, str>>> {
         Ok(self.query(vec![CwtOidcLabel::FamilyName.into()].into())?.as_ref().map(Value::deserialized).transpose()?)
     }
 
-    fn middle_name(&mut self) -> EsdicawtReadResult<Option<Cow<'_, str>>> {
+    fn middle_name(&self) -> EsdicawtReadResult<Option<Cow<'_, str>>> {
         Ok(self.query(vec![CwtOidcLabel::MiddleName.into()].into())?.as_ref().map(Value::deserialized).transpose()?)
     }
 
-    fn nickname(&mut self) -> EsdicawtReadResult<Option<Cow<'_, str>>> {
+    fn nickname(&self) -> EsdicawtReadResult<Option<Cow<'_, str>>> {
         Ok(self.query(vec![CwtOidcLabel::Nickname.into()].into())?.as_ref().map(Value::deserialized).transpose()?)
     }
 
-    fn preferred_username(&mut self) -> EsdicawtReadResult<Option<Cow<'_, str>>> {
+    fn preferred_username(&self) -> EsdicawtReadResult<Option<Cow<'_, str>>> {
         Ok(self
             .query(vec![CwtOidcLabel::PreferredUsername.into()].into())?
             .as_ref()
@@ -417,47 +418,47 @@ where
             .transpose()?)
     }
 
-    fn profile(&mut self) -> EsdicawtReadResult<Option<Url>> {
+    fn profile(&self) -> EsdicawtReadResult<Option<Url>> {
         Ok(self.query(vec![CwtOidcLabel::Profile.into()].into())?.as_ref().map(Value::deserialized).transpose()?)
     }
 
-    fn picture(&mut self) -> EsdicawtReadResult<Option<Url>> {
+    fn picture(&self) -> EsdicawtReadResult<Option<Url>> {
         Ok(self.query(vec![CwtOidcLabel::Picture.into()].into())?.as_ref().map(Value::deserialized).transpose()?)
     }
 
-    fn website(&mut self) -> EsdicawtReadResult<Option<Url>> {
+    fn website(&self) -> EsdicawtReadResult<Option<Url>> {
         Ok(self.query(vec![CwtOidcLabel::Website.into()].into())?.as_ref().map(Value::deserialized).transpose()?)
     }
 
-    fn email(&mut self) -> EsdicawtReadResult<Option<Cow<'_, str>>> {
+    fn email(&self) -> EsdicawtReadResult<Option<Cow<'_, str>>> {
         Ok(self.query(vec![CwtOidcLabel::Email.into()].into())?.as_ref().map(Value::deserialized).transpose()?)
     }
 
-    fn email_verified(&mut self) -> EsdicawtReadResult<Option<bool>> {
+    fn email_verified(&self) -> EsdicawtReadResult<Option<bool>> {
         Ok(self.query(vec![CwtOidcLabel::EmailVerified.into()].into())?.as_ref().map(Value::deserialized).transpose()?)
     }
 
-    fn gender(&mut self) -> EsdicawtReadResult<Option<Cow<'_, str>>> {
+    fn gender(&self) -> EsdicawtReadResult<Option<Cow<'_, str>>> {
         Ok(self.query(vec![CwtOidcLabel::Gender.into()].into())?.as_ref().map(Value::deserialized).transpose()?)
     }
 
-    fn birthdate(&mut self) -> EsdicawtReadResult<Option<Cow<'_, str>>> {
+    fn birthdate(&self) -> EsdicawtReadResult<Option<Cow<'_, str>>> {
         Ok(self.query(vec![CwtOidcLabel::Birthdate.into()].into())?.as_ref().map(Value::deserialized).transpose()?)
     }
 
-    fn zoneinfo(&mut self) -> EsdicawtReadResult<Option<Cow<'_, str>>> {
+    fn zoneinfo(&self) -> EsdicawtReadResult<Option<Cow<'_, str>>> {
         Ok(self.query(vec![CwtOidcLabel::ZoneInfo.into()].into())?.as_ref().map(Value::deserialized).transpose()?)
     }
 
-    fn locale(&mut self) -> EsdicawtReadResult<Option<Cow<'_, str>>> {
+    fn locale(&self) -> EsdicawtReadResult<Option<Cow<'_, str>>> {
         Ok(self.query(vec![CwtOidcLabel::Locale.into()].into())?.as_ref().map(Value::deserialized).transpose()?)
     }
 
-    fn phone_number(&mut self) -> EsdicawtReadResult<Option<Cow<'_, str>>> {
+    fn phone_number(&self) -> EsdicawtReadResult<Option<Cow<'_, str>>> {
         Ok(self.query(vec![CwtOidcLabel::PhoneNumber.into()].into())?.as_ref().map(Value::deserialized).transpose()?)
     }
 
-    fn phone_number_verified(&mut self) -> EsdicawtReadResult<Option<bool>> {
+    fn phone_number_verified(&self) -> EsdicawtReadResult<Option<bool>> {
         Ok(self
             .query(vec![CwtOidcLabel::PhoneNumberVerified.into()].into())?
             .as_ref()
@@ -465,12 +466,94 @@ where
             .transpose()?)
     }
 
-    fn address(&mut self) -> EsdicawtReadResult<Option<OidcAddressClaim>> {
+    fn address(&self) -> EsdicawtReadResult<Option<OidcAddressClaim>> {
         Ok(self.query(vec![CwtOidcLabel::Address.into()].into())?.as_ref().map(Value::deserialized).transpose()?)
     }
 
-    fn updated_at(&mut self) -> EsdicawtReadResult<Option<u64>> {
+    fn updated_at(&self) -> EsdicawtReadResult<Option<u64>> {
         Ok(self.query(vec![CwtOidcLabel::UpdatedAt.into()].into())?.as_ref().map(Value::deserialized).transpose()?)
+    }
+}
+
+impl<PayloadClaims: Select, Hasher: digest::Digest + digest::FixedOutputReset + Clone + 'static, IssuerProtectedClaims: CustomClaims, IssuerUnprotectedClaims: CustomClaims>
+    SpiceOidcSdCwtRead for SdCwtVerified<PayloadClaims, Hasher, IssuerProtectedClaims, IssuerUnprotectedClaims>
+where
+    for<'a> &'a PayloadClaims: Into<&'a SpiceOidcClaims>,
+{
+    fn name(&self) -> EsdicawtReadResult<Option<Cow<'_, str>>> {
+        self.deref().name()
+    }
+
+    fn given_name(&self) -> EsdicawtReadResult<Option<Cow<'_, str>>> {
+        self.deref().given_name()
+    }
+
+    fn family_name(&self) -> EsdicawtReadResult<Option<Cow<'_, str>>> {
+        self.deref().family_name()
+    }
+
+    fn middle_name(&self) -> EsdicawtReadResult<Option<Cow<'_, str>>> {
+        self.deref().middle_name()
+    }
+
+    fn nickname(&self) -> EsdicawtReadResult<Option<Cow<'_, str>>> {
+        self.deref().nickname()
+    }
+
+    fn preferred_username(&self) -> EsdicawtReadResult<Option<Cow<'_, str>>> {
+        self.deref().preferred_username()
+    }
+
+    fn profile(&self) -> EsdicawtReadResult<Option<Url>> {
+        self.deref().profile()
+    }
+
+    fn picture(&self) -> EsdicawtReadResult<Option<Url>> {
+        self.deref().picture()
+    }
+
+    fn website(&self) -> EsdicawtReadResult<Option<Url>> {
+        self.deref().website()
+    }
+
+    fn email(&self) -> EsdicawtReadResult<Option<Cow<'_, str>>> {
+        self.deref().email()
+    }
+
+    fn email_verified(&self) -> EsdicawtReadResult<Option<bool>> {
+        self.deref().email_verified()
+    }
+
+    fn gender(&self) -> EsdicawtReadResult<Option<Cow<'_, str>>> {
+        self.deref().gender()
+    }
+
+    fn birthdate(&self) -> EsdicawtReadResult<Option<Cow<'_, str>>> {
+        self.deref().birthdate()
+    }
+
+    fn zoneinfo(&self) -> EsdicawtReadResult<Option<Cow<'_, str>>> {
+        self.deref().zoneinfo()
+    }
+
+    fn locale(&self) -> EsdicawtReadResult<Option<Cow<'_, str>>> {
+        self.deref().locale()
+    }
+
+    fn phone_number(&self) -> EsdicawtReadResult<Option<Cow<'_, str>>> {
+        self.deref().phone_number()
+    }
+
+    fn phone_number_verified(&self) -> EsdicawtReadResult<Option<bool>> {
+        self.deref().phone_number_verified()
+    }
+
+    fn address(&self) -> EsdicawtReadResult<Option<OidcAddressClaim>> {
+        self.deref().address()
+    }
+
+    fn updated_at(&self) -> EsdicawtReadResult<Option<u64>> {
+        self.deref().updated_at()
     }
 }
 
@@ -486,27 +569,27 @@ impl<
 where
     for<'a> &'a IssuerPayloadClaims: Into<&'a SpiceOidcClaims>,
 {
-    fn name(&mut self) -> EsdicawtReadResult<Option<Cow<'_, str>>> {
+    fn name(&self) -> EsdicawtReadResult<Option<Cow<'_, str>>> {
         Ok(self.query(vec![CwtOidcLabel::Name.into()].into())?.as_ref().map(Value::deserialized).transpose()?)
     }
 
-    fn given_name(&mut self) -> EsdicawtReadResult<Option<Cow<'_, str>>> {
+    fn given_name(&self) -> EsdicawtReadResult<Option<Cow<'_, str>>> {
         Ok(self.query(vec![CwtOidcLabel::GivenName.into()].into())?.as_ref().map(Value::deserialized).transpose()?)
     }
 
-    fn family_name(&mut self) -> EsdicawtReadResult<Option<Cow<'_, str>>> {
+    fn family_name(&self) -> EsdicawtReadResult<Option<Cow<'_, str>>> {
         Ok(self.query(vec![CwtOidcLabel::FamilyName.into()].into())?.as_ref().map(Value::deserialized).transpose()?)
     }
 
-    fn middle_name(&mut self) -> EsdicawtReadResult<Option<Cow<'_, str>>> {
+    fn middle_name(&self) -> EsdicawtReadResult<Option<Cow<'_, str>>> {
         Ok(self.query(vec![CwtOidcLabel::MiddleName.into()].into())?.as_ref().map(Value::deserialized).transpose()?)
     }
 
-    fn nickname(&mut self) -> EsdicawtReadResult<Option<Cow<'_, str>>> {
+    fn nickname(&self) -> EsdicawtReadResult<Option<Cow<'_, str>>> {
         Ok(self.query(vec![CwtOidcLabel::Nickname.into()].into())?.as_ref().map(Value::deserialized).transpose()?)
     }
 
-    fn preferred_username(&mut self) -> EsdicawtReadResult<Option<Cow<'_, str>>> {
+    fn preferred_username(&self) -> EsdicawtReadResult<Option<Cow<'_, str>>> {
         Ok(self
             .query(vec![CwtOidcLabel::PreferredUsername.into()].into())?
             .as_ref()
@@ -514,47 +597,47 @@ where
             .transpose()?)
     }
 
-    fn profile(&mut self) -> EsdicawtReadResult<Option<Url>> {
+    fn profile(&self) -> EsdicawtReadResult<Option<Url>> {
         Ok(self.query(vec![CwtOidcLabel::Profile.into()].into())?.as_ref().map(Value::deserialized).transpose()?)
     }
 
-    fn picture(&mut self) -> EsdicawtReadResult<Option<Url>> {
+    fn picture(&self) -> EsdicawtReadResult<Option<Url>> {
         Ok(self.query(vec![CwtOidcLabel::Picture.into()].into())?.as_ref().map(Value::deserialized).transpose()?)
     }
 
-    fn website(&mut self) -> EsdicawtReadResult<Option<Url>> {
+    fn website(&self) -> EsdicawtReadResult<Option<Url>> {
         Ok(self.query(vec![CwtOidcLabel::Website.into()].into())?.as_ref().map(Value::deserialized).transpose()?)
     }
 
-    fn email(&mut self) -> EsdicawtReadResult<Option<Cow<'_, str>>> {
+    fn email(&self) -> EsdicawtReadResult<Option<Cow<'_, str>>> {
         Ok(self.query(vec![CwtOidcLabel::Email.into()].into())?.as_ref().map(Value::deserialized).transpose()?)
     }
 
-    fn email_verified(&mut self) -> EsdicawtReadResult<Option<bool>> {
+    fn email_verified(&self) -> EsdicawtReadResult<Option<bool>> {
         Ok(self.query(vec![CwtOidcLabel::EmailVerified.into()].into())?.as_ref().map(Value::deserialized).transpose()?)
     }
 
-    fn gender(&mut self) -> EsdicawtReadResult<Option<Cow<'_, str>>> {
+    fn gender(&self) -> EsdicawtReadResult<Option<Cow<'_, str>>> {
         Ok(self.query(vec![CwtOidcLabel::Gender.into()].into())?.as_ref().map(Value::deserialized).transpose()?)
     }
 
-    fn birthdate(&mut self) -> EsdicawtReadResult<Option<Cow<'_, str>>> {
+    fn birthdate(&self) -> EsdicawtReadResult<Option<Cow<'_, str>>> {
         Ok(self.query(vec![CwtOidcLabel::Birthdate.into()].into())?.as_ref().map(Value::deserialized).transpose()?)
     }
 
-    fn zoneinfo(&mut self) -> EsdicawtReadResult<Option<Cow<'_, str>>> {
+    fn zoneinfo(&self) -> EsdicawtReadResult<Option<Cow<'_, str>>> {
         Ok(self.query(vec![CwtOidcLabel::ZoneInfo.into()].into())?.as_ref().map(Value::deserialized).transpose()?)
     }
 
-    fn locale(&mut self) -> EsdicawtReadResult<Option<Cow<'_, str>>> {
+    fn locale(&self) -> EsdicawtReadResult<Option<Cow<'_, str>>> {
         Ok(self.query(vec![CwtOidcLabel::Locale.into()].into())?.as_ref().map(Value::deserialized).transpose()?)
     }
 
-    fn phone_number(&mut self) -> EsdicawtReadResult<Option<Cow<'_, str>>> {
+    fn phone_number(&self) -> EsdicawtReadResult<Option<Cow<'_, str>>> {
         Ok(self.query(vec![CwtOidcLabel::PhoneNumber.into()].into())?.as_ref().map(Value::deserialized).transpose()?)
     }
 
-    fn phone_number_verified(&mut self) -> EsdicawtReadResult<Option<bool>> {
+    fn phone_number_verified(&self) -> EsdicawtReadResult<Option<bool>> {
         Ok(self
             .query(vec![CwtOidcLabel::PhoneNumberVerified.into()].into())?
             .as_ref()
@@ -562,11 +645,11 @@ where
             .transpose()?)
     }
 
-    fn address(&mut self) -> EsdicawtReadResult<Option<OidcAddressClaim>> {
+    fn address(&self) -> EsdicawtReadResult<Option<OidcAddressClaim>> {
         Ok(self.query(vec![CwtOidcLabel::Address.into()].into())?.as_ref().map(Value::deserialized).transpose()?)
     }
 
-    fn updated_at(&mut self) -> EsdicawtReadResult<Option<u64>> {
+    fn updated_at(&self) -> EsdicawtReadResult<Option<u64>> {
         Ok(self.query(vec![CwtOidcLabel::UpdatedAt.into()].into())?.as_ref().map(Value::deserialized).transpose()?)
     }
 }
@@ -595,7 +678,7 @@ mod tests {
 
         let alice = alice();
         let alice_subject = alice.preferred_username.clone().unwrap();
-        let mut alice_sd_cwt = issue_oidc_claim(&issuer, alice.clone(), &alice_holder.signer().verifying_key(), &alice_subject);
+        let alice_sd_cwt = issue_oidc_claim(&issuer, alice.clone(), &alice_holder.signer().verifying_key(), &alice_subject);
 
         let name = alice_sd_cwt.name().unwrap().unwrap().to_string();
         let given_name = alice_sd_cwt.given_name().unwrap().unwrap().to_string();
@@ -646,7 +729,7 @@ mod tests {
         let alice_sd_cwt = alice_sd_cwt.to_cbor_bytes().unwrap();
         let alice_sd_cwt = alice_holder.verify_sd_cwt(&alice_sd_cwt, Default::default(), &cks).unwrap();
 
-        let mut alice_kbt = alice_holder
+        let alice_kbt = alice_holder
             .new_presentation(
                 alice_sd_cwt,
                 esdicawt::HolderParams {

@@ -397,7 +397,7 @@ mod tests {
             .verify_sd_cwt(&sd_cwt, Default::default(), &CoseKeySet::builder().with_signing_key(&issuer_signing_key).unwrap().build())
             .unwrap();
 
-        let mut sd_kbt = holder.new_presentation(sd_cwt, presentation_params).unwrap();
+        let sd_kbt = holder.new_presentation(sd_cwt, presentation_params).unwrap();
 
         assert_eq!(sd_kbt.query(vec!["name".into()].into()).unwrap().unwrap(), cbor!("Alice Smith").unwrap());
         assert!(sd_kbt.query(vec!["age".into()].into()).unwrap().is_none());

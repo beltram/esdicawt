@@ -14,27 +14,27 @@ use std::borrow::Cow;
 
 #[allow(dead_code)]
 pub trait SdCwtRead: TokenQuery {
-    fn sub(&mut self) -> EsdicawtReadResult<Option<Cow<'_, str>>> {
+    fn sub(&self) -> EsdicawtReadResult<Option<Cow<'_, str>>> {
         Ok(self.query(vec![CwtClaimName::Sub.to_i64().into()].into())?.as_ref().map(Value::deserialized).transpose()?)
     }
 
-    fn iss(&mut self) -> EsdicawtReadResult<Option<Cow<'_, str>>> {
+    fn iss(&self) -> EsdicawtReadResult<Option<Cow<'_, str>>> {
         Ok(self.query(vec![CwtClaimName::Iss.to_i64().into()].into())?.as_ref().map(Value::deserialized).transpose()?)
     }
 
-    fn aud(&mut self) -> EsdicawtReadResult<Option<Cow<'_, str>>> {
+    fn aud(&self) -> EsdicawtReadResult<Option<Cow<'_, str>>> {
         Ok(self.query(vec![CwtClaimName::Aud.to_i64().into()].into())?.as_ref().map(Value::deserialized).transpose()?)
     }
 
-    fn exp(&mut self) -> EsdicawtReadResult<Option<i64>> {
+    fn exp(&self) -> EsdicawtReadResult<Option<i64>> {
         Ok(self.query(vec![CwtClaimName::Exp.to_i64().into()].into())?.as_ref().map(Value::deserialized).transpose()?)
     }
 
-    fn nbf(&mut self) -> EsdicawtReadResult<Option<i64>> {
+    fn nbf(&self) -> EsdicawtReadResult<Option<i64>> {
         Ok(self.query(vec![CwtClaimName::Nbf.to_i64().into()].into())?.as_ref().map(Value::deserialized).transpose()?)
     }
 
-    fn iat(&mut self) -> EsdicawtReadResult<Option<i64>> {
+    fn iat(&self) -> EsdicawtReadResult<Option<i64>> {
         Ok(self.query(vec![CwtClaimName::Iat.to_i64().into()].into())?.as_ref().map(Value::deserialized).transpose()?)
     }
 }

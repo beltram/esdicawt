@@ -413,7 +413,7 @@ mod tests {
             name: Some("Alice".to_string()),
             age: Some(42),
         };
-        let (mut sd_cwt, _) = issue(Some(model));
+        let (sd_cwt, _) = issue(Some(model));
 
         let model = sd_cwt.payload.to_value().unwrap().inner.extra.clone().unwrap();
 
@@ -421,7 +421,7 @@ mod tests {
         assert!(model.age.is_some());
         assert!(model.name.is_some());
 
-        let mut disclosures = sd_cwt.disclosures_mut().unwrap().iter().map(|d| d.unwrap());
+        let mut disclosures = sd_cwt.disclosures().unwrap().iter().map(|d| d.unwrap());
         assert!(disclosures.next().is_none());
     }
 

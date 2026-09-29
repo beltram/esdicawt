@@ -11,7 +11,7 @@ pub trait ClaimSetExt {
 
     /// Given a SD-KBT, either verified or not, computes the claimset.
     /// The signature is not verified here (in order to be faster than the verified version) so use at your own risk !
-    fn claimset_unchecked(&mut self) -> SdCwtVerifierResult<Option<Self::Payload>, Infallible>;
+    fn claimset_unchecked(&self) -> SdCwtVerifierResult<Option<Self::Payload>, Infallible>;
 }
 
 impl<
@@ -26,10 +26,10 @@ impl<
 {
     type Payload = IssuerPayloadClaims;
 
-    fn claimset_unchecked(&mut self) -> SdCwtVerifierResult<Option<Self::Payload>, Infallible> {
-        let mut sd_cwt = self.generic_sd_cwt()?;
+    fn claimset_unchecked(&self) -> SdCwtVerifierResult<Option<Self::Payload>, Infallible> {
+        let sd_cwt = self.generic_sd_cwt()?;
         let mut payload = sd_cwt.payload.upcast_value()?;
-        if let Some(disclosures) = sd_cwt.disclosures_mut() {
+        if let Some(disclosures) = sd_cwt.disclosures() {
             // compute the hash of all disclosures
             let mut disclosures = disclosures.digested::<Hasher>()?;
 
