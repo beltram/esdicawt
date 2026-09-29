@@ -356,6 +356,10 @@ fn __shallow_batch_verify_sd_kbt<
     #[cfg(feature = "ed25519")]
     let mut ed25519_batch_ranges = Vec::<(usize, core::ops::Range<usize>)>::with_capacity(raw_sd_kbts.len());
 
+    // decompressed once for the whole batch
+    #[cfg(feature = "ed25519")]
+    let mut ed25519_issuer_verifier = None::<ed25519_dalek::VerifyingKey>;
+
     #[cfg(feature = "ed25519")]
     let ed25519_tbs_cells = ed25519_tbs_cell.iter();
     #[cfg(not(feature = "ed25519"))]
@@ -419,17 +423,6 @@ fn __shallow_batch_verify_sd_kbt<
             let sd_cwt_alg = &*sd_cwt.protected.to_value()?.alg;
 
             // First the Verifier must validate the SD-KBT as described in Section 7.2 of [RFC8392].
-            // verifying signature
-            let holder_verifier_key: HolderVerifier = key_confirmation.try_into()?;
-
-            // verify confirmation key advertised in the KBT matches the expected one if supplied
-            if let Some(hvk) = holder_verifier {
-                let key_confirmation: HolderVerifier = key_confirmation.try_into()?;
-                if key_confirmation != *hvk {
-                    return Err(SdCwtVerifierError::UnexpectedKeyConfirmation);
-                }
-            }
-
             if cfg!(feature = "ed25519")
                 && let KeyConfirmation::CoseKey(key) = key_confirmation
                 && key.alg() == Some(coset::iana::Algorithm::EdDSA)
@@ -444,17 +437,31 @@ fn __shallow_batch_verify_sd_kbt<
                     let kbt_signature = ed25519_dalek::Signature::from_slice(&kbt.signature)?;
                     let sd_cwt_signature = ed25519_dalek::Signature::from_slice(&sd_cwt.signature)?;
 
-                    let holder_verifying_key = holder_verifier_key.as_ref().try_into().map_err(crate::signature_verifier::SignatureVerifierError::from)?;
-                    let holder_verifier_key = ed25519_dalek::VerifyingKey::from_bytes(holder_verifying_key).map_err(crate::signature_verifier::SignatureVerifierError::from)?;
+                    // decompressing a point is expensive, so the holder key is decompressed only once
+                    let holder_verifier_key = ed25519_dalek::VerifyingKey::try_from(key_confirmation)?;
+
+                    // verify confirmation key advertised in the KBT matches the expected one if supplied
+                    if let Some(hvk) = holder_verifier
+                        && hvk.as_ref() != holder_verifier_key.as_bytes()
+                    {
+                        return Err(SdCwtVerifierError::UnexpectedKeyConfirmation);
+                    }
+
+                    // all the SD-CWTs are verified with the same key, no need to decompress it for each of them
+                    let sd_cwt_verifier = match ed25519_issuer_verifier {
+                        Some(verifier) => verifier,
+                        None => {
+                            // without a key the signatures would never make it to the batch, hence never be verified
+                            let key = cks
+                                .find_keys(&coset::iana::Algorithm::EdDSA)
+                                .find(|key| key.crv() == Some(coset::iana::EllipticCurve::Ed25519))
+                                .ok_or(crate::signature_verifier::SignatureVerifierError::NoSigner)?;
+                            let verifier = ed25519_dalek::VerifyingKey::try_from(key).map_err(crate::signature_verifier::SignatureVerifierError::from)?;
+                            *ed25519_issuer_verifier.insert(verifier)
+                        }
+                    };
 
                     let (kbt_tbs, sd_cwt_tbs) = ed25519_tbs_cell.get_or_init(|| (kbt_tbs, sd_cwt_tbs));
-
-                    // without a key the signatures would never make it to the batch, hence never be verified
-                    let key = cks
-                        .find_keys(&coset::iana::Algorithm::EdDSA)
-                        .find(|key| key.crv() == Some(coset::iana::EllipticCurve::Ed25519))
-                        .ok_or(crate::signature_verifier::SignatureVerifierError::NoSigner)?;
-                    let sd_cwt_verifier = ed25519_dalek::VerifyingKey::try_from(key).map_err(crate::signature_verifier::SignatureVerifierError::from)?;
                     ed25519_tbs.push(kbt_tbs);
                     ed25519_tbs.push(sd_cwt_tbs);
                     ed25519_signatures.push(kbt_signature);
@@ -463,6 +470,15 @@ fn __shallow_batch_verify_sd_kbt<
                     ed25519_verifiers.push(sd_cwt_verifier);
                 }
             } else {
+                let holder_verifier_key: HolderVerifier = key_confirmation.try_into()?;
+
+                // verify confirmation key advertised in the KBT matches the expected one if supplied
+                if let Some(hvk) = holder_verifier
+                    && holder_verifier_key != *hvk
+                {
+                    return Err(SdCwtVerifierError::UnexpectedKeyConfirmation);
+                }
+
                 let kbt_signature = HolderSignature::try_from(&kbt.signature).map_err(|_| SdCwtVerifierError::SignatureEncodingError)?;
                 holder_verifier_key.verify(&kbt_tbs, &kbt_signature)?;
                 // After validation, the SD-CWT MUST be extracted from the kcwt header, and validated as described in Section 7.2 of [RFC8392].
