@@ -92,7 +92,11 @@ pub trait Verifier {
         >,
         SdCwtVerifierError<Self::Error>,
     > {
-        __verify_sd_kbt(raw_sd_kbt, params, holder_verifier, cks, |sd_hash_alg: SdHashAlg| self.digest(sd_hash_alg))
+        __verify_sd_kbt_batch(&[(raw_sd_kbt, params, holder_verifier)], cks, |sd_hash_alg: SdHashAlg| self.digest(sd_hash_alg))
+            .pop()
+            .unwrap_or(Err(SdCwtVerifierError::ImplementationError(
+                "'__verify_sd_kbt_batch' should always return as much elements as given",
+            )))
     }
 
     /// Like [self.verify_sd_kbt] but batches operations
@@ -114,15 +118,13 @@ pub trait Verifier {
             SdCwtVerifierError<Self::Error>,
         >,
     > {
-        raw_sd_kbts
-            .iter()
-            .map(|(raw_sd_kbt, params, holder_verifier)| self.verify_sd_kbt(raw_sd_kbt, params, *holder_verifier, cks))
-            .collect()
+        __verify_sd_kbt_batch(raw_sd_kbts, cks, |sd_hash_alg: SdHashAlg| self.digest(sd_hash_alg))
     }
 }
 
+/// Signatures of all the SD-KBTs are verified at once, then the claims of each one of them
 #[allow(clippy::type_complexity)]
-fn __verify_sd_kbt<
+fn __verify_sd_kbt_batch<
     Error: core::error::Error + Send + Sync,
     HolderSignature: signature::SignatureEncoding,
     HolderVerifier: signature::Verifier<HolderSignature> + AsRef<[u8]> + PartialEq + for<'a> TryFrom<&'a KeyConfirmation, Error = CoseKeyConfirmationError>,
@@ -133,20 +135,50 @@ fn __verify_sd_kbt<
     KbtProtectedClaims: CustomClaims,
     KbtUnprotectedClaims: CustomClaims,
 >(
-    raw_sd_kbt: &[u8],
-    params: &VerifierParams,
-    holder_verifier: Option<&HolderVerifier>,
+    raw_sd_kbts: &[(&[u8], &VerifierParams, Option<&HolderVerifier>)],
     cks: &cose_key::keyset::CoseKeySet,
     digest: impl Fn(SdHashAlg) -> Rc<dyn digest::DynDigest>,
+) -> Vec<
+    Result<
+        KbtCwtVerified<IssuerPayloadClaims, KbtPayloadClaims, IssuerProtectedClaims, IssuerUnprotectedClaims, KbtProtectedClaims, KbtUnprotectedClaims>,
+        SdCwtVerifierError<Error>,
+    >,
+> {
+    let shallow_params = raw_sd_kbts.iter().map(|(_, params, _)| params.shallow()).collect::<Vec<_>>();
+    let shallow_batch = raw_sd_kbts
+        .iter()
+        .zip(&shallow_params)
+        .map(|(&(raw_sd_kbt, _, holder_verifier), shallow_params)| (raw_sd_kbt, shallow_params, holder_verifier))
+        .collect::<Vec<_>>();
+
+    __shallow_batch_verify_sd_kbt(&shallow_batch, cks)
+        .into_iter()
+        .zip(raw_sd_kbts)
+        .map(|(shallow, (_, params, _))| {
+            let (kbt, generic_sd_cwt_payload) = shallow?;
+            __verify_sd_kbt_claims(kbt, generic_sd_cwt_payload, params, &digest)
+        })
+        .collect()
+}
+
+#[allow(clippy::type_complexity)]
+fn __verify_sd_kbt_claims<
+    Error: core::error::Error + Send + Sync,
+    IssuerProtectedClaims: CustomClaims,
+    IssuerUnprotectedClaims: CustomClaims,
+    IssuerPayloadClaims: Select,
+    KbtPayloadClaims: CustomClaims,
+    KbtProtectedClaims: CustomClaims,
+    KbtUnprotectedClaims: CustomClaims,
+>(
+    kbt: KbtCwt<IssuerPayloadClaims, AnyDigest, KbtPayloadClaims, IssuerProtectedClaims, IssuerUnprotectedClaims, KbtProtectedClaims, KbtUnprotectedClaims>,
+    mut generic_sd_cwt_payload: Value,
+    params: &VerifierParams,
+    digest: &impl Fn(SdHashAlg) -> Rc<dyn digest::DynDigest>,
 ) -> Result<
     KbtCwtVerified<IssuerPayloadClaims, KbtPayloadClaims, IssuerProtectedClaims, IssuerUnprotectedClaims, KbtProtectedClaims, KbtUnprotectedClaims>,
     SdCwtVerifierError<Error>,
 > {
-    let (kbt, mut generic_sd_cwt_payload) = __shallow_batch_verify_sd_kbt(&[(raw_sd_kbt, &params.shallow(), holder_verifier)], cks)
-        .pop()
-        .unwrap_or(Err(SdCwtVerifierError::ImplementationError(
-            "'__shallow_batch_verify_sd_kbt' should always return as much elements as given",
-        )))?;
     let generic_sd_cwt_payload_map = generic_sd_cwt_payload.as_map().ok_or(SdCwtVerifierError::InvalidSdCwt)?;
 
     let kbt_protected = kbt.protected.to_value()?;
@@ -320,6 +352,10 @@ fn __shallow_batch_verify_sd_kbt<
         Vec::with_capacity(raw_sd_kbts.len() * 2),
     ); // we have SD-CWT and SD-KBT signatures to verify per KBT
 
+    // index of the SD-KBT in the results along with the position of its signatures in the batch
+    #[cfg(feature = "ed25519")]
+    let mut ed25519_batch_ranges = Vec::<(usize, core::ops::Range<usize>)>::with_capacity(raw_sd_kbts.len());
+
     #[cfg(feature = "ed25519")]
     let ed25519_tbs_cells = ed25519_tbs_cell.iter();
     #[cfg(not(feature = "ed25519"))]
@@ -327,6 +363,9 @@ fn __shallow_batch_verify_sd_kbt<
 
     #[cfg_attr(not(feature = "ed25519"), allow(unused_variables))]
     for (&(raw_sd_kbt, params, holder_verifier), ed25519_tbs_cell) in raw_sd_kbts.iter().zip(ed25519_tbs_cells) {
+        #[cfg(feature = "ed25519")]
+        let batch_start = ed25519_tbs.len();
+
         #[allow(unused_mut)]
         let mut verify = || -> Result<
             (
@@ -410,15 +449,18 @@ fn __shallow_batch_verify_sd_kbt<
 
                     let (kbt_tbs, sd_cwt_tbs) = ed25519_tbs_cell.get_or_init(|| (kbt_cose_sign1.tbs_data(&[]), sd_cwt_cose_sign1.tbs_data(&[])));
 
-                    if let Some(key) = cks.find_keys(&coset::iana::Algorithm::EdDSA).find(|key| key.crv() == Some(coset::iana::EllipticCurve::Ed25519)) {
-                            let sd_cwt_verifier = ed25519_dalek::VerifyingKey::try_from(key).map_err(crate::signature_verifier::SignatureVerifierError::from)?;
-                            ed25519_tbs.push(kbt_tbs);
-                            ed25519_tbs.push(sd_cwt_tbs);
-                            ed25519_signatures.push(kbt_signature);
-                            ed25519_signatures.push(sd_cwt_signature);
-                            ed25519_verifiers.push(holder_verifier_key);
-                            ed25519_verifiers.push(sd_cwt_verifier);
-                    }
+                    // without a key the signatures would never make it to the batch, hence never be verified
+                    let key = cks
+                        .find_keys(&coset::iana::Algorithm::EdDSA)
+                        .find(|key| key.crv() == Some(coset::iana::EllipticCurve::Ed25519))
+                        .ok_or(crate::signature_verifier::SignatureVerifierError::NoSigner)?;
+                    let sd_cwt_verifier = ed25519_dalek::VerifyingKey::try_from(key).map_err(crate::signature_verifier::SignatureVerifierError::from)?;
+                    ed25519_tbs.push(kbt_tbs);
+                    ed25519_tbs.push(sd_cwt_tbs);
+                    ed25519_signatures.push(kbt_signature);
+                    ed25519_signatures.push(sd_cwt_signature);
+                    ed25519_verifiers.push(holder_verifier_key);
+                    ed25519_verifiers.push(sd_cwt_verifier);
                 }
             } else {
                 kbt_cose_sign1.verify_signature(&[], |signature, raw_data| {
@@ -438,14 +480,39 @@ fn __shallow_batch_verify_sd_kbt<
 
             Ok((kbt, generic_sd_cwt_payload))
         };
-        results.push(verify());
+
+        let result = verify();
+
+        // only keep in the batch the signatures of the SD-KBTs which passed all the other verifications
+        #[cfg(feature = "ed25519")]
+        if result.is_ok() {
+            if ed25519_tbs.len() > batch_start {
+                ed25519_batch_ranges.push((results.len(), batch_start..ed25519_tbs.len()));
+            }
+        } else {
+            ed25519_tbs.truncate(batch_start);
+            ed25519_signatures.truncate(batch_start);
+            ed25519_verifiers.truncate(batch_start);
+        }
+
+        results.push(result);
     }
 
     #[cfg(feature = "ed25519")]
-    if !ed25519_tbs.is_empty() && !ed25519_signatures.is_empty() && !ed25519_verifiers.is_empty() {
-        match ed25519_dalek::verify_batch(&ed25519_tbs[..], &ed25519_signatures[..], &ed25519_verifiers[..]) {
-            Ok(_) => {}
-            Err(e) => results.push(Err(SdCwtVerifierError::SignatureError(e))),
+    if !ed25519_tbs.is_empty() && ed25519_dalek::verify_batch(&ed25519_tbs, &ed25519_signatures, &ed25519_verifiers).is_err() {
+        // the batch does not tell which signature is invalid so each SD-KBT is verified on its own
+        for (i, range) in ed25519_batch_ranges {
+            let (Some(tbs), Some(signatures), Some(verifiers), Some(result)) = (
+                ed25519_tbs.get(range.clone()),
+                ed25519_signatures.get(range.clone()),
+                ed25519_verifiers.get(range),
+                results.get_mut(i),
+            ) else {
+                continue;
+            };
+            if let Err(e) = ed25519_dalek::verify_batch(tbs, signatures, verifiers) {
+                *result = Err(SdCwtVerifierError::SignatureError(e));
+            }
         }
     }
 
@@ -633,6 +700,55 @@ mod tests {
                 &CoseKeySet::builder().with(&issuer_verifying_key_bis).unwrap().build()
             ),
             Err(SdCwtVerifierError::SignatureError(_))
+        ));
+    }
+
+    #[test]
+    #[wasm_bindgen_test::wasm_bindgen_test]
+    fn should_verify_batch() {
+        let holder_signing_key = ed25519_dalek::SigningKey::generate(&mut rand::thread_rng());
+        let holder_verifying_key = holder_signing_key.verifying_key();
+        let issuer_params = default_issuer_params(None::<Value>, &holder_signing_key);
+        let (cks, sd_kbt, ..) = generate_sd_kbt(issuer_params.clone(), default_holder_params::<NoClaims>(), &holder_signing_key);
+        // signed by another issuer, not in the keyset
+        let (_, other_sd_kbt, ..) = generate_sd_kbt(issuer_params, default_holder_params::<NoClaims>(), &holder_signing_key);
+        let verifier = HybridVerifier::<Value, NoClaims>::default();
+        let params = VerifierParams::default();
+
+        let results = verifier.verify_sd_kbt_batch(&[(&sd_kbt, &params, None), (&sd_kbt, &params, Some(&holder_verifying_key))], &cks);
+        assert!(matches!(results.as_slice(), [Ok(_), Ok(_)]));
+
+        // an invalid signature is attributed to the right SD-KBT
+        let results = verifier.verify_sd_kbt_batch(&[(&sd_kbt, &params, None), (&other_sd_kbt, &params, None), (&sd_kbt, &params, None)], &cks);
+        assert!(matches!(results.as_slice(), [Ok(_), Err(SdCwtVerifierError::SignatureError(_)), Ok(_)]));
+
+        // a SD-KBT failing before signature verification does not taint the others
+        let holder_verifying_key_bis = ed25519_dalek::SigningKey::generate(&mut rand::thread_rng()).verifying_key();
+        let results = verifier.verify_sd_kbt_batch(&[(&sd_kbt, &params, Some(&holder_verifying_key_bis)), (&sd_kbt, &params, None)], &cks);
+        assert!(matches!(results.as_slice(), [Err(SdCwtVerifierError::UnexpectedKeyConfirmation), Ok(_)]));
+
+        assert!(verifier.verify_sd_kbt_batch(&[], &cks).is_empty());
+    }
+
+    #[test]
+    #[wasm_bindgen_test::wasm_bindgen_test]
+    fn should_fail_without_issuer_key() {
+        use crate::signature_verifier::SignatureVerifierError;
+
+        let holder_signing_key = ed25519_dalek::SigningKey::generate(&mut rand::thread_rng());
+        let issuer_params = default_issuer_params(None::<Value>, &holder_signing_key);
+        let (_, sd_kbt, ..) = generate_sd_kbt(issuer_params, default_holder_params::<NoClaims>(), &holder_signing_key);
+        let verifier = HybridVerifier::<Value, NoClaims>::default();
+
+        let issuer_signing_key = p256::ecdsa::SigningKey::random(&mut rand::thread_rng());
+        let cks = CoseKeySet::builder().with_signing_key(&issuer_signing_key).unwrap().build();
+        assert!(matches!(
+            verifier.verify_sd_kbt(&sd_kbt, &Default::default(), None, &cks),
+            Err(SdCwtVerifierError::IssuerSignatureValidationError(SignatureVerifierError::NoSigner))
+        ));
+        assert!(matches!(
+            verifier.shallow_verify_sd_kbt(&sd_kbt, &Default::default(), None, &cks),
+            Err(SdCwtVerifierError::IssuerSignatureValidationError(SignatureVerifierError::NoSigner))
         ));
     }
 
