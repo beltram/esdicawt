@@ -410,8 +410,7 @@ fn __shallow_batch_verify_sd_kbt<
 
                     let (kbt_tbs, sd_cwt_tbs) = ed25519_tbs_cell.get_or_init(|| (kbt_cose_sign1.tbs_data(&[]), sd_cwt_cose_sign1.tbs_data(&[])));
 
-                    for key in cks.find_keys(&coset::iana::Algorithm::EdDSA) {
-                        if key.crv() == Some(coset::iana::EllipticCurve::Ed25519) {
+                    if let Some(key) = cks.find_keys(&coset::iana::Algorithm::EdDSA).find(|key| key.crv() == Some(coset::iana::EllipticCurve::Ed25519)) {
                             let sd_cwt_verifier = ed25519_dalek::VerifyingKey::try_from(key).map_err(crate::signature_verifier::SignatureVerifierError::from)?;
                             ed25519_tbs.push(kbt_tbs);
                             ed25519_tbs.push(sd_cwt_tbs);
@@ -419,7 +418,6 @@ fn __shallow_batch_verify_sd_kbt<
                             ed25519_signatures.push(sd_cwt_signature);
                             ed25519_verifiers.push(holder_verifier_key);
                             ed25519_verifiers.push(sd_cwt_verifier);
-                        }
                     }
                 }
             } else {
