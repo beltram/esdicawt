@@ -6,13 +6,13 @@ use crate::{
     CwtStdLabel, ShallowVerifierParams, VerifierParams,
     any_digest::AnyDigest,
     elapsed_since_epoch,
+    signature_verifier::cose_sign1_tbs,
     spec::{CWT_CLAIM_KEY_CONFIRMATION, CustomClaims, CwtAny, SdHashAlg, Select, issuance::SdInnerPayload, key_binding::KbtCwt, reexports::coset, verified::KbtCwtVerified},
     time::verify_time_claims,
     verifier::error::SdCwtVerifierError,
 };
 use ciborium::{Value, value::Integer};
 use cose_key::confirmation::{CoseKeyConfirmationError, KeyConfirmation};
-use coset::{CoseSign1, TaggedCborSerializable};
 use std::rc::Rc;
 
 pub trait Verifier {
@@ -379,12 +379,10 @@ fn __shallow_batch_verify_sd_kbt<
                     raw_sd_kbt,
                 )?;
 
-            let generic_sd_cwt = kbt.generic_sd_cwt()?;
-            let kbt_protected = kbt.protected.to_value()?;
+            let sd_cwt = &kbt.protected.to_value()?.kcwt;
 
-            let generic_sd_cwt_payload = generic_sd_cwt.payload.upcast_value()?;
+            let generic_sd_cwt_payload = sd_cwt.payload.upcast_value()?;
             let generic_sd_cwt_payload_map = generic_sd_cwt_payload.as_map().ok_or(SdCwtVerifierError::InvalidSdCwt)?;
-            let sd_cwt_bytes = kbt_protected.kcwt.to_cbor_bytes()?;
 
             let mut key_confirmation = None;
             let (mut iat, mut exp, mut nbf) = (None, None, None);
@@ -415,8 +413,10 @@ fn __shallow_batch_verify_sd_kbt<
                 .ok_or(SdCwtVerifierError::<Error>::MalformedSdCwt("Missing KeyConfirmation"))?
                 .deserialized::<KeyConfirmation>()?;
 
-            let kbt_cose_sign1 = CoseSign1::from_tagged_slice(raw_sd_kbt)?;
-            let sd_cwt_cose_sign1 = CoseSign1::from_tagged_slice(&sd_cwt_bytes)?;
+            // what has been signed is built from the raw bytes, no need to re-encode the SD-CWT nor to parse COSE_Sign1s
+            let kbt_tbs = cose_sign1_tbs(kbt.protected.to_bytes()?, kbt.payload.to_bytes()?)?;
+            let sd_cwt_tbs = cose_sign1_tbs(sd_cwt.protected.to_bytes()?, sd_cwt.payload.to_bytes()?)?;
+            let sd_cwt_alg = &*sd_cwt.protected.to_value()?.alg;
 
             // First the Verifier must validate the SD-KBT as described in Section 7.2 of [RFC8392].
             // verifying signature
@@ -434,20 +434,20 @@ fn __shallow_batch_verify_sd_kbt<
                 && let KeyConfirmation::CoseKey(key) = key_confirmation
                 && key.alg() == Some(coset::iana::Algorithm::EdDSA)
                 && key.crv() == Some(coset::iana::EllipticCurve::Ed25519)
-                && sd_cwt_cose_sign1.protected.header.alg == Some(coset::Algorithm::Assigned(coset::iana::Algorithm::EdDSA))
+                && *sd_cwt_alg == coset::Algorithm::Assigned(coset::iana::Algorithm::EdDSA)
                 // only way to differentiate ed25519 from ed448 since we do not have crv
-                && sd_cwt_cose_sign1.signature.len() == ED25519_DALEK_SIGNATURE_LENGTH
+                && sd_cwt.signature.len() == ED25519_DALEK_SIGNATURE_LENGTH
             {
                 #[cfg(feature = "ed25519")]
                 {
                     // just for the feature scoped imports
-                    let kbt_signature = ed25519_dalek::Signature::from_slice(&kbt_cose_sign1.signature)?;
-                    let sd_cwt_signature = ed25519_dalek::Signature::from_slice(&sd_cwt_cose_sign1.signature)?;
+                    let kbt_signature = ed25519_dalek::Signature::from_slice(&kbt.signature)?;
+                    let sd_cwt_signature = ed25519_dalek::Signature::from_slice(&sd_cwt.signature)?;
 
                     let holder_verifying_key = holder_verifier_key.as_ref().try_into().map_err(crate::signature_verifier::SignatureVerifierError::from)?;
                     let holder_verifier_key = ed25519_dalek::VerifyingKey::from_bytes(holder_verifying_key).map_err(crate::signature_verifier::SignatureVerifierError::from)?;
 
-                    let (kbt_tbs, sd_cwt_tbs) = ed25519_tbs_cell.get_or_init(|| (kbt_cose_sign1.tbs_data(&[]), sd_cwt_cose_sign1.tbs_data(&[])));
+                    let (kbt_tbs, sd_cwt_tbs) = ed25519_tbs_cell.get_or_init(|| (kbt_tbs, sd_cwt_tbs));
 
                     // without a key the signatures would never make it to the batch, hence never be verified
                     let key = cks
@@ -463,13 +463,12 @@ fn __shallow_batch_verify_sd_kbt<
                     ed25519_verifiers.push(sd_cwt_verifier);
                 }
             } else {
-                kbt_cose_sign1.verify_signature(&[], |signature, raw_data| {
-                    let signature = HolderSignature::try_from(signature).map_err(|_| SdCwtVerifierError::SignatureEncodingError)?;
-                    holder_verifier_key.verify(raw_data, &signature).map_err(SdCwtVerifierError::from)
-                })?;
+                let kbt_signature = HolderSignature::try_from(&kbt.signature).map_err(|_| SdCwtVerifierError::SignatureEncodingError)?;
+                holder_verifier_key.verify(&kbt_tbs, &kbt_signature)?;
                 // After validation, the SD-CWT MUST be extracted from the kcwt header, and validated as described in Section 7.2 of [RFC8392].
                 // verify signature if a verifying key supplied
-                crate::signature_verifier::validate_cose_sign1_signature(&sd_cwt_cose_sign1, cks)?;
+                let sd_cwt_alg = crate::signature_verifier::iana_alg(Some(sd_cwt_alg))?;
+                crate::signature_verifier::validate_signature(&sd_cwt_alg, &sd_cwt_tbs, &sd_cwt.signature, cks)?;
             }
 
             let kbt_payload = kbt.payload.to_value()?;
@@ -614,6 +613,8 @@ pub trait VerifierWithStatus: Verifier {
         raw_status_token: &[u8],
         status_list_cks: &cose_key::keyset::CoseKeySet,
     ) -> Result<VerifiedStatusListToken<Self::Status>, SdCwtVerifierError<Self::Error>> {
+        use coset::{CoseSign1, TaggedCborSerializable as _};
+
         let status_token = status_list::issuer::StatusListToken::from_cbor_bytes(raw_status_token)?;
         let status_token_sign1 = CoseSign1::from_tagged_slice(raw_status_token)?;
 

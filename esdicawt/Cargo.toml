@@ -33,6 +33,7 @@ enum-variants-strings.workspace = true
 status-list = { workspace = true, optional = true }
 url.workspace = true
 seabored.workspace = true
+serde_bytes.workspace = true
 
 sha2 = { optional = true, workspace = true }
 ed25519-dalek = { optional = true, workspace = true, features = ["rand_core", "pem", "serde", "batch"] }
