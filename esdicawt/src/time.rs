@@ -96,10 +96,10 @@ mod tests {
         // iat == now
         verify_time_claims(10, Default::default(), Some(10), None, None, Default::default()).unwrap();
         // iat > now
-        assert!(matches!(
+        std::assert_matches!(
             verify_time_claims(10, Default::default(), Some(20), None, None, Default::default()),
             Err(CwtTimeError::ClockDrift)
-        ));
+        );
     }
 
     #[test]
@@ -113,10 +113,10 @@ mod tests {
         // exp == now -leeway
         verify_time_claims(10, Duration::from_secs(5), None, Some(5), None, Default::default()).unwrap();
         // exp > now - leeway
-        assert!(matches!(
+        std::assert_matches!(
             verify_time_claims(10, Duration::from_secs(5), None, Some(4), None, Default::default()),
             Err(CwtTimeError::Expired)
-        ));
+        );
     }
 
     #[test]
@@ -130,9 +130,9 @@ mod tests {
         // nbf == now + leeway
         verify_time_claims(10, Duration::from_secs(5), None, None, Some(15), Default::default()).unwrap();
         // nbf > now + leeway
-        assert!(matches!(
+        std::assert_matches!(
             verify_time_claims(10, Duration::from_secs(5), None, None, Some(16), Default::default()),
             Err(CwtTimeError::NotValidYet)
-        ));
+        );
     }
 }

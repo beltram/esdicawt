@@ -161,50 +161,50 @@ mod tests {
 
         // === sub mismatch ===
         validation_params.expected_subject.replace("sub-b");
-        assert!(matches!(
+        std::assert_matches!(
             holder.verify_sd_cwt(&sd_cwt, validation_params.clone(), &issuer_verifying_key),
             Err(SdCwtHolderError::ValidationError(SdCwtHolderValidationError::SubMismatch { expected, actual })) if &expected == "sub-b" && &actual == "sub-a"
-        ));
+        );
         // works with right expectation
         validation_params.expected_subject.replace("sub-a");
         holder.verify_sd_cwt(&sd_cwt, validation_params.clone(), &issuer_verifying_key).unwrap();
 
         // === issuer mismatch ===
         validation_params.expected_issuer.replace("iss-b");
-        assert!(matches!(
+        std::assert_matches!(
             holder.verify_sd_cwt(&sd_cwt, validation_params.clone(), &issuer_verifying_key),
             Err(SdCwtHolderError::ValidationError(SdCwtHolderValidationError::IssuerMismatch { expected, actual })) if &expected == "iss-b" && &actual == "iss-a"
-        ));
+        );
         // works with right expectation
         validation_params.expected_issuer.replace("iss-a");
         holder.verify_sd_cwt(&sd_cwt, validation_params.clone(), &issuer_verifying_key).unwrap();
 
         // === audience mismatch ===
         validation_params.expected_audience.replace("aud-b");
-        assert!(matches!(
+        std::assert_matches!(
             holder.verify_sd_cwt(&sd_cwt, validation_params.clone(), &issuer_verifying_key),
             Err(SdCwtHolderError::ValidationError(SdCwtHolderValidationError::AudienceMismatch { expected, actual })) if &expected == "aud-b" && &actual == "aud-a"
-        ));
+        );
         // works with right expectation
         validation_params.expected_audience.replace("aud-a");
         holder.verify_sd_cwt(&sd_cwt, validation_params.clone(), &issuer_verifying_key).unwrap();
 
         // === cnonce mismatch ===
         validation_params.expected_cnonce.replace(b"cnonce-b");
-        assert!(matches!(
+        std::assert_matches!(
             holder.verify_sd_cwt(&sd_cwt, validation_params.clone(), &issuer_verifying_key),
             Err(SdCwtHolderError::ValidationError(SdCwtHolderValidationError::CnonceMismatch { expected, actual })) if &expected == b"cnonce-b" && &actual == b"cnonce-a"
-        ));
+        );
         // works with right expectation
         validation_params.expected_cnonce.replace(b"cnonce-a");
         holder.verify_sd_cwt(&sd_cwt, validation_params.clone(), &issuer_verifying_key).unwrap();
 
         // === verifying key mismatch
         let holder_bis = Ed25519Holder::<Value, NoClaims>::new(ed25519_dalek::SigningKey::generate(&mut rand::thread_rng()));
-        assert!(matches!(
+        std::assert_matches!(
             holder_bis.verify_sd_cwt(&sd_cwt, validation_params.clone(), &issuer_verifying_key),
             Err(SdCwtHolderError::ValidationError(SdCwtHolderValidationError::VerifyingKeyMismatch))
-        ));
+        );
     }
 
     #[test]
@@ -235,10 +235,10 @@ mod tests {
             .disclosures_mut()
             .unwrap()
             .retain(|d| !matches!(d.to_value().unwrap(), c if c.name() == Some(&SdCwtClaim::Int(42))));
-        assert!(matches!(
+        std::assert_matches!(
             holder.verify_sd_cwt(&sd_cwt.to_cbor_bytes().unwrap(), Default::default(), &issuer_verifying_key),
             Err(SdCwtHolderError::ValidationError(SdCwtHolderValidationError::DisclosureNotFound))
-        ));
+        );
 
         // remove disclosure of the inner map
         let mut sd_cwt = sd_cwt_tagged.clone();
@@ -246,10 +246,10 @@ mod tests {
             .disclosures_mut()
             .unwrap()
             .retain(|d| !matches!(d.to_value().unwrap(), c if c.name() == Some(&SdCwtClaim::Int(44))));
-        assert!(matches!(
+        std::assert_matches!(
             holder.verify_sd_cwt(&sd_cwt.to_cbor_bytes().unwrap(), Default::default(), &issuer_verifying_key),
             Err(SdCwtHolderError::ValidationError(SdCwtHolderValidationError::DisclosureNotFound))
-        ));
+        );
 
         // remove disclosure of the array element
         let mut sd_cwt = sd_cwt_tagged.clone();
@@ -257,10 +257,10 @@ mod tests {
             .disclosures_mut()
             .unwrap()
             .retain(|d| !matches!(d.to_value().unwrap(), c if c.value() == Some(&cbor!(46).unwrap())));
-        assert!(matches!(
+        std::assert_matches!(
             holder.verify_sd_cwt(&sd_cwt.to_cbor_bytes().unwrap(), Default::default(), &issuer_verifying_key),
             Err(SdCwtHolderError::ValidationError(SdCwtHolderValidationError::DisclosureNotFound))
-        ));
+        );
 
         // remove disclosure of the nested array element
         let mut sd_cwt = sd_cwt_tagged.clone();
@@ -268,10 +268,10 @@ mod tests {
             .disclosures_mut()
             .unwrap()
             .retain(|d| !matches!(d.to_value().unwrap(), c if c.value() == Some(&cbor!(48).unwrap())));
-        assert!(matches!(
+        std::assert_matches!(
             holder.verify_sd_cwt(&sd_cwt.to_cbor_bytes().unwrap(), Default::default(), &issuer_verifying_key),
             Err(SdCwtHolderError::ValidationError(SdCwtHolderValidationError::DisclosureNotFound))
-        ));
+        );
 
         // adding extra disclosure
         let mut sd_cwt = sd_cwt_tagged.clone();
@@ -280,21 +280,21 @@ mod tests {
             salt: Salt::empty(),
         });
         sd_cwt.disclosures_mut().unwrap().push(extra.into());
-        assert!(matches!(
+        std::assert_matches!(
             holder.verify_sd_cwt(&sd_cwt.to_cbor_bytes().unwrap(), Default::default(), &issuer_verifying_key),
             Err(SdCwtHolderError::ValidationError(SdCwtHolderValidationError::OrphanDisclosure { expected, actual }))
             if expected == 8 && actual == 9
-        ));
+        );
 
         // adding extra decoy disclosure
         let mut sd_cwt = sd_cwt_tagged.clone();
         let extra = SaltedEntry::Decoy(Decoy { salt: (Salt::empty(),) });
         sd_cwt.disclosures_mut().unwrap().push(extra.into());
-        assert!(matches!(
+        std::assert_matches!(
             holder.verify_sd_cwt(&sd_cwt.to_cbor_bytes().unwrap(), Default::default(), &issuer_verifying_key),
             Err(SdCwtHolderError::ValidationError(SdCwtHolderValidationError::OrphanDisclosure { expected, actual }))
             if expected == 8 && actual == 9
-        ));
+        );
 
         // alter disclosure of the map element
         let mut sd_cwt = sd_cwt_tagged.clone();
@@ -306,10 +306,10 @@ mod tests {
             })
             .unwrap();
         }
-        assert!(matches!(
+        std::assert_matches!(
             holder.verify_sd_cwt(&sd_cwt.to_cbor_bytes().unwrap(), Default::default(), &issuer_verifying_key),
             Err(SdCwtHolderError::ValidationError(SdCwtHolderValidationError::DisclosureNotFound))
-        ));
+        );
 
         // alter disclosure of the array element
         #[allow(clippy::redundant_clone)]
@@ -322,10 +322,10 @@ mod tests {
             })
             .unwrap();
         }
-        assert!(matches!(
+        std::assert_matches!(
             holder.verify_sd_cwt(&sd_cwt.to_cbor_bytes().unwrap(), Default::default(), &issuer_verifying_key),
             Err(SdCwtHolderError::ValidationError(SdCwtHolderValidationError::DisclosureNotFound))
-        ));
+        );
     }
 
     #[test]
@@ -369,14 +369,14 @@ mod tests {
 
         let issuer_signing_key_bis = ed25519_dalek::SigningKey::generate(&mut rand::thread_rng());
 
-        assert!(matches!(
+        std::assert_matches!(
             holder.verify_sd_cwt(
                 &sd_cwt,
                 Default::default(),
                 &CoseKeySet::builder().with_signing_key(&issuer_signing_key_bis).unwrap().build()
             ),
             Err(SdCwtHolderError::IssuerSignatureValidationError(SignatureVerifierError::SignatureError(_)))
-        ));
+        );
     }
 
     fn default_issuer_params(holder_signing_key: &ed25519_dalek::SigningKey, payload: Option<Value>) -> IssuerParams<'_, Value> {

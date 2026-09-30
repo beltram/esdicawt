@@ -1,6 +1,6 @@
 use digest::{FixedOutput, FixedOutputReset, Output, OutputSizeUser, Reset, Update, consts::U32};
 
-#[derive(Clone)]
+#[derive(Debug, Clone)]
 pub struct AnyDigest;
 
 impl OutputSizeUser for AnyDigest {
