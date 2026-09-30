@@ -187,27 +187,27 @@ mod tests {
 
         // --- disclosures ---
         let d1 = d1.deserialized::<SaltedClaim<u64>>().unwrap();
-        assert!(matches!(&d1.name, SdCwtClaim::Tstr(n) if n == "a"));
+        std::assert_matches!(&d1.name, SdCwtClaim::Tstr(n) if n == "a");
         assert_eq!(d1.value, 1);
         assert!(rck_contains_digest(&rck, &d1));
 
         let d2 = d2.deserialized::<SaltedClaim<String>>().unwrap();
-        assert!(matches!(&d2.name, SdCwtClaim::Int(n) if *n == 2));
+        std::assert_matches!(&d2.name, SdCwtClaim::Int(n) if *n == 2);
         assert_eq!(&d2.value, "b");
         assert!(rck_contains_digest(&rck, &d2));
 
         let d3 = d3.deserialized::<SaltedClaim<Option<u8>>>().unwrap();
-        assert!(matches!(&d3.name, SdCwtClaim::Int(n) if *n == 3));
+        std::assert_matches!(&d3.name, SdCwtClaim::Int(n) if *n == 3);
         assert_eq!(d3.value, None);
         assert!(rck_contains_digest(&rck, &d3));
 
         let d4 = d4.deserialized::<SaltedClaim<bool>>().unwrap();
-        assert!(matches!(&d4.name, SdCwtClaim::Int(n) if *n == 4));
+        std::assert_matches!(&d4.name, SdCwtClaim::Int(n) if *n == 4);
         assert!(!d4.value);
         assert!(rck_contains_digest(&rck, &d4));
 
         let d5 = d5.deserialized::<SaltedClaim<f64>>().unwrap();
-        assert!(matches!(&d5.name, SdCwtClaim::Int(n) if *n == 5));
+        std::assert_matches!(&d5.name, SdCwtClaim::Int(n) if *n == 5);
         assert_eq!(d5.value, 14.3);
         assert!(rck_contains_digest(&rck, &d5));
     }
@@ -226,7 +226,7 @@ mod tests {
         assert!(!payload.iter().any(|(k, _)| k == &cbor!(1).unwrap()));
 
         let d3 = d3.deserialized::<SaltedClaim<Vec<RedactedClaimElement>>>().unwrap();
-        assert!(matches!(&d3.name, SdCwtClaim::Int(n) if *n == 1));
+        std::assert_matches!(&d3.name, SdCwtClaim::Int(n) if *n == 1);
         assert!(rck_contains_digest(&rck, &d3));
 
         // verify that the disclosure of mapping claim '1' contains a redacted array which itself
@@ -258,7 +258,7 @@ mod tests {
         assert!(!payload.iter().any(|(k, _)| k == &cbor!(1).unwrap()));
 
         let d4 = d4.deserialized::<SaltedClaim<Vec<RedactedClaimElement>>>().unwrap();
-        assert!(matches!(&d4.name, SdCwtClaim::Int(n) if *n == 1));
+        std::assert_matches!(&d4.name, SdCwtClaim::Int(n) if *n == 1);
         assert!(rck_contains_digest(&rck, &d4));
 
         // verify that the disclosure of mapping claim '1' contains a redacted array which itself
@@ -291,7 +291,7 @@ mod tests {
 
         // --- disclosures ---
         let d0 = d0.deserialized::<SaltedClaim<Value>>().unwrap();
-        assert!(matches!(&d0.name, SdCwtClaim::Int(i) if *i == 0));
+        std::assert_matches!(&d0.name, SdCwtClaim::Int(i) if *i == 0);
         assert!(rck_contains_digest(&rck0, &d0));
 
         // --- depth 1 ---
@@ -302,7 +302,7 @@ mod tests {
 
         // --- disclosures ---
         let d1 = d1.deserialized::<SaltedClaim<String>>().unwrap();
-        assert!(matches!(&d1.name, SdCwtClaim::Int(i) if *i == 1));
+        std::assert_matches!(&d1.name, SdCwtClaim::Int(i) if *i == 1);
         assert_eq!(d1.value, "a".to_string());
     }
 
@@ -321,7 +321,7 @@ mod tests {
 
         // --- depth 2 ---
         let d2 = d2.deserialized::<SaltedClaim<u64>>().unwrap();
-        assert!(matches!(&d2.name, SdCwtClaim::Int(n) if *n == 1));
+        std::assert_matches!(&d2.name, SdCwtClaim::Int(n) if *n == 1);
         assert_eq!(d2.value, 2);
 
         // --- depth 1 ---
@@ -333,7 +333,7 @@ mod tests {
 
         // --- depth 0, again ---
         let d0 = d0.deserialized::<SaltedClaim<Vec<RedactedClaimElement>>>().unwrap();
-        assert!(matches!(&d0.name, SdCwtClaim::Int(n) if *n == 0));
+        std::assert_matches!(&d0.name, SdCwtClaim::Int(n) if *n == 0);
 
         let [mapping12]: [RedactedClaimElement; 1] = d0.value.try_into().unwrap();
         assert_eq!(mapping12.to_cbor_value().unwrap(), element_digest(&d1));

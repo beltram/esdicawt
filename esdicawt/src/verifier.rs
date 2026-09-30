@@ -702,14 +702,14 @@ mod tests {
 
         // verifying Holder signature
         let holder_verifying_key_bis = ed25519_dalek::SigningKey::generate(&mut rand::thread_rng()).verifying_key();
-        assert!(matches!(
+        std::assert_matches!(
             verifier.verify_sd_kbt(&sd_kbt, &Default::default(), Some(&holder_verifying_key_bis), &cks),
             Err(SdCwtVerifierError::UnexpectedKeyConfirmation)
-        ));
+        );
 
         // verifying Issuer signature
         let issuer_verifying_key_bis = ed25519_dalek::SigningKey::generate(&mut rand::thread_rng()).verifying_key();
-        assert!(matches!(
+        std::assert_matches!(
             verifier.verify_sd_kbt(
                 &sd_kbt,
                 &Default::default(),
@@ -717,7 +717,7 @@ mod tests {
                 &CoseKeySet::builder().with(&issuer_verifying_key_bis).unwrap().build()
             ),
             Err(SdCwtVerifierError::SignatureError(_))
-        ));
+        );
     }
 
     #[test]
@@ -733,16 +733,16 @@ mod tests {
         let params = VerifierParams::default();
 
         let results = verifier.verify_sd_kbt_batch(&[(&sd_kbt, &params, None), (&sd_kbt, &params, Some(&holder_verifying_key))], &cks);
-        assert!(matches!(results.as_slice(), [Ok(_), Ok(_)]));
+        std::assert_matches!(results.as_slice(), [Ok(_), Ok(_)]);
 
         // an invalid signature is attributed to the right SD-KBT
         let results = verifier.verify_sd_kbt_batch(&[(&sd_kbt, &params, None), (&other_sd_kbt, &params, None), (&sd_kbt, &params, None)], &cks);
-        assert!(matches!(results.as_slice(), [Ok(_), Err(SdCwtVerifierError::SignatureError(_)), Ok(_)]));
+        std::assert_matches!(results.as_slice(), [Ok(_), Err(SdCwtVerifierError::SignatureError(_)), Ok(_)]);
 
         // a SD-KBT failing before signature verification does not taint the others
         let holder_verifying_key_bis = ed25519_dalek::SigningKey::generate(&mut rand::thread_rng()).verifying_key();
         let results = verifier.verify_sd_kbt_batch(&[(&sd_kbt, &params, Some(&holder_verifying_key_bis)), (&sd_kbt, &params, None)], &cks);
-        assert!(matches!(results.as_slice(), [Err(SdCwtVerifierError::UnexpectedKeyConfirmation), Ok(_)]));
+        std::assert_matches!(results.as_slice(), [Err(SdCwtVerifierError::UnexpectedKeyConfirmation), Ok(_)]);
 
         assert!(verifier.verify_sd_kbt_batch(&[], &cks).is_empty());
     }
@@ -759,14 +759,14 @@ mod tests {
 
         let issuer_signing_key = p256::ecdsa::SigningKey::random(&mut rand::thread_rng());
         let cks = CoseKeySet::builder().with_signing_key(&issuer_signing_key).unwrap().build();
-        assert!(matches!(
+        std::assert_matches!(
             verifier.verify_sd_kbt(&sd_kbt, &Default::default(), None, &cks),
             Err(SdCwtVerifierError::IssuerSignatureValidationError(SignatureVerifierError::NoSigner))
-        ));
-        assert!(matches!(
+        );
+        std::assert_matches!(
             verifier.shallow_verify_sd_kbt(&sd_kbt, &Default::default(), None, &cks),
             Err(SdCwtVerifierError::IssuerSignatureValidationError(SignatureVerifierError::NoSigner))
-        ));
+        );
     }
 
     #[test]
@@ -802,11 +802,11 @@ mod tests {
             expected_subject: Some("sub-b"),
             ..Default::default()
         };
-        assert!(matches!(
+        std::assert_matches!(
         verifier.verify_sd_kbt(&sd_kbt, &params, Some(&holder_verifying_key), &cks),
             Err(SdCwtVerifierError::SubMismatch { expected, actual })
             if expected == "sub-b" && actual == "sub-a"
-        ));
+        );
 
         // === verify SD-CWT issuer
         // ok when same
@@ -820,11 +820,11 @@ mod tests {
             expected_issuer: Some("iss-b"),
             ..Default::default()
         };
-        assert!(matches!(
+        std::assert_matches!(
         verifier.verify_sd_kbt(&sd_kbt, &params, Some(&holder_verifying_key), &cks),
             Err(SdCwtVerifierError::IssuerMismatch { expected, actual })
             if expected == "iss-b" && actual == "iss-a"
-        ));
+        );
 
         // === verify SD-CWT audience
         // ok when same
@@ -838,11 +838,11 @@ mod tests {
             expected_audience: Some("aud-b"),
             ..Default::default()
         };
-        assert!(matches!(
+        std::assert_matches!(
         verifier.verify_sd_kbt(&sd_kbt, &params, Some(&holder_verifying_key), &cks),
             Err(SdCwtVerifierError::AudienceMismatch { expected, actual })
             if expected == "aud-b" && actual == "aud-a"
-        ));
+        );
 
         // === verify SD-KBT audience
         // ok when same
@@ -856,11 +856,11 @@ mod tests {
             expected_kbt_audience: Some("kbt-aud-b"),
             ..Default::default()
         };
-        assert!(matches!(
+        std::assert_matches!(
         verifier.verify_sd_kbt(&sd_kbt, &params, Some(&holder_verifying_key), &cks),
             Err(SdCwtVerifierError::KbtAudienceMismatch { expected, actual })
             if expected == "kbt-aud-b" && actual == "kbt-aud-a"
-        ));
+        );
 
         // === verify SD-KBT cnonce
         // ok when same
@@ -874,11 +874,11 @@ mod tests {
             expected_cnonce: Some(b"kbt-cnonce-b"),
             ..Default::default()
         };
-        assert!(matches!(
+        std::assert_matches!(
         verifier.verify_sd_kbt(&sd_kbt, &params, Some(&holder_verifying_key), &cks),
             Err(SdCwtVerifierError::CnonceMismatch { expected, actual })
             if expected == b"kbt-cnonce-b" && actual == b"kbt-cnonce-a"
-        ));
+        );
     }
 
     #[test]
@@ -997,7 +997,7 @@ mod tests {
             .verify_sd_kbt_with_status(&sd_kbt, verifier_params, status_list_verifier_params, None, &cks, status_list_cks)
             .await
             .unwrap_err();
-        assert!(matches!(err, SdCwtVerifierError::StatusError(SdCwtStatusVerifierError::StatusNotFound(uri)) if uri == status_uri));
+        std::assert_matches!(err, SdCwtVerifierError::StatusError(SdCwtStatusVerifierError::StatusNotFound(uri)) if uri == status_uri);
 
         // 3. status at index is not valid
         status_list.set(64, OauthStatus::Invalid);
@@ -1007,7 +1007,7 @@ mod tests {
             .verify_sd_kbt_with_status(&sd_kbt, verifier_params, status_list_verifier_params, None, &cks, status_list_cks)
             .await
             .unwrap_err();
-        assert!(matches!(err, SdCwtVerifierError::StatusError(SdCwtStatusVerifierError::StatusInvalid(uri)) if uri == status_uri));
+        std::assert_matches!(err, SdCwtVerifierError::StatusError(SdCwtStatusVerifierError::StatusInvalid(uri)) if uri == status_uri);
 
         // 4. index is out of bounds
         let short_status_list = StatusList::<OauthStatus>::with_capacity(1 << 6, None);
@@ -1017,7 +1017,7 @@ mod tests {
             .verify_sd_kbt_with_status(&sd_kbt, verifier_params, status_list_verifier_params, None, &cks, status_list_cks)
             .await
             .unwrap_err();
-        assert!(matches!(err, SdCwtVerifierError::StatusError(SdCwtStatusVerifierError::IndexOutOfBounds(uri)) if uri == status_uri));
+        std::assert_matches!(err, SdCwtVerifierError::StatusError(SdCwtStatusVerifierError::IndexOutOfBounds(uri)) if uri == status_uri);
 
         // 5. ensure we don't have an off by one issue
         issuer_params.status.status_list_bit_index = 63;
@@ -1039,7 +1039,7 @@ mod tests {
         let fake_status_token_signer = ed25519_dalek::SigningKey::generate(&mut rand::thread_rng());
         let fake_status_list_cks = CoseKeySet::builder().with(&fake_status_token_signer.verifying_key()).unwrap().build();
         let err = verifier.verify_status_token(&status_token.to_cbor_bytes().unwrap(), &fake_status_list_cks).unwrap_err();
-        assert!(matches!(err, SdCwtVerifierError::StatusError(SdCwtStatusVerifierError::InvalidStatusTokenSignature(_))));
+        std::assert_matches!(err, SdCwtVerifierError::StatusError(SdCwtStatusVerifierError::InvalidStatusTokenSignature(_)));
     }
 
     #[test]
