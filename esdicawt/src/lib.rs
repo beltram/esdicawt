@@ -3,7 +3,7 @@
 #[cfg(feature = "status")]
 pub use {
     issuer::params::StatusParams,
-    verifier::{VerifiedStatusListToken, VerifierWithStatus, params::StatusListVerifierParams},
+    verifier::{VerifiedStatusListToken, VerifierWithStatus, error::SdCwtStatusVerifierError, params::StatusListVerifierParams},
 };
 
 pub use crate::spec::reexports::coset;
