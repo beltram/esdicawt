@@ -14,10 +14,7 @@ use pkcs8::DecodePrivateKey;
 use rand_core::{CryptoRng, Error, RngCore};
 use serde::ser::SerializeMap;
 use spice_oidc_cwt::{CwtOidcAddressLabel, OidcAddressClaim};
-use std::{
-    io::Write,
-    sync::atomic::{AtomicU32, Ordering},
-};
+use std::io::Write;
 
 #[derive(Debug, Clone, PartialEq, derive_builder::Builder)]
 #[builder(pattern = "mutable")]
@@ -320,12 +317,11 @@ impl<T: Select> Holder for P256Holder<T> {
 }
 
 #[test]
-#[ignore]
 fn normal_test_vectors() {
     let payload = Payload {
         most_recent_inspection_passed: true,
         inspector_license_number: Some("ABCD-123456".into()),
-        inspection_dates: vec![1549560720, 1612560720, 17183928],
+        inspection_dates: vec![1549560720, 1612560720, 1674004740],
         inspection_location: OidcAddressClaim {
             country: Some("us".into()),
             region: Some("ca".into()),
@@ -341,7 +337,6 @@ fn normal_test_vectors() {
 }
 
 #[test]
-#[ignore]
 fn nested_test_vectors() {
     let payload1 = PayloadLog {
         most_recent_inspection_passed: true,
@@ -368,7 +363,7 @@ fn nested_test_vectors() {
     let payload3 = PayloadLog {
         most_recent_inspection_passed: true,
         inspector_license_number: Some("ABCD-123456".into()),
-        inspection_date: 17183928,
+        inspection_date: 1674004740,
         inspection_location: OidcAddressClaim {
             country: Some("us".into()),
             region: Some("ca".into()),
@@ -402,7 +397,7 @@ fn test_vectors<P: Select>(payload: P, spec_sd_cwt_bytes: &[u8], spec_sd_kbt_byt
         unprotected_claims: None::<NoClaims>,
         payload: Some(payload),
         issuer: "https://issuer.example",
-        subject: Some("https://device.example"),
+        subject: Some("https://holder.example"),
         audience: Default::default(),
         cti: Default::default(),
         cnonce: Default::default(),
@@ -427,7 +422,7 @@ fn test_vectors<P: Select>(payload: P, spec_sd_cwt_bytes: &[u8], spec_sd_kbt_byt
     let spec_payload = spec_payload.as_bytes().unwrap();
     let spec_payload = Value::from_cbor_bytes(spec_payload).unwrap().into_map().unwrap();
 
-    let esdicawt_sd_cwt = sd_issuer.issue_cwt(&mut TestVectorRng, params).unwrap();
+    let esdicawt_sd_cwt = sd_issuer.issue_cwt(&mut TestVectorRng::default(), params).unwrap();
     let esdicawt_sd_cwt_bytes = esdicawt_sd_cwt.to_cbor_bytes().unwrap();
     let esdicawt_sd_cwt = Value::from_cbor_bytes(&esdicawt_sd_cwt_bytes).unwrap();
     let mut esdicawt_sd_cwt = esdicawt_sd_cwt.into_tag().unwrap().1.into_array().unwrap();
@@ -559,7 +554,10 @@ fn issuer_verifying_key() -> CoseKeySet {
     CoseKeySet::builder().with_signing_key(&issuer_signing_key()).unwrap().build()
 }
 
-struct TestVectorRng;
+#[derive(Default)]
+struct TestVectorRng {
+    ctr: usize,
+}
 
 impl CryptoRng for TestVectorRng {}
 
@@ -577,7 +575,6 @@ impl RngCore for TestVectorRng {
     }
 
     fn try_fill_bytes(&mut self, mut dest: &mut [u8]) -> Result<(), Error> {
-        static CTR: AtomicU32 = AtomicU32::new(0);
         const SALTS: &[&str] = &[
             // first disclosure
             "bae611067bb823486797da1ebbb52f83",
@@ -626,9 +623,10 @@ impl RngCore for TestVectorRng {
             // G
             "d2be8cc99c185ef10e3f91a61d2d9bf9",
         ];
-        let i = CTR.fetch_add(1, Ordering::SeqCst);
+        let i = self.ctr;
+        self.ctr += 1;
         #[allow(clippy::indexing_slicing)]
-        let salt = SALTS[i as usize];
+        let salt = SALTS[i];
         let _ = dest.write(&hex::decode(salt).unwrap()[..]).unwrap();
         Ok(())
     }
