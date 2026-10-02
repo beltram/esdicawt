@@ -114,13 +114,12 @@ fn normal_test_vectors() {
 }
 
 #[test]
-#[ignore]
 fn nested_test_vectors() {
     let payload1 = PayloadLog {
         most_recent_inspection_passed: true,
         inspector_license_number: Some("DCBA-101777".into()),
         inspection_date: 1549560720,
-        inspection_location: InspectionLocation {
+        inspection_location: InspectionLocationNested {
             country: "us".into(),
             region: Some("co".into()),
             postal_code: Some("80302".into()),
@@ -130,7 +129,7 @@ fn nested_test_vectors() {
         most_recent_inspection_passed: true,
         inspector_license_number: Some("EFGH-789012".into()),
         inspection_date: 1612560720,
-        inspection_location: InspectionLocation {
+        inspection_location: InspectionLocationNested {
             country: "us".into(),
             region: Some("nv".into()),
             postal_code: Some("89155".into()),
@@ -140,7 +139,7 @@ fn nested_test_vectors() {
         most_recent_inspection_passed: true,
         inspector_license_number: Some("ABCD-123456".into()),
         inspection_date: 1674004740,
-        inspection_location: InspectionLocation {
+        inspection_location: InspectionLocationNested {
             country: "us".into(),
             region: Some("ca".into()),
             postal_code: Some("94188".into()),
