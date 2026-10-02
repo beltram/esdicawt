@@ -150,7 +150,6 @@ impl<IssuerPayloadClaims: Select, Hasher: digest::Digest + Clone, IssuerProtecte
         // map typ
         let builder = builder.value(CWT_MEDIA_TYPE, Value::Integer(MEDIA_TYPE_KB_CWT.into()));
 
-
         Ok(builder.build())
     }
 }
