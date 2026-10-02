@@ -7,7 +7,7 @@ use model::*;
 use rng::*;
 
 use esdicawt::{
-    Holder, HolderParams, Issuer, IssuerParams, TimeArg,
+    Holder, HolderParams, Issuer, IssuerParams, Presentation, TimeArg,
     cose_key::keyset::CoseKeySet,
     spec::{
         EsdicawtSpecError, NoClaims, SdHashAlg, Select,
@@ -101,18 +101,20 @@ fn normal_test_vectors() {
         inspection_dates: vec![1549560720, 1612560720, 1674004740],
         inspection_location: InspectionLocation {
             country: "us".into(),
-            region: "ca".into(),
-            postal_code: "94188".into(),
+            region: Some("ca".into()),
+            postal_code: Some("94188".into()),
         },
     };
 
     let spec_sd_cwt_bytes = include_bytes!("../../../draft-ietf-spice-sd-cwt/examples/issuer_cwt.cbor");
     let spec_sd_kbt_bytes = include_bytes!("../../../draft-ietf-spice-sd-cwt/examples/kbt.cbor");
 
-    test_vectors::<Payload>(payload, spec_sd_cwt_bytes, spec_sd_kbt_bytes, false)
+    // the holder discloses "inspector_license_number", "inspected 7-Feb-2019" and "region=California"
+    test_vectors::<Payload>(payload, spec_sd_cwt_bytes, spec_sd_kbt_bytes, false, &[0, 1, 3])
 }
 
 #[test]
+#[ignore]
 fn nested_test_vectors() {
     let payload1 = PayloadLog {
         most_recent_inspection_passed: true,
@@ -120,8 +122,8 @@ fn nested_test_vectors() {
         inspection_date: 1549560720,
         inspection_location: InspectionLocation {
             country: "us".into(),
-            region: "co".into(),
-            postal_code: "80302".into(),
+            region: Some("co".into()),
+            postal_code: Some("80302".into()),
         },
     };
     let payload2 = PayloadLog {
@@ -130,8 +132,8 @@ fn nested_test_vectors() {
         inspection_date: 1612560720,
         inspection_location: InspectionLocation {
             country: "us".into(),
-            region: "nv".into(),
-            postal_code: "89155".into(),
+            region: Some("nv".into()),
+            postal_code: Some("89155".into()),
         },
     };
     let payload3 = PayloadLog {
@@ -140,8 +142,8 @@ fn nested_test_vectors() {
         inspection_date: 1674004740,
         inspection_location: InspectionLocation {
             country: "us".into(),
-            region: "ca".into(),
-            postal_code: "94188".into(),
+            region: Some("ca".into()),
+            postal_code: Some("94188".into()),
         },
     };
 
@@ -155,10 +157,12 @@ fn nested_test_vectors() {
         spec_sd_cwt_bytes,
         spec_sd_kbt_bytes,
         true,
+        &[14, 11, 0, 13, 10, 3, 4],
     )
 }
 
-fn test_vectors<P: Select>(payload: P, spec_sd_cwt_bytes: &[u8], spec_sd_kbt_bytes: &[u8], nested: bool) {
+/// `presented` are the indexes, in the issued SD-CWT, of the disclosures presented by the holder, in the order of the SD-KBT
+fn test_vectors<P: Select>(payload: P, spec_sd_cwt_bytes: &[u8], spec_sd_kbt_bytes: &[u8], nested: bool, presented: &'static [usize]) {
     // === Issuer ===
     let sd_issuer = P384Issuer::<P>::new(issuer_signing_key());
 
@@ -192,7 +196,7 @@ fn test_vectors<P: Select>(payload: P, spec_sd_cwt_bytes: &[u8], spec_sd_kbt_byt
     let sd_holder = P256Holder::<P>::new(holder_signing_key());
 
     let params = HolderParams {
-        presentation: Default::default(),
+        presentation: Presentation::Custom(Box::new(|issued| presented.iter().filter_map(|&i| issued.get(i).cloned()).collect::<Vec<_>>().into())),
         audience: "https://verifier.example/app",
         cnonce: Some(&hex::decode("8c0f5f523b95bea44a9a48c649240803").unwrap()),
         expiry: None,

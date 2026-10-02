@@ -58,7 +58,7 @@ impl<'de> serde::Deserialize<'de> for Payload {
                     let values = values.into_iter().filter(|v| !matches!(v, Value::Tag(_, _))).collect::<Vec<_>>();
                     builder.inspection_dates(Value::Array(values).deserialized().map_err(D::Error::custom)?)
                 }
-                (Value::Integer(i), value) if i == CwtLabel::InspectionLocation => builder.inspection_location(value.deserialized().map_err(D::Error::custom)?),
+                (Value::Integer(i), location) if i == CwtLabel::InspectionLocation => builder.inspection_location(location.deserialized().map_err(D::Error::custom)?),
                 _ => unreachable!("Unexpected claim"),
             };
         }
@@ -85,10 +85,13 @@ impl Select for Payload {
             .collect();
         map.push((CwtLabel::InspectionDates.into(), Value::Array(inspection_dates)));
 
-        let mut inspection_location = Vec::with_capacity(3);
-        inspection_location.push(("country".into(), Value::Text(self.inspection_location.country)));
-        inspection_location.push((sd!(Value::from("region")), Value::Text(self.inspection_location.region)));
-        inspection_location.push((sd!(Value::from("postal_code")), Value::Text(self.inspection_location.postal_code)));
+        let mut inspection_location = vec![("country".into(), Value::Text(self.inspection_location.country))];
+        if let Some(region) = self.inspection_location.region {
+            inspection_location.push((sd!(Value::from("region")), Value::Text(region)));
+        }
+        if let Some(postal_code) = self.inspection_location.postal_code {
+            inspection_location.push((sd!(Value::from("postal_code")), Value::Text(postal_code)));
+        }
         map.push((CwtLabel::InspectionLocation.into(), Value::Map(inspection_location)));
 
         Ok(Value::Map(map))
@@ -183,7 +186,7 @@ impl<'de> serde::Deserialize<'de> for PayloadLog {
                 (Value::Integer(i), Value::Bool(b)) if i == CwtLabel::MostRecentInspectionPassed => builder.most_recent_inspection_passed(b),
                 (Value::Integer(i), Value::Text(s)) if i == CwtLabel::InspectorLicenseNumber => builder.inspector_license_number(s),
                 (Value::Integer(i), Value::Integer(d)) if i == CwtLabel::InspectionDates => builder.inspection_date(d.try_into().map_err(D::Error::custom)?),
-                (Value::Integer(i), value) if i == CwtLabel::InspectionLocation => builder.inspection_location(value.deserialized().map_err(D::Error::custom)?),
+                (Value::Integer(i), location) if i == CwtLabel::InspectionLocation => builder.inspection_location(location.deserialized().map_err(D::Error::custom)?),
                 _ => unreachable!("Unexpected claim"),
             };
         }
@@ -204,19 +207,48 @@ impl Select for PayloadLog {
 
         map.push((CwtLabel::InspectionDates.into(), Value::Integer(self.inspection_date.into())));
 
-        let mut inspection_location = Vec::with_capacity(3);
-        inspection_location.push(("country".into(), Value::Text(self.inspection_location.country)));
-        inspection_location.push((sd!(Value::from("region")), Value::Text(self.inspection_location.region)));
-        inspection_location.push((sd!(Value::from("postal_code")), Value::Text(self.inspection_location.postal_code)));
+        let mut inspection_location = vec![("country".into(), Value::Text(self.inspection_location.country))];
+        if let Some(region) = self.inspection_location.region {
+            inspection_location.push((sd!(Value::from("region")), Value::Text(region)));
+        }
+        if let Some(postal_code) = self.inspection_location.postal_code {
+            inspection_location.push((sd!(Value::from("postal_code")), Value::Text(postal_code)));
+        }
         map.push((sd!(Value::Integer((CwtLabel::InspectionLocation as i64).into())), Value::Map(inspection_location)));
 
         Ok(Value::Map(map))
     }
 }
 
-#[derive(Debug, Clone, Eq, PartialEq, Hash, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Clone, Eq, PartialEq, Hash, serde::Serialize)]
 pub struct InspectionLocation {
     pub country: String,
-    pub region: String,
-    pub postal_code: String,
+    pub region: Option<String>,
+    pub postal_code: Option<String>,
+}
+
+impl<'de> serde::Deserialize<'de> for InspectionLocation {
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        use serde::de::Error as _;
+
+        let value = <Value as serde::Deserialize>::deserialize(deserializer)?;
+        let values = value.into_map().map_err(|_| D::Error::custom("expected a map"))?;
+
+        let (mut country, mut region, mut postal_code) = (None, None, None);
+
+        for entry in values {
+            match entry {
+                (Value::Text(k), Value::Text(v)) if k == "country" => country = Some(v),
+                (Value::Text(k), Value::Text(v)) if k == "region" => region = Some(v),
+                (Value::Text(k), Value::Text(v)) if k == "postal_code" => postal_code = Some(v),
+                _ => {}
+            };
+        }
+
+        Ok(Self {
+            country: country.ok_or_else(|| D::Error::missing_field("country"))?,
+            region,
+            postal_code,
+        })
+    }
 }
