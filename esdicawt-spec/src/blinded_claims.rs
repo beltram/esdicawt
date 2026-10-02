@@ -65,20 +65,13 @@ pub struct SaltedClaimRef<'a, T: CwtAny> {
 
 impl<'a, T: CwtAny> ToRedacted for SaltedClaimRef<'a, T> {}
 
-#[derive(Debug, Clone, Copy, serde_tuple::Serialize_tuple, serde_tuple::Deserialize_tuple)]
+/// A decoy disclosure, a single element array containing only a salt
+#[derive(Debug, Clone, Copy, Eq, PartialEq, serde_tuple::Serialize_tuple, serde_tuple::Deserialize_tuple)]
 pub struct Decoy {
-    pub salt: (Salt,),
+    pub salt: Salt,
 }
 
 impl ToRedacted for Decoy {}
-
-impl PartialEq for Decoy {
-    fn eq(&self, other: &Self) -> bool {
-        self.salt.0.eq(&other.salt.0)
-    }
-}
-
-impl Eq for Decoy {}
 
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub enum SaltedEntry<T: CwtAny> {
@@ -105,8 +98,7 @@ impl<T: CwtAny> SaltedEntry<T> {
 
     pub fn salt(&self) -> Salt {
         match self {
-            Self::Claim(SaltedClaim { salt, .. }) | Self::Element(SaltedElement { salt, .. }) => *salt,
-            Self::Decoy(Decoy { salt: (s, ..) }) => *s,
+            Self::Claim(SaltedClaim { salt, .. }) | Self::Element(SaltedElement { salt, .. }) | Self::Decoy(Decoy { salt }) => *salt,
         }
     }
 
@@ -143,11 +135,7 @@ impl<T: CwtAny> serde::Serialize for SaltedEntry<T> {
                 array.serialize_element(value)?;
                 array.end()
             }
-            Self::Decoy(Decoy { salt: (salt,) }) => {
-                let mut array = serializer.serialize_seq(Some(1))?;
-                array.serialize_element(salt)?;
-                array.end()
-            }
+            Self::Decoy(decoy) => decoy.serialize(serializer),
         }
     }
 }
@@ -171,7 +159,7 @@ impl<'de, T: CwtAny> serde::Deserialize<'de> for SaltedEntry<T> {
                 let name = seq.next_element::<SdCwtClaim>()?;
 
                 Ok(match (salt, value, name) {
-                    (salt, None, None) => SaltedEntry::Decoy(Decoy { salt: (salt,) }),
+                    (salt, None, None) => SaltedEntry::Decoy(Decoy { salt }),
                     (salt, Some(value), None) => SaltedEntry::Element(SaltedElement { salt, value }),
                     (salt, Some(value), Some(name)) => SaltedEntry::Claim(SaltedClaim { salt, value, name }),
                     _ => return Err(A::Error::custom("Invalid disclosure")),
@@ -505,5 +493,36 @@ mod tests {
         let salted_entry = SaltedEntry::Claim(salted_claim);
         let redacted_claim_hash = salted_entry.to_redacted::<sha2::Sha256>().unwrap();
         assert_eq!(hex::encode(&*redacted_claim_hash), "af375dc3fba1d082448642c00be7b2f7bb05c9d8fb61cfc230ddfdfb4616a693");
+    }
+
+    // see https://datatracker.ietf.org/doc/html/draft-ietf-spice-sd-cwt#name-decoy-digests
+    #[test]
+    fn decoy_should_be_a_single_element_array() {
+        let salt = Salt(hex::decode("c1069bc056e234d64f58baff8a7b776b").unwrap().try_into().unwrap());
+        let decoy = Decoy { salt };
+        let expected = "8150c1069bc056e234d64f58baff8a7b776b";
+
+        let entry = SaltedEntry::<Value>::Decoy(decoy);
+        let entry_ref = SaltedEntryRef::<Value>::Decoy(decoy);
+        assert_eq!(hex::encode(decoy.to_cbor_bytes().unwrap()), expected);
+        assert_eq!(hex::encode(entry.to_cbor_bytes().unwrap()), expected);
+        let mut entry_ref_bytes = vec![];
+        ciborium::ser::into_writer(&entry_ref, &mut entry_ref_bytes).unwrap();
+        assert_eq!(hex::encode(entry_ref_bytes), expected);
+
+        // all have the same digest, the one of the decoy in the spec's example
+        let digest = "3f80963a1246b412d6567f2a5ca446fd19a01dd8cfc291bed69e8c575c5abfb8";
+        assert_eq!(hex::encode(&*decoy.to_redacted::<sha2::Sha256>().unwrap()), digest);
+        assert_eq!(hex::encode(&*entry.to_redacted::<sha2::Sha256>().unwrap()), digest);
+        assert_eq!(hex::encode(&*entry_ref.to_redacted::<sha2::Sha256>().unwrap()), digest);
+
+        // roundtrip
+        let bytes = hex::decode(expected).unwrap();
+        assert_eq!(Decoy::from_cbor_bytes(&bytes).unwrap(), decoy);
+        assert_eq!(SaltedEntry::<Value>::from_cbor_bytes(&bytes).unwrap(), entry);
+
+        // a disclosure is only a decoy when it contains nothing but a salt
+        let element = SaltedEntry::Element(SaltedElement { salt, value: Value::Bool(true) }).to_cbor_bytes().unwrap();
+        std::assert_matches!(SaltedEntry::<Value>::from_cbor_bytes(&element).unwrap(), SaltedEntry::Element(_));
     }
 }

@@ -660,7 +660,7 @@ mod tests {
     use crate::{
         CwtTimeError, HolderParams, Issuer, IssuerParams, Presentation, SdCwtVerifierError, StatusParams, TimeArg, Verifier, VerifierParams, elapsed_since_epoch,
         holder::Holder,
-        spec::{CustomClaims, CwtAny, NoClaims, Select, sd, verified::KbtCwtVerified},
+        spec::{CustomClaims, CwtAny, NoClaims, Select, decoy, sd, verified::KbtCwtVerified},
         test_utils::{Ed25519Holder, Ed25519Issuer},
         verifier::{VerifierWithStatus, error::SdCwtStatusVerifierError, test_utils::HybridVerifier},
     };
@@ -914,6 +914,52 @@ mod tests {
 
         // array in mapping
         verifying(cbor!({ "a" => [0, 1] }));
+    }
+
+    #[test]
+    #[wasm_bindgen_test::wasm_bindgen_test]
+    fn should_verify_with_decoys() {
+        let payload = cbor!({
+            "array" => ["a", sd!("b"), decoy!(1)],
+            sd!("c") => "d",
+            decoy!(2) => null,
+            "map" => { "e" => "f", decoy!(3) => null, decoy!(4) => null },
+        })
+        .unwrap();
+        let holder_signing_key = ed25519_dalek::SigningKey::generate(&mut rand::thread_rng());
+        let issuer_params = default_issuer_params(Some(payload), &holder_signing_key);
+        let verified = verify(issuer_params, default_holder_params::<NoClaims>(), &holder_signing_key).unwrap();
+
+        // the decoys are not part of the verified claims
+        let expected = cbor!({ "array" => ["a", "b"], "c" => "d", "map" => { "e" => "f" } }).unwrap();
+        assert_eq!(sorted(verified.claimset.unwrap()), sorted(expected));
+    }
+
+    #[test]
+    #[wasm_bindgen_test::wasm_bindgen_test]
+    fn should_remove_undisclosed_elements() {
+        let payload = cbor!({ "array" => ["a", sd!("b")] }).unwrap();
+        let holder_signing_key = ed25519_dalek::SigningKey::generate(&mut rand::thread_rng());
+        let issuer_params = default_issuer_params(Some(payload), &holder_signing_key);
+        let mut holder_params = default_holder_params::<NoClaims>();
+        holder_params.presentation = Presentation::None;
+        let verified = verify(issuer_params, holder_params, &holder_signing_key).unwrap();
+
+        // the redacted element is removed from the array, not left as a redacted claim element
+        assert_eq!(verified.claimset.unwrap(), cbor!({ "array" => ["a"] }).unwrap());
+    }
+
+    /// sorts the mappings' entries, recursively, to compare claim sets regardless of the order of disclosed claims
+    fn sorted(value: Value) -> Value {
+        match value {
+            Value::Map(mapping) => {
+                let mut mapping = mapping.into_iter().map(|(k, v)| (k, sorted(v))).collect::<Vec<_>>();
+                mapping.sort_by(|(a, _), (b, _)| a.partial_cmp(b).unwrap());
+                Value::Map(mapping)
+            }
+            Value::Array(array) => Value::Array(array.into_iter().map(sorted).collect()),
+            v => v,
+        }
     }
 
     #[test]
