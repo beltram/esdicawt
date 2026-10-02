@@ -1,0 +1,25 @@
+[package]
+name = "esdicawt-test-vector"
+edition.workspace = true
+version.workspace = true
+description = "Verifies esdicawt against the test vectors of draft-ietf-spice-sd-cwt"
+authors.workspace = true
+publish = false
+
+[dev-dependencies]
+# without the "status" feature since the test vectors have no status claim
+esdicawt = { workspace = true, features = ["test-vectors", "p256", "p384"] }
+esdicawt-spec.workspace = true
+ciborium.workspace = true
+p256.workspace = true
+p384.workspace = true
+pkcs8.workspace = true
+sha2.workspace = true
+rand_core.workspace = true
+hex.workspace = true
+serde = { workspace = true, features = ["derive"] }
+serde_repr.workspace = true
+derive_builder.workspace = true
+
+[lints]
+workspace = true
