@@ -22,6 +22,9 @@ pub enum CwtLabel {
     InspectionDates = 502,
     InspectionLocation = 503,
     NestedPayload = 504,
+    NestedCountry = 1,
+    NestedRegion = 2,
+    NestedPostalCode = 3,
 }
 
 cwt_label!(CwtLabel);
@@ -154,7 +157,7 @@ pub struct PayloadLog {
     #[builder(default, setter(into, strip_option))]
     pub inspector_license_number: Option<String>,
     pub inspection_date: u64,
-    pub inspection_location: InspectionLocation,
+    pub inspection_location: InspectionLocationNested,
 }
 
 impl serde::Serialize for PayloadLog {
@@ -207,12 +210,12 @@ impl Select for PayloadLog {
 
         map.push((CwtLabel::InspectionDates.into(), Value::Integer(self.inspection_date.into())));
 
-        let mut inspection_location = vec![("country".into(), Value::Text(self.inspection_location.country))];
+        let mut inspection_location = vec![(CwtLabel::NestedCountry.into(), Value::Text(self.inspection_location.country))];
         if let Some(region) = self.inspection_location.region {
-            inspection_location.push((sd!(Value::from("region")), Value::Text(region)));
+            inspection_location.push((sd!(CwtLabel::NestedRegion as i64), Value::Text(region)));
         }
         if let Some(postal_code) = self.inspection_location.postal_code {
-            inspection_location.push((sd!(Value::from("postal_code")), Value::Text(postal_code)));
+            inspection_location.push((sd!(CwtLabel::NestedPostalCode as i64), Value::Text(postal_code)));
         }
         map.push((sd!(Value::Integer((CwtLabel::InspectionLocation as i64).into())), Value::Map(inspection_location)));
 
@@ -241,6 +244,54 @@ impl<'de> serde::Deserialize<'de> for InspectionLocation {
                 (Value::Text(k), Value::Text(v)) if k == "country" => country = Some(v),
                 (Value::Text(k), Value::Text(v)) if k == "region" => region = Some(v),
                 (Value::Text(k), Value::Text(v)) if k == "postal_code" => postal_code = Some(v),
+                _ => {}
+            };
+        }
+
+        Ok(Self {
+            country: country.ok_or_else(|| D::Error::missing_field("country"))?,
+            region,
+            postal_code,
+        })
+    }
+}
+
+/// A bit different, labels are integers here to adapt to test vectors
+#[derive(Debug, Clone, Eq, PartialEq, Hash)]
+pub struct InspectionLocationNested {
+    pub country: String,
+    pub region: Option<String>,
+    pub postal_code: Option<String>,
+}
+
+impl serde::Serialize for InspectionLocationNested {
+    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        let mut map = serializer.serialize_map(Some(1 + self.region.is_some() as usize + self.postal_code.is_some() as usize))?;
+        map.serialize_entry(&CwtLabel::NestedCountry, &self.country)?;
+        if let Some(region) = &self.region {
+            map.serialize_entry(&CwtLabel::NestedRegion, &region)?;
+        }
+        if let Some(postal_code) = &self.postal_code {
+            map.serialize_entry(&CwtLabel::NestedPostalCode, &postal_code)?;
+        }
+        map.end()
+    }
+}
+
+impl<'de> serde::Deserialize<'de> for InspectionLocationNested {
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        use serde::de::Error as _;
+
+        let value = <Value as serde::Deserialize>::deserialize(deserializer)?;
+        let values = value.into_map().map_err(|_| D::Error::custom("expected a map"))?;
+
+        let (mut country, mut region, mut postal_code) = (None, None, None);
+
+        for entry in values {
+            match entry {
+                (Value::Integer(i), Value::Text(v)) if i == CwtLabel::NestedCountry => country = Some(v),
+                (Value::Integer(i), Value::Text(v)) if i == CwtLabel::NestedRegion => region = Some(v),
+                (Value::Integer(i), Value::Text(v)) if i == CwtLabel::NestedPostalCode => postal_code = Some(v),
                 _ => {}
             };
         }
