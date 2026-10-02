@@ -45,19 +45,33 @@ jobs:
       - run: cargo clippy -p esdicawt-test-vector --tests -- -D warnings
 
   test:
+    name: test (${{ matrix.name }})
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: default
+            args: ""
+          - name: backward # remove at some point when all consumers migrated
+            args: --features backward
+          - name: test-vectors
+            args: -p esdicawt-test-vector
+          - name: doc
+            args: --doc
+          - name: benches
+            args: --benches
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
       - uses: taiki-e/install-action@nextest
       - uses: Swatinem/rust-cache@v2
+        with:
+          # one cache per matrix entry since they do not build the same artifacts
+          key: ${{ matrix.name }}
         # temporary pinning the draft because the test vectors fail
       - run: git submodule init && git submodule update --recursive --remote && cd draft-ietf-spice-sd-cwt
-      - run: cargo test
-      - run: cargo test --features backward # remove at some point when all consumers migrated
-      - run: cargo test -p esdicawt-test-vector
-      - run: cargo test --doc
-      - run: cargo test --benches
+      - run: cargo test ${{ matrix.args }}
 
   wasm-test:
     runs-on: ubuntu-latest
