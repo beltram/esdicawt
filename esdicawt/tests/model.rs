@@ -2,7 +2,6 @@ use ciborium::Value;
 use esdicawt::cwt_label;
 use esdicawt_spec::{CwtAny, Select, sd};
 use serde::ser::SerializeMap;
-use spice_oidc_cwt::CwtOidcAddressLabel;
 
 #[derive(Debug, Clone, PartialEq, derive_builder::Builder)]
 #[builder(pattern = "mutable")]
@@ -87,9 +86,9 @@ impl Select for Payload {
         map.push((CwtLabel::InspectionDates.into(), Value::Array(inspection_dates)));
 
         let mut inspection_location = Vec::with_capacity(3);
-        inspection_location.push((CwtOidcAddressLabel::Country.into(), Value::Text(self.inspection_location.country)));
-        inspection_location.push((sd!(CwtOidcAddressLabel::Region), Value::Text(self.inspection_location.region)));
-        inspection_location.push((sd!(CwtOidcAddressLabel::PostalCode), Value::Text(self.inspection_location.postal_code)));
+        inspection_location.push(("country".into(), Value::Text(self.inspection_location.country)));
+        inspection_location.push((sd!(Value::from("region")), Value::Text(self.inspection_location.region)));
+        inspection_location.push((sd!(Value::from("postal_code")), Value::Text(self.inspection_location.postal_code)));
         map.push((CwtLabel::InspectionLocation.into(), Value::Map(inspection_location)));
 
         Ok(Value::Map(map))
@@ -206,9 +205,9 @@ impl Select for PayloadLog {
         map.push((CwtLabel::InspectionDates.into(), Value::Integer(self.inspection_date.into())));
 
         let mut inspection_location = Vec::with_capacity(3);
-        inspection_location.push((CwtOidcAddressLabel::Country.into(), Value::Text(self.inspection_location.country)));
-        inspection_location.push((sd!(CwtOidcAddressLabel::Region), Value::Text(self.inspection_location.region)));
-        inspection_location.push((sd!(CwtOidcAddressLabel::PostalCode), Value::Text(self.inspection_location.postal_code)));
+        inspection_location.push(("country".into(), Value::Text(self.inspection_location.country)));
+        inspection_location.push((sd!(Value::from("region")), Value::Text(self.inspection_location.region)));
+        inspection_location.push((sd!(Value::from("postal_code")), Value::Text(self.inspection_location.postal_code)));
         map.push((sd!(Value::Integer((CwtLabel::InspectionLocation as i64).into())), Value::Map(inspection_location)));
 
         Ok(Value::Map(map))
