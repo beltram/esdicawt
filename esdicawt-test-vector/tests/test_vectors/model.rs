@@ -1,6 +1,6 @@
 use ciborium::Value;
 use esdicawt::cwt_label;
-use esdicawt_spec::{CwtAny, Select, sd};
+use esdicawt_spec::{CwtAny, Select, decoy, sd};
 use serde::ser::SerializeMap;
 
 #[derive(Debug, Clone, PartialEq, derive_builder::Builder)]
@@ -25,6 +25,7 @@ pub enum CwtLabel {
     NestedCountry = 1,
     NestedRegion = 2,
     NestedPostalCode = 3,
+    Countries = 98,
 }
 
 cwt_label!(CwtLabel);
@@ -301,5 +302,69 @@ impl<'de> serde::Deserialize<'de> for InspectionLocationNested {
             region,
             postal_code,
         })
+    }
+}
+
+/// Payload of "decoy.cbor"
+#[derive(Debug, Clone, PartialEq)]
+pub struct DecoyPayload {
+    pub countries: Vec<String>,
+    pub most_recent_inspection_passed: Option<bool>,
+}
+
+impl serde::Serialize for DecoyPayload {
+    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        let mut map = serializer.serialize_map(Some(1 + self.most_recent_inspection_passed.is_some() as usize))?;
+        map.serialize_entry(&CwtLabel::Countries, &self.countries)?;
+        if let Some(most_recent_inspection_passed) = &self.most_recent_inspection_passed {
+            map.serialize_entry(&CwtLabel::MostRecentInspectionPassed, most_recent_inspection_passed)?;
+        }
+        map.end()
+    }
+}
+
+impl<'de> serde::Deserialize<'de> for DecoyPayload {
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        use serde::de::Error as _;
+
+        let value = <Value as serde::Deserialize>::deserialize(deserializer)?;
+        let values = value.into_map().map_err(|_| D::Error::custom("expected a map"))?;
+
+        let (mut countries, mut most_recent_inspection_passed) = (vec![], None);
+
+        for entry in values {
+            match entry {
+                (Value::Integer(i), Value::Array(values)) if i == CwtLabel::Countries => {
+                    // filters out the redacted elements
+                    countries = values.into_iter().filter_map(|v| v.into_text().ok()).collect();
+                }
+                (Value::Integer(i), Value::Bool(b)) if i == CwtLabel::MostRecentInspectionPassed => most_recent_inspection_passed = Some(b),
+                // the redacted claims
+                (Value::Simple(_), _) => {}
+                _ => unreachable!("Unexpected claim"),
+            };
+        }
+
+        Ok(Self {
+            countries,
+            most_recent_inspection_passed,
+        })
+    }
+}
+
+impl Select for DecoyPayload {
+    fn select(self) -> Result<Value, ciborium::value::Error> {
+        // redacts each country and adds a decoy to hide the number of countries
+        let mut countries = self.countries.into_iter().map(|c| sd!(c)).collect::<Vec<_>>();
+        countries.push(decoy!(1));
+
+        let mut map = vec![(CwtLabel::Countries.into(), Value::Array(countries))];
+        if let Some(most_recent_inspection_passed) = self.most_recent_inspection_passed {
+            map.push((sd!(CwtLabel::MostRecentInspectionPassed as i64), Value::Bool(most_recent_inspection_passed)));
+        }
+        // and a decoy in the payload
+        map.push((decoy!(2), Value::Null));
+
+        Ok(Value::Map(map))
     }
 }

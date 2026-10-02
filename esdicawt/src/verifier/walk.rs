@@ -1,7 +1,7 @@
 use crate::{
     SdCwtVerifierError, SdCwtVerifierResult,
     spec::{
-        CwtAny,
+        CwtAny, REDACTED_CLAIM_ELEMENT_TAG,
         blinded_claims::{SaltedClaim, SaltedElement, SaltedEntry},
         redacted_claims::{RedactedClaimElement, RedactedClaimKeys},
     },
@@ -58,7 +58,7 @@ where
             }
         }
         Value::Array(array) => {
-            for element in array {
+            for element in array.iter_mut() {
                 // not all the array elements are redacted, we might have partial redactions
                 let Ok(redacted_element) = element.deserialized::<RedactedClaimElement>() else {
                     walk_payload(hasher.clone(), element, disclosures)?;
@@ -78,6 +78,10 @@ where
                     }
                 }
             }
+
+            // the remaining redacted elements are either decoys or not disclosed, so they are removed
+            // see step 10 of https://datatracker.ietf.org/doc/html/draft-ietf-spice-sd-cwt#name-kbt-and-sd-cwt-verifier-val
+            array.retain(|element| !matches!(element, Value::Tag(REDACTED_CLAIM_ELEMENT_TAG, _)));
         }
         _ => {}
     }

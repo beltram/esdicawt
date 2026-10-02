@@ -1,13 +1,13 @@
 use crate::{
     SdCwtIssuerError,
     spec::{
-        CwtAny, Salt, SdCwtClaim, TO_BE_REDACTED_TAG,
-        blinded_claims::{SaltedArray, SaltedClaimRef, SaltedElementRef},
+        CwtAny, Salt, SdCwtClaim, TO_BE_DECOY_TAG, TO_BE_REDACTED_TAG,
+        blinded_claims::{Decoy, SaltedArray, SaltedClaimRef, SaltedElementRef},
         redacted_claims::{RedactedClaimElement, RedactedClaimKeys},
     },
 };
 use ciborium::Value;
-use std::ops::DerefMut;
+use std::{collections::HashSet, ops::DerefMut};
 
 /// Redacts the claims in this Value by recursively traversing, depth-first the ClaimSet
 pub fn redact<E, Hasher>(csprng: &mut dyn rand_core::CryptoRngCore, payload: &mut Value) -> Result<SaltedArray, SdCwtIssuerError<E>>
@@ -16,7 +16,8 @@ where
     Hasher: digest::Digest,
 {
     let mut sd_claims = SaltedArray::default();
-    redact_value::<E, Hasher>(payload, csprng, &mut sd_claims, None)?;
+    let mut decoys = HashSet::new();
+    redact_value::<E, Hasher>(payload, csprng, &mut sd_claims, &mut decoys, None)?;
     Ok(sd_claims)
 }
 
@@ -25,13 +26,14 @@ fn redact_value<E, Hasher>(
     value: &mut Value,
     csprng: &mut dyn rand_core::CryptoRngCore,
     sd_claims: &mut SaltedArray,
+    decoys: &mut HashSet<u64>,
     parent_ctx: Option<(&SdCwtClaim, &mut RedactedClaimKeys)>,
 ) -> Result<(), SdCwtIssuerError<E>>
 where
     E: core::error::Error + Send + Sync,
     Hasher: digest::Digest,
 {
-    _redact::<E, Hasher>(value, csprng, sd_claims, parent_ctx)
+    _redact::<E, Hasher>(value, csprng, sd_claims, decoys, parent_ctx)
 }
 
 #[tailcall::tailcall]
@@ -39,6 +41,7 @@ fn _redact<E, H>(
     mut value: &mut Value,
     csprng: &mut dyn rand_core::CryptoRngCore,
     sd_claims: &mut SaltedArray,
+    decoys: &mut HashSet<u64>,
     parent_ctx: Option<(&SdCwtClaim, &mut RedactedClaimKeys)>,
 ) -> Result<(), SdCwtIssuerError<E>>
 where
@@ -50,11 +53,26 @@ where
             let mut rcks = RedactedClaimKeys::with_capacity(mapping.len());
             let mut redacted = vec![];
             for (i, (label, claim_value)) in mapping.iter_mut().enumerate() {
-                if let Value::Tag(TO_BE_REDACTED_TAG, _) = label {
-                    redacted.push(i);
-                };
+                match label {
+                    Value::Tag(TO_BE_DECOY_TAG, decoy_index) => {
+                        // a decoy in a mapping: its digest goes in the 'redacted_claim_keys' and the entry is removed
+                        if !claim_value.is_null() {
+                            return Err(SdCwtIssuerError::CwtError("A decoy's mapping value must be null"));
+                        }
+                        let decoy = new_decoy(csprng, decoy_index, decoys)?;
+                        sd_claims.push_ref_bytes::<()>(decoy)?;
+                        rcks.push::<H>(&decoy)?;
+                        redacted.push(i);
+                        continue;
+                    }
+                    Value::Tag(TO_BE_REDACTED_TAG, _) => {
+                        redacted.push(i);
+                    }
+                    _ => {}
+                }
+
                 let label = Value::deserialized::<SdCwtClaim>(label)?;
-                redact_value::<E, H>(claim_value, csprng, sd_claims, Some((&label, &mut rcks)))?;
+                redact_value::<E, H>(claim_value, csprng, sd_claims, decoys, Some((&label, &mut rcks)))?;
             }
 
             // removal indexes need to be sorted in decreasing order
@@ -79,7 +97,7 @@ where
         }
         Value::Array(array) => {
             for element in array.iter_mut() {
-                redact_value::<E, H>(element, csprng, sd_claims, None)?;
+                redact_value::<E, H>(element, csprng, sd_claims, decoys, None)?;
             }
 
             // if we are in a mapping then redact the array itself
@@ -91,10 +109,10 @@ where
                 sd_claims.push_ref_bytes(salted_claim)?;
             }
         }
-        Value::Tag(tag, original_value) if *tag == TO_BE_REDACTED_TAG && (original_value.is_map() || original_value.is_array()) => {
+        Value::Tag(TO_BE_REDACTED_TAG, original_value) if (original_value.is_map() || original_value.is_array()) => {
             let in_array = parent_ctx.is_none();
 
-            redact_value::<E, H>(original_value, csprng, sd_claims, parent_ctx)?;
+            redact_value::<E, H>(original_value, csprng, sd_claims, decoys, parent_ctx)?;
 
             // if we are in an array then redact in place
             if in_array {
@@ -110,9 +128,13 @@ where
                 Some((parent_label, rcks)) => {
                     // ... in a Mapping. So we insert it in the disclosures and push the digest to it's parent 'redacted_claim_keys'
 
+                    if let Value::Tag(TO_BE_DECOY_TAG, _) = value {
+                        return Err(SdCwtIssuerError::CwtError("To Be Decoy tag not allowed in mapping values"));
+                    }
+
                     // unwrap tagged values
                     let value = match value {
-                        Value::Tag(tag, value) if *tag == TO_BE_REDACTED_TAG => value,
+                        Value::Tag(TO_BE_REDACTED_TAG, value) => value,
                         value => value,
                     };
 
@@ -124,7 +146,13 @@ where
                     }
                 }
                 None => {
-                    if let Value::Tag(TO_BE_REDACTED_TAG, original_value) = value {
+                    if let Value::Tag(TO_BE_DECOY_TAG, decoy_index) = value {
+                        // ... a decoy in an Array. So we insert it in the disclosures and replace the element with its digest in the array
+                        let decoy = new_decoy(csprng, decoy_index, decoys)?;
+                        let rce = RedactedClaimElement::from_salted_entry::<H>(&decoy)?;
+                        sd_claims.push_ref_bytes::<()>(decoy)?;
+                        *value = rce.to_cbor_value()?;
+                    } else if let Value::Tag(TO_BE_REDACTED_TAG, original_value) = value {
                         // ... in an Array. So we insert it in the disclosures and replace the element with its digest in the array
                         let salt = new_salt(csprng)?;
                         let salted_element = SaltedElementRef { salt, value: original_value };
@@ -137,6 +165,22 @@ where
         }
     }
     Ok(())
+}
+
+/// Creates a decoy for the To Be Decoy tag containing `decoy_index`, which must be an unsigned integer unique in the CWT
+/// see https://datatracker.ietf.org/doc/html/draft-ietf-spice-sd-cwt#name-to-be-decoy
+fn new_decoy<E>(csprng: &mut dyn rand_core::CryptoRngCore, decoy_index: &Value, decoys: &mut HashSet<u64>) -> Result<Decoy, SdCwtIssuerError<E>>
+where
+    E: core::error::Error + Send + Sync,
+{
+    let decoy_index = decoy_index
+        .as_integer()
+        .and_then(|i| u64::try_from(i).ok())
+        .ok_or(SdCwtIssuerError::CwtError("To Be Decoy tag must contain an unsigned integer"))?;
+    if !decoys.insert(decoy_index) {
+        return Err(SdCwtIssuerError::CwtError("To Be Decoy tag must contain an integer unique in the CWT"));
+    }
+    Ok(Decoy { salt: new_salt(csprng)? })
 }
 
 fn new_salt<E>(csprng: &mut dyn rand_core::CryptoRngCore) -> Result<Salt, SdCwtIssuerError<E>>
@@ -154,6 +198,7 @@ mod tests {
     use crate::spec::{
         REDACTED_CLAIM_ELEMENT_TAG,
         blinded_claims::{SaltedClaim, SaltedElement, SaltedEntry},
+        decoy,
         redacted_claims::ToRedacted,
         sd,
     };
@@ -339,11 +384,96 @@ mod tests {
         assert_eq!(mapping12.to_cbor_value().unwrap(), element_digest(&d1));
     }
 
+    #[test]
+    #[wasm_bindgen_test::wasm_bindgen_test]
+    fn should_insert_decoy_in_array() {
+        let payload = Value::Map(vec![(Value::Integer(1.into()), Value::Array(vec![Value::Text("a".into()), decoy!(1)]))]);
+        let (payload, [d1]) = _redact(payload);
+
+        // the element is replaced in place by the decoy digest
+        let payload = payload.as_map().unwrap();
+        let [(_, array)] = payload.as_slice() else { panic!("Expected a single claim") };
+        let [a, decoy] = array.as_array().unwrap().as_slice() else {
+            panic!("Expected 2 elements")
+        };
+        assert_eq!(a, &Value::Text("a".into()));
+
+        let d1 = SaltedEntry::<Value>::from_cbor_value(&d1).unwrap();
+        std::assert_matches!(d1, SaltedEntry::Decoy(_));
+        assert_eq!(decoy, &element_digest(&d1));
+    }
+
+    #[test]
+    #[wasm_bindgen_test::wasm_bindgen_test]
+    fn should_insert_decoys_in_mapping() {
+        let payload = Value::Map(vec![
+            (Value::Integer(1.into()), Value::Text("a".into())),
+            (decoy!(1), Value::Null),
+            (decoy!(2), Value::Null),
+        ]);
+        let (payload, [d1, d2]) = _redact(payload);
+
+        // the decoy entries are replaced by their digest in the 'redacted_claim_keys'
+        let rck = get_redacted_claim_keys::<2>(&payload);
+        let payload = payload.as_map().unwrap();
+        assert_eq!(payload.len(), 2);
+        assert!(!payload.iter().any(|(k, _)| matches!(k, Value::Tag(TO_BE_DECOY_TAG, _))));
+
+        for d in [d1, d2] {
+            let d = SaltedEntry::<Value>::from_cbor_value(&d).unwrap();
+            std::assert_matches!(d, SaltedEntry::Decoy(_));
+            assert!(rck_contains_digest(&rck, &d));
+        }
+    }
+
+    #[test]
+    #[wasm_bindgen_test::wasm_bindgen_test]
+    fn should_insert_decoy_in_redacted_array() {
+        let payload = Value::Map(vec![(sd!(1), Value::Array(vec![sd!("a"), decoy!(1)]))]);
+        let (payload, [d1, d2, d3]) = _redact(payload);
+
+        let rck = get_redacted_claim_keys::<1>(&payload);
+        let d3 = d3.deserialized::<SaltedClaim<Vec<RedactedClaimElement>>>().unwrap();
+        assert!(rck_contains_digest(&rck, &d3));
+
+        let [a, decoy]: [RedactedClaimElement; 2] = d3.value.try_into().unwrap();
+        assert_eq!(a.to_cbor_value().unwrap(), element_digest(&SaltedEntry::<Value>::from_cbor_value(&d1).unwrap()));
+        let d2 = SaltedEntry::<Value>::from_cbor_value(&d2).unwrap();
+        std::assert_matches!(d2, SaltedEntry::Decoy(_));
+        assert_eq!(decoy.to_cbor_value().unwrap(), element_digest(&d2));
+    }
+
+    #[test]
+    #[wasm_bindgen_test::wasm_bindgen_test]
+    fn should_reject_invalid_decoys() {
+        let int = |i: i64| Value::Integer(i.into());
+
+        // the decoy integer must be unique in the CWT, not just at a given level
+        let duplicate = Value::Map(vec![(decoy!(1), Value::Null), (int(2), Value::Array(vec![decoy!(1)]))]);
+        std::assert_matches!(try_redact(duplicate), Err(SdCwtIssuerError::CwtError(m)) if m.contains("unique"));
+
+        // a decoy in a mapping must have a null value
+        let not_null = Value::Map(vec![(decoy!(1), Value::Bool(true))]);
+        std::assert_matches!(try_redact(not_null), Err(SdCwtIssuerError::CwtError(m)) if m.contains("must be null"));
+
+        // a decoy can only contain an unsigned integer
+        let text = Value::Map(vec![(int(1), Value::Array(vec![Value::Tag(TO_BE_DECOY_TAG, Value::Text("a".into()).into())]))]);
+        std::assert_matches!(try_redact(text), Err(SdCwtIssuerError::CwtError(m)) if m.contains("unsigned integer"));
+        let negative = Value::Map(vec![(Value::Tag(TO_BE_DECOY_TAG, int(-1).into()), Value::Null)]);
+        std::assert_matches!(try_redact(negative), Err(SdCwtIssuerError::CwtError(m)) if m.contains("unsigned integer"));
+
+        // a decoy cannot be a mapping value
+        let map_value = Value::Map(vec![(int(1), decoy!(1))]);
+        std::assert_matches!(try_redact(map_value), Err(SdCwtIssuerError::CwtError(m)) if m.contains("not allowed in mapping values"));
+    }
+
+    fn try_redact(mut payload: Value) -> Result<SaltedArray, SdCwtIssuerError<Error>> {
+        redact::<Error, sha2::Sha256>(&mut rand::thread_rng(), &mut payload)
+    }
+
     // TODO: if got time change return to '(Value, [Salted<Value>; N])'
     fn _redact<const N: usize>(mut payload: Value) -> (Value, [Value; N]) {
-        let mut sd_claims = SaltedArray::default();
-
-        redact_value::<Error, sha2::Sha256>(&mut payload, &mut rand::thread_rng(), &mut sd_claims, None).unwrap();
+        let sd_claims = redact::<Error, sha2::Sha256>(&mut rand::thread_rng(), &mut payload).unwrap();
 
         for d in sd_claims.iter() {
             let d = d.unwrap();
