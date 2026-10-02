@@ -120,6 +120,7 @@ mod tests {
         spec::{
             CwtAny, EsdicawtSpecError, NoClaims, Salt, SdCwtClaim,
             blinded_claims::{Decoy, SaltedElement, SaltedEntry},
+            decoy,
             issuance::SdCwtIssued,
             sd,
         },
@@ -288,7 +289,7 @@ mod tests {
 
         // adding extra decoy disclosure
         let mut sd_cwt = sd_cwt_tagged.clone();
-        let extra = SaltedEntry::Decoy(Decoy { salt: (Salt::empty(),) });
+        let extra = SaltedEntry::Decoy(Decoy { salt: Salt::empty() });
         sd_cwt.disclosures_mut().unwrap().push(extra.into());
         std::assert_matches!(
             holder.verify_sd_cwt(&sd_cwt.to_cbor_bytes().unwrap(), Default::default(), &issuer_verifying_key),
@@ -326,6 +327,41 @@ mod tests {
             holder.verify_sd_cwt(&sd_cwt.to_cbor_bytes().unwrap(), Default::default(), &issuer_verifying_key),
             Err(SdCwtHolderError::ValidationError(SdCwtHolderValidationError::DisclosureNotFound))
         );
+    }
+
+    #[test]
+    fn should_fail_when_decoy_disclosure_missing() {
+        let issuer_signing_key = ed25519_dalek::SigningKey::generate(&mut rand::thread_rng());
+        let issuer_verifying_key = CoseKeySet::builder().with_signing_key(&issuer_signing_key).unwrap().build();
+        let issuer = Ed25519Issuer::<Value>::new(issuer_signing_key);
+
+        let holder_signing_key = ed25519_dalek::SigningKey::generate(&mut rand::thread_rng());
+        let holder = Ed25519Holder::<Value, NoClaims>::new(holder_signing_key.clone());
+
+        let payload = cbor!({ sd!(42) => "a", 43 => [decoy!(1)], decoy!(2) => null }).unwrap();
+        let issuer_params = default_issuer_params(&holder_signing_key, Some(payload));
+        let sd_cwt = issuer.issue_cwt(&mut rand::thread_rng(), issuer_params).unwrap().to_cbor_bytes().unwrap();
+        holder.verify_sd_cwt(&sd_cwt, Default::default(), &issuer_verifying_key).unwrap();
+
+        let sd_cwt_tagged = SdCwtIssued::<Value, sha2::Sha256>::from_cbor_bytes(&sd_cwt).unwrap();
+        let decoys = sd_cwt_tagged
+            .disclosures()
+            .unwrap()
+            .iter()
+            .enumerate()
+            .filter_map(|(i, d)| matches!(d.unwrap(), SaltedEntry::Decoy(_)).then_some(i))
+            .collect::<Vec<_>>();
+        assert_eq!(decoys.len(), 2);
+
+        // the holder must receive the disclosure of every decoy, in an array or in a mapping
+        for decoy in decoys {
+            let mut sd_cwt = sd_cwt_tagged.clone();
+            sd_cwt.disclosures_mut().unwrap().remove(decoy);
+            std::assert_matches!(
+                holder.verify_sd_cwt(&sd_cwt.to_cbor_bytes().unwrap(), Default::default(), &issuer_verifying_key),
+                Err(SdCwtHolderError::ValidationError(SdCwtHolderValidationError::DisclosureNotFound))
+            );
+        }
     }
 
     #[test]

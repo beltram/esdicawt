@@ -1,7 +1,10 @@
 use crate::{
     SdCwtHolderResult, TimeVerification,
     holder::traverse::traverse_all_cbor_paths_in_salted_array,
-    spec::{CustomClaims, NoClaims, SdCwtClaim, blinded_claims::SaltedArray},
+    spec::{
+        CustomClaims, NoClaims, SdCwtClaim,
+        blinded_claims::{SaltedArray, SaltedEntry},
+    },
     time::TimeArg,
 };
 use ciborium::Value;
@@ -26,11 +29,18 @@ pub struct HolderParams<'a, KbtPayloadClaims: CustomClaims = NoClaims, KbtProtec
     pub extra_kbt_payload: Option<KbtPayloadClaims>,
 }
 
+/// Which disclosures the holder presents to the verifier.
+///
+/// Decoys are never presented, whatever the variant, since it would reveal to the verifier which digests are decoys.
+/// See https://datatracker.ietf.org/doc/html/draft-ietf-spice-sd-cwt#name-decoy-digests
 #[derive(Default)]
 pub enum Presentation {
+    /// All the disclosures
     #[default]
     Full,
+    /// The disclosures returned by the function
     Custom(Box<dyn Fn(SaltedArray) -> SaltedArray>),
+    /// The disclosures whose path is accepted by the function
     #[allow(clippy::type_complexity)]
     Path(Box<dyn Fn(&[CborPath]) -> bool>),
     None,
@@ -49,7 +59,7 @@ impl std::fmt::Debug for Presentation {
 
 impl Presentation {
     pub(crate) fn try_select_disclosures<Hasher: digest::Digest, E: core::error::Error + Send + Sync>(&self, disclosures: SaltedArray) -> SdCwtHolderResult<SaltedArray, E> {
-        Ok(match self {
+        let mut disclosures = match self {
             Self::Full => disclosures,
             Self::None => SaltedArray::default(),
             Self::Custom(f) => f(disclosures),
@@ -62,7 +72,10 @@ impl Presentation {
                     .collect::<Vec<_>>()
                     .into()
             }
-        })
+        };
+        // decoys are never presented since it would reveal to the verifier which digests are decoys
+        disclosures.retain(|d| !matches!(d.to_value(), Ok(SaltedEntry::Decoy(_))));
+        Ok(disclosures)
     }
 }
 

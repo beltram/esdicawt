@@ -67,6 +67,17 @@ macro_rules! sd {
     };
 }
 
+/// Indicates where the issuer must insert a decoy digest.
+///
+/// Either as an array element or as a mapping label whose value is `null`. The positive integer must be unique for each
+/// decoy in the CWT, see https://datatracker.ietf.org/doc/html/draft-ietf-spice-sd-cwt#name-to-be-decoy
+#[macro_export]
+macro_rules! decoy {
+    ($i:expr) => {
+        ciborium::Value::Tag(62, Box::new(ciborium::Value::Integer(($i as u64).into())))
+    };
+}
+
 /// Redact in place a label or an array element
 pub trait Redact {
     fn redact(&mut self);

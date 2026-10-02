@@ -482,6 +482,45 @@ mod tests {
         }
     }
 
+    #[test]
+    #[wasm_bindgen_test::wasm_bindgen_test]
+    fn should_not_present_decoys() {
+        use crate::spec::{decoy, sd};
+
+        let holder_signing_key = ed25519_dalek::SigningKey::generate(&mut rand::thread_rng());
+        let issuer_signing_key = ed25519_dalek::SigningKey::generate(&mut rand::thread_rng());
+        let cks = CoseKeySet::builder().with_signing_key(&issuer_signing_key).unwrap().build();
+        let issuer = Ed25519Issuer::<Value>::new(issuer_signing_key);
+
+        let payload = cbor!({ "a" => ["b", decoy!(1)], sd!("c") => "d", decoy!(2) => null }).unwrap();
+        let holder_confirmation_key = (&holder_signing_key.verifying_key()).try_into().unwrap();
+        let issuer_params = crate::issuer::snapshot::issuer_params(Some(payload), &holder_confirmation_key);
+        let sd_cwt = issuer.issue_cwt(&mut rand::thread_rng(), issuer_params).unwrap().to_cbor_bytes().unwrap();
+
+        let holder = Ed25519Holder::<Value, NoClaims>::new(holder_signing_key);
+        let sd_cwt = holder.verify_sd_cwt(&sd_cwt, Default::default(), &cks).unwrap();
+
+        let count_decoys = |d: &[&SaltedEntry<Value>]| d.iter().filter(|d| matches!(d, SaltedEntry::Decoy(_))).count();
+
+        // the holder receives all the decoys
+        let disclosures = sd_cwt.disclosures().unwrap().iter().map(Result::unwrap).collect::<Vec<_>>();
+        assert_eq!(disclosures.len(), 3);
+        assert_eq!(count_decoys(&disclosures), 2);
+
+        // but never presents them since the verifier would learn which digests are decoys, even when asked to present everything
+        let presentations: [fn() -> Presentation; 3] = [
+            || Presentation::Full,
+            || Presentation::Custom(Box::new(|disclosures| disclosures)),
+            || Presentation::Path(Box::new(|_| true)),
+        ];
+        for presentation in presentations {
+            let sd_kbt = holder.new_presentation(sd_cwt.clone(), snapshot::holder_params(presentation())).unwrap();
+            let presented = sd_kbt.walk_disclosed_claims().unwrap().map(Result::unwrap).collect::<Vec<_>>();
+            assert_eq!(presented.len(), 1);
+            assert_eq!(count_decoys(&presented), 0);
+        }
+    }
+
     #[allow(dead_code, unused_variables, clippy::type_complexity)]
     fn should_be_object_safe(
         holder: Box<
