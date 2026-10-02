@@ -144,11 +144,12 @@ impl<IssuerPayloadClaims: Select, Hasher: digest::Digest + Clone, IssuerProtecte
             }
         }
 
+        // map sd_cwt_issued in kcwt
+        let builder = builder.value(COSE_HEADER_KCWT, kbtp.kcwt.to_cbor_value()?);
+
         // map typ
         let builder = builder.value(CWT_MEDIA_TYPE, Value::Integer(MEDIA_TYPE_KB_CWT.into()));
 
-        // map sd_cwt_issued in kcwt
-        let builder = builder.value(COSE_HEADER_KCWT, kbtp.kcwt.to_cbor_value()?);
 
         Ok(builder.build())
     }
