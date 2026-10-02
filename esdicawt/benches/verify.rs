@@ -1,4 +1,4 @@
-use crate::fmk::ed25519::{Ed25519Holder, Ed25519Issuer, Ed25519Verifier};
+use crate::crypto::ed25519::{Ed25519Holder, Ed25519Issuer, Ed25519Verifier};
 use ciborium::{Value, value::Error};
 use cose_key::keyset::CoseKeySet;
 use criterion::{BatchSize, BenchmarkGroup, BenchmarkId, Criterion, criterion_group, criterion_main, measurement::WallTime};
@@ -9,8 +9,8 @@ use esdicawt::{
 use itertools::Itertools;
 use std::{collections::HashMap, hint::black_box};
 
-#[path = "../tests/fmk.rs"]
-mod fmk;
+#[path = "../tests/crypto.rs"]
+mod crypto;
 
 fn issue_bench(c: &mut Criterion) {
     let mut group = c.benchmark_group("Issuer");
