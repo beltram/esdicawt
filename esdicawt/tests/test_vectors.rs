@@ -8,12 +8,11 @@ mod model;
 use crypto::rng::*;
 use model::*;
 
-use ciborium::{Value, value::Integer};
 use cose_key::keyset::CoseKeySet;
 use esdicawt::{
     Holder, HolderParams, Issuer, IssuerParams, StatusParams, TimeArg,
     spec::{
-        CwtAny, EsdicawtSpecError, NoClaims, SdHashAlg, Select,
+        EsdicawtSpecError, NoClaims, SdHashAlg, Select,
         reexports::{coset, coset::iana::Algorithm},
     },
 };
@@ -190,96 +189,12 @@ fn test_vectors<P: Select>(payload: P, spec_sd_cwt_bytes: &[u8], spec_sd_kbt_byt
         },
     };
 
-    let spec_sd_cwt = Value::from_cbor_bytes(spec_sd_cwt_bytes).unwrap();
-    let mut spec_sd_cwt = spec_sd_cwt.into_tag().unwrap().1.into_array().unwrap();
-    let _spec_protected = spec_sd_cwt.remove(0);
-    let spec_unprotected = spec_sd_cwt.remove(0);
-    let spec_payload = spec_sd_cwt.remove(0);
-    let spec_payload = spec_payload.as_bytes().unwrap();
-    let spec_payload = Value::from_cbor_bytes(spec_payload).unwrap().into_map().unwrap();
-
     let salt_ranges = if nested { NESTED_SALT_RANGES } else { NORMAL_SALT_RANGES };
-    let esdicawt_sd_cwt = sd_issuer.issue_cwt(&mut TestVectorRng::new(salt_ranges), params).unwrap();
-    let esdicawt_sd_cwt_bytes = esdicawt_sd_cwt.to_cbor_bytes().unwrap();
-    let esdicawt_sd_cwt = Value::from_cbor_bytes(&esdicawt_sd_cwt_bytes).unwrap();
-    let mut esdicawt_sd_cwt = esdicawt_sd_cwt.into_tag().unwrap().1.into_array().unwrap();
-    let _esdicawt_protected = esdicawt_sd_cwt.remove(0);
-    let esdicawt_unprotected = esdicawt_sd_cwt.remove(0);
-    let esdicawt_payload = esdicawt_sd_cwt.remove(0);
-    let esdicawt_payload = esdicawt_payload.as_bytes().unwrap();
-    let esdicawt_payload = Value::from_cbor_bytes(esdicawt_payload).unwrap().into_map().unwrap();
+    let esdicawt_sd_cwt_bytes = sd_issuer.issue_raw_cwt(&mut TestVectorRng::new(salt_ranges), params).unwrap();
 
-    // protected
-    // FIXME: pending test vectors use CoAP content formats
-    // assert_eq!(spec_protected, esdicawt_protected);
-
-    // unprotected
-    assert_eq!(spec_unprotected.as_map().unwrap().len(), 1);
-    assert_eq!(esdicawt_unprotected.as_map().unwrap().len(), 1);
-
-    let (_, spec_sd_claims) = spec_unprotected.as_map().unwrap().first().unwrap();
-    let (_, esdicawt_sd_claims) = esdicawt_unprotected.as_map().unwrap().first().unwrap();
-    let spec_sd_claims = spec_sd_claims.as_array().unwrap();
-    let esdicawt_sd_claims = esdicawt_sd_claims.as_array().unwrap();
-
-    assert!(spec_sd_claims.iter().all(|v| v.is_bytes()));
-    assert!(esdicawt_sd_claims.iter().all(|v| v.is_bytes()));
-
-    assert_eq!(spec_sd_claims.len(), esdicawt_sd_claims.len());
-
-    // every disclosure should have been generated with the same salt as in the spec
-    let salt = |disclosure: &Value| Value::from_cbor_bytes(disclosure.as_bytes().unwrap()).unwrap().into_array().unwrap().remove(0);
-    for (i, (spec, esdicawt)) in spec_sd_claims.iter().zip(esdicawt_sd_claims).enumerate() {
-        assert_eq!(salt(spec), salt(esdicawt), "salt mismatch for disclosure {i}");
-    }
-
-    let claim = |map: &Vec<(Value, Value)>, i: i64| {
-        let found = map.iter().find_map(|(k, v)| matches!(k, Value::Integer(int) if *int == Integer::from(i)).then_some(v));
-        found.cloned()
-    };
-    let assert_claim = |i: i64| {
-        assert_eq!(
-            claim(&spec_payload, i).unwrap_or_else(|| panic!("{i} not found")),
-            claim(&esdicawt_payload, i).unwrap_or_else(|| panic!("{i} not found"))
-        );
-    };
-
-    assert_claim(1); // issuer
-    assert_claim(2); // sub
-    assert_claim(4); // exp
-    assert_claim(5); // nbf
-    assert_claim(6); // iat
-    if !nested {
-        assert_claim(500); // most_recent_inspection_passed
-    }
-    // assert_claim(502); // inspection_dates
-    // assert_claim(503); // inspection_location
-
-    // cnf
-    let spec_cnf = claim(&spec_payload, 8).unwrap().into_map().unwrap();
-    let (_, spec_cnf) = spec_cnf.first().unwrap().clone();
-    let mut spec_cnf = spec_cnf.into_map().unwrap();
-    let esdicawt_cnf = claim(&esdicawt_payload, 8).unwrap().into_map().unwrap();
-    let (_, esdicawt_cnf) = esdicawt_cnf.first().unwrap().clone();
-    let mut esdicawt_cnf = esdicawt_cnf.into_map().unwrap();
-
-    // all labels are integers
-    spec_cnf.sort_by_key(|(k, _)| i64::try_from(k.as_integer().unwrap()).unwrap());
-    esdicawt_cnf.sort_by_key(|(k, _)| i64::try_from(k.as_integer().unwrap()).unwrap());
-
-    assert_eq!(spec_cnf, esdicawt_cnf);
+    assert_eq!(hex::encode(&esdicawt_sd_cwt_bytes), hex::encode(spec_sd_cwt_bytes), "SD-CWT mismatch");
 
     // === Holder ===
-    let spec_sd_kbt = Value::from_cbor_bytes(spec_sd_kbt_bytes).unwrap();
-    let mut spec_sd_kbt = spec_sd_kbt.into_tag().unwrap().1.into_array().unwrap();
-    let spec_protected = spec_sd_kbt.remove(0);
-    let spec_protected = spec_protected.as_bytes().unwrap();
-    let spec_protected = Value::from_cbor_bytes(spec_protected).unwrap().into_map().unwrap();
-    let spec_unprotected = spec_sd_kbt.remove(0);
-    let spec_payload = spec_sd_kbt.remove(0);
-    let spec_payload = spec_payload.as_bytes().unwrap();
-    let spec_payload = Value::from_cbor_bytes(spec_payload).unwrap().into_map().unwrap();
-
     let sd_holder = P256Holder::<P>::new(holder_signing_key());
 
     let params = HolderParams {
@@ -297,28 +212,8 @@ fn test_vectors<P: Select>(payload: P, spec_sd_cwt_bytes: &[u8], spec_sd_kbt_byt
     };
     let sd_cwt = sd_holder.verify_sd_cwt(&esdicawt_sd_cwt_bytes[..], Default::default(), &issuer_verifying_key()).unwrap();
 
-    let esdicawt_sd_kbt = sd_holder.new_presentation(sd_cwt, params).unwrap();
-    let esdicawt_sd_kbt_bytes = esdicawt_sd_kbt.to_cbor_bytes().unwrap();
-    let esdicawt_sd_kbt = Value::from_cbor_bytes(&esdicawt_sd_kbt_bytes[..]).unwrap();
-    let mut esdicawt_sd_kbt = esdicawt_sd_kbt.into_tag().unwrap().1.into_array().unwrap();
-    let esdicawt_protected = esdicawt_sd_kbt.remove(0);
-    let esdicawt_protected = esdicawt_protected.as_bytes().unwrap();
-    let esdicawt_protected = Value::from_cbor_bytes(esdicawt_protected).unwrap().into_map().unwrap();
-    let esdicawt_unprotected = esdicawt_sd_kbt.remove(0);
-    let esdicawt_payload = esdicawt_sd_kbt.remove(0);
-    let esdicawt_payload = esdicawt_payload.as_bytes().unwrap();
-    let esdicawt_payload = Value::from_cbor_bytes(esdicawt_payload).unwrap().into_map().unwrap();
-
-    // FIXME: pending test vectors use CoAP content formats
-    // assert_eq!(claim(&spec_protected, 16), claim(&esdicawt_protected, 16)); // typ
-    assert_eq!(claim(&spec_protected, 1), claim(&esdicawt_protected, 1)); // alg
-    // should find kcwt claim
-    claim(&spec_protected, 13);
-    claim(&esdicawt_protected, 13);
-
-    assert_eq!(spec_unprotected, esdicawt_unprotected);
-
-    assert_eq!(spec_payload, esdicawt_payload);
+    let esdicawt_sd_kbt_bytes = sd_holder.new_presentation_raw(sd_cwt, params).unwrap();
+    assert_eq!(hex::encode(&esdicawt_sd_kbt_bytes), hex::encode(spec_sd_kbt_bytes), "SD-KBT mismatch");
 }
 
 fn holder_signing_key() -> p256::ecdsa::SigningKey {
