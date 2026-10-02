@@ -1,16 +1,14 @@
 #![allow(clippy::borrow_interior_mutable_const, clippy::declare_interior_mutable_const, dead_code)]
 
-#[path = "crypto.rs"]
-mod crypto;
-#[path = "model.rs"]
 mod model;
+mod rng;
 
-use crypto::rng::*;
 use model::*;
+use rng::*;
 
-use cose_key::keyset::CoseKeySet;
 use esdicawt::{
-    Holder, HolderParams, Issuer, IssuerParams, StatusParams, TimeArg,
+    Holder, HolderParams, Issuer, IssuerParams, TimeArg,
+    cose_key::keyset::CoseKeySet,
     spec::{
         EsdicawtSpecError, NoClaims, SdHashAlg, Select,
         reexports::{coset, coset::iana::Algorithm},
@@ -108,8 +106,8 @@ fn normal_test_vectors() {
         },
     };
 
-    let spec_sd_cwt_bytes = include_bytes!("../../draft-ietf-spice-sd-cwt/examples/issuer_cwt.cbor");
-    let spec_sd_kbt_bytes = include_bytes!("../../draft-ietf-spice-sd-cwt/examples/kbt.cbor");
+    let spec_sd_cwt_bytes = include_bytes!("../../../draft-ietf-spice-sd-cwt/examples/issuer_cwt.cbor");
+    let spec_sd_kbt_bytes = include_bytes!("../../../draft-ietf-spice-sd-cwt/examples/kbt.cbor");
 
     test_vectors::<Payload>(payload, spec_sd_cwt_bytes, spec_sd_kbt_bytes, false)
 }
@@ -147,8 +145,8 @@ fn nested_test_vectors() {
         },
     };
 
-    let spec_sd_cwt_bytes = include_bytes!("../../draft-ietf-spice-sd-cwt/examples/nested_issuer_cwt.cbor");
-    let spec_sd_kbt_bytes = include_bytes!("../../draft-ietf-spice-sd-cwt/examples/nested_kbt.cbor");
+    let spec_sd_cwt_bytes = include_bytes!("../../../draft-ietf-spice-sd-cwt/examples/nested_issuer_cwt.cbor");
+    let spec_sd_kbt_bytes = include_bytes!("../../../draft-ietf-spice-sd-cwt/examples/nested_kbt.cbor");
 
     test_vectors::<NestedPayload>(
         NestedPayload {
@@ -183,10 +181,6 @@ fn test_vectors<P: Select>(payload: P, spec_sd_cwt_bytes: &[u8], spec_sd_kbt_byt
         artificial_time: Some(core::time::Duration::from_secs(NOW)),
         key_location: "https://issuer.example/cose-key3",
         holder_confirmation_key: holder_signing_key().verifying_key().try_into().unwrap(),
-        status: StatusParams {
-            status_list_bit_index: 0,
-            uri: "https://example.com/statuslists/1".parse().unwrap(),
-        },
     };
 
     let salt_ranges = if nested { NESTED_SALT_RANGES } else { NORMAL_SALT_RANGES };
@@ -217,13 +211,13 @@ fn test_vectors<P: Select>(payload: P, spec_sd_cwt_bytes: &[u8], spec_sd_kbt_byt
 }
 
 fn holder_signing_key() -> p256::ecdsa::SigningKey {
-    p256::SecretKey::from_pkcs8_pem(include_str!("../../draft-ietf-spice-sd-cwt/holder_privkey.pem").trim())
+    p256::SecretKey::from_pkcs8_pem(include_str!("../../../draft-ietf-spice-sd-cwt/holder_privkey.pem").trim())
         .unwrap()
         .into()
 }
 
 fn issuer_signing_key() -> p384::ecdsa::SigningKey {
-    p384::SecretKey::from_pkcs8_pem(include_str!("../../draft-ietf-spice-sd-cwt/issuer_privkey.pem").trim())
+    p384::SecretKey::from_pkcs8_pem(include_str!("../../../draft-ietf-spice-sd-cwt/issuer_privkey.pem").trim())
         .unwrap()
         .into()
 }
