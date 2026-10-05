@@ -638,6 +638,7 @@ mod snapshot {
         Issuer, Presentation, TimeVerification,
         holder::claims::{CustomTokenClaims, CustomTokenClaimsAllRedacted},
         issuer::snapshot::issuer_params,
+        snapshots::SNAPSHOT_SUFFIX,
         test_utils::{Ed25519Holder, Ed25519Issuer},
         time::TimeArg,
     };
@@ -668,11 +669,11 @@ mod snapshot {
         let sd_cwt_verified = holder.verify_sd_cwt(&sd_cwt, Default::default(), &cks).unwrap();
         let params = holder_params(Presentation::Full);
         let sd_kbt = holder.new_presentation_raw(sd_cwt_verified.clone(), params).unwrap();
-        assert_snapshot!("sd-kbt-full-ed25519.txt", hex::encode(&sd_kbt));
+        assert_snapshot!(format!("sd-kbt-full-ed25519{SNAPSHOT_SUFFIX}.txt"), hex::encode(&sd_kbt));
 
         let params = holder_params(Presentation::None);
         let sd_kbt = holder.new_presentation_raw(sd_cwt_verified, params).unwrap();
-        assert_snapshot!("sd-kbt-none-ed25519.txt", hex::encode(&sd_kbt));
+        assert_snapshot!(format!("sd-kbt-none-ed25519{SNAPSHOT_SUFFIX}.txt"), hex::encode(&sd_kbt));
     }
 
     pub(super) fn holder_params(presentation: Presentation) -> HolderParams<'static> {

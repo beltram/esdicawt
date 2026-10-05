@@ -91,7 +91,13 @@ impl RedactedClaimKeys {
     }
 
     pub fn push<H: digest::Digest>(&mut self, salted_claim: &impl ToRedacted) -> EsdicawtSpecResult<()> {
-        self.0.push(salted_claim.to_redacted::<H>()?.as_ref().into());
+        #[cfg(not(feature = "backward"))]
+        let digest = salted_claim.to_redacted::<H>()?;
+        // produce the digest of draft-08 implementations, computed over the raw bytes without wrapping them in a bstr
+        #[cfg(feature = "backward")]
+        let digest = salted_claim.old_to_redacted::<H>()?;
+
+        self.0.push(digest.as_ref().into());
         Ok(())
     }
 
@@ -146,7 +152,13 @@ pub struct RedactedClaimElement(ciborium::tag::RequireExact<serde_bytes::ByteBuf
 
 impl RedactedClaimElement {
     pub fn from_salted_entry<H: digest::Digest>(salted_entry: &impl ToRedacted) -> EsdicawtSpecResult<Self> {
-        Ok(salted_entry.to_redacted::<H>()?.as_ref().into())
+        #[cfg(not(feature = "backward"))]
+        let digest = salted_entry.to_redacted::<H>()?;
+        // produce the digest of draft-08 implementations, computed over the raw bytes without wrapping them in a bstr
+        #[cfg(feature = "backward")]
+        let digest = salted_entry.old_to_redacted::<H>()?;
+
+        Ok(digest.as_ref().into())
     }
 }
 

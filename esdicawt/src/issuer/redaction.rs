@@ -358,12 +358,19 @@ mod tests {
     }
 
     fn rck_contains_digest(rck: &[Value], salted: &impl ToRedacted) -> bool {
-        let redacted = salted.to_redacted::<sha2::Sha256>().unwrap().to_vec();
+        let redacted = digest(salted);
         rck.iter().map(|r| r.as_bytes().unwrap()).any(|r| r == &redacted)
     }
 
     fn element_digest(salted: &impl ToRedacted) -> Value {
-        Value::Tag(REDACTED_CLAIM_ELEMENT_TAG, Value::Bytes(salted.to_redacted::<sha2::Sha256>().unwrap().to_vec()).into())
+        Value::Tag(REDACTED_CLAIM_ELEMENT_TAG, Value::Bytes(digest(salted)).into())
+    }
+
+    fn digest(salted: &impl ToRedacted) -> Vec<u8> {
+        #[cfg(not(feature = "backward"))]
+        return salted.to_redacted::<sha2::Sha256>().unwrap().to_vec();
+        #[cfg(feature = "backward")]
+        return salted.old_to_redacted::<sha2::Sha256>().unwrap().to_vec();
     }
 
     fn get_redacted_claim_keys<const N: usize>(payload: &Value) -> [Value; N] {

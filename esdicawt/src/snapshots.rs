@@ -1,6 +1,12 @@
 use insta::Snapshot;
 use std::path::PathBuf;
 
+/// With the 'backward' feature, the Issuer & Holder produce draft-08 tokens, so they are compared against the draft-08 snapshots
+#[cfg(not(feature = "backward"))]
+pub const SNAPSHOT_SUFFIX: &str = "";
+#[cfg(feature = "backward")]
+pub const SNAPSHOT_SUFFIX: &str = "-draft08";
+
 #[derive(Debug, Copy, Clone, Eq, PartialEq, strum_macros::EnumIter)]
 pub enum SdCwtSnapshots {
     Full,
