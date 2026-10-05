@@ -28,7 +28,15 @@ impl<IssuerPayloadClaims: Select, Hasher: digest::Digest + Clone, IssuerProtecte
         let alg = (*self.alg).clone().to_cbor_value().map_err(|e| S::Error::custom(format!("Cannot set Alg: {e}")))?;
         map.serialize_entry(&CWT_CLAIM_ALG, &alg)?;
 
+        #[cfg(not(feature = "backward"))]
         map.serialize_entry(&COSE_HEADER_KCWT, &self.kcwt)?;
+
+        // produce the kcwt of draft-08 implementations, wrapped in a bstr
+        #[cfg(feature = "backward")]
+        {
+            let kcwt = self.kcwt.to_cbor_bytes().map_err(S::Error::custom)?;
+            map.serialize_entry(&COSE_HEADER_KCWT, serde_bytes::Bytes::new(&kcwt))?;
+        }
 
         for (k, v) in extras {
             map.serialize_entry(&k, &v)?;
@@ -145,10 +153,15 @@ impl<IssuerPayloadClaims: Select, Hasher: digest::Digest + Clone, IssuerProtecte
         }
 
         // map sd_cwt_issued in kcwt
+        #[cfg(not(feature = "backward"))]
         let builder = builder.value(COSE_HEADER_KCWT, kbtp.kcwt.to_cbor_value()?);
 
         // map typ
         let builder = builder.value(CWT_MEDIA_TYPE, Value::Integer(MEDIA_TYPE_KB_CWT.into()));
+
+        // produce the kcwt of draft-08 implementations, wrapped in a bstr and placed after the media type
+        #[cfg(feature = "backward")]
+        let builder = builder.value(COSE_HEADER_KCWT, Value::Bytes(kbtp.kcwt.to_cbor_bytes()?));
 
         Ok(builder.build())
     }

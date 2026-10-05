@@ -244,7 +244,10 @@ mod tests {
         assert_eq!(value, &cbor!("Alice Smith").unwrap());
 
         // verify digest of disclosure in 'redacted_key_claims'
+        #[cfg(not(feature = "backward"))]
         let digest = d0.to_redacted::<sha2::Sha256>().unwrap().to_vec();
+        #[cfg(feature = "backward")]
+        let digest = d0.old_to_redacted::<sha2::Sha256>().unwrap().to_vec();
         assert_eq!(digest, rck_name.to_vec());
     }
 
@@ -697,6 +700,7 @@ pub mod snapshot {
     use crate::{
         StatusParams,
         issuer::claims::{FullClaimsAllRedacted, FullClaimsNoRedaction},
+        snapshots::SNAPSHOT_SUFFIX,
         time::TimeArg,
     };
     use cose_key::confirmation::KeyConfirmation;
@@ -719,21 +723,21 @@ pub mod snapshot {
         };
         let mut params = issuer_params(Some(payload.clone()), &holder_confirmation_key);
         let sd_cwt = issuer.issue_raw_cwt(&mut rng, params.clone()).unwrap();
-        assert_snapshot!("sd-cwt-full-ed25519.txt", hex::encode(&sd_cwt));
+        assert_snapshot!(format!("sd-cwt-full-ed25519{SNAPSHOT_SUFFIX}.txt"), hex::encode(&sd_cwt));
 
         params.payload = None;
         let sd_cwt = issuer.issue_raw_cwt(&mut rng, params).unwrap();
-        assert_snapshot!("sd-cwt-empty-ed25519.txt", hex::encode(&sd_cwt));
+        assert_snapshot!(format!("sd-cwt-empty-ed25519{SNAPSHOT_SUFFIX}.txt"), hex::encode(&sd_cwt));
 
         let params = crate::issuer::snapshot::issuer_params(Some(FullClaimsNoRedaction(payload.clone())), &holder_confirmation_key);
         let issuer = Ed25519Issuer::<FullClaimsNoRedaction>::new(issuer_signing_key.clone());
         let sd_cwt = issuer.issue_raw_cwt(&mut rng, params).unwrap();
-        assert_snapshot!("sd-cwt-none-redacted-ed25519.txt", hex::encode(&sd_cwt));
+        assert_snapshot!(format!("sd-cwt-none-redacted-ed25519{SNAPSHOT_SUFFIX}.txt"), hex::encode(&sd_cwt));
 
         let params = crate::issuer::snapshot::issuer_params(Some(FullClaimsAllRedacted(payload)), &holder_confirmation_key);
         let issuer = Ed25519Issuer::<FullClaimsAllRedacted>::new(issuer_signing_key);
         let sd_cwt = issuer.issue_raw_cwt(&mut rng, params).unwrap();
-        assert_snapshot!("sd-cwt-all-redacted-ed25519.txt", hex::encode(&sd_cwt));
+        assert_snapshot!(format!("sd-cwt-all-redacted-ed25519{SNAPSHOT_SUFFIX}.txt"), hex::encode(&sd_cwt));
     }
 
     pub fn issuer_params<T: Select>(payload: Option<T>, holder_confirmation_key: &KeyConfirmation) -> IssuerParams<'static, T> {
