@@ -29,6 +29,16 @@ where
     Ok(paths.into_iter().map(|(p, s, _)| (p, s)).collect())
 }
 
+/// Given the payload and its disclosures, returns the path from the root of the payload of every disclosure reachable from it
+pub fn traverse_all_cbor_paths_from_payload<H: digest::Digest, E>(payload: &Value, salted_array: &SaltedArrayHashing<'_>) -> SdCwtHolderResult<PathAndSalted, E>
+where
+    E: core::error::Error + Send + Sync,
+{
+    let mut paths = Vec::with_capacity(salted_array.len());
+    __traverse::<H, _>(&payload.into(), vec![], salted_array, &mut paths)?;
+    Ok(paths.into_iter().map(|(p, s, _)| (p, s)).collect())
+}
+
 #[tailcall::tailcall]
 fn __traverse<'a, H: digest::Digest, E>(
     salted_or_value: &'a SaltedOrValue<'a>,

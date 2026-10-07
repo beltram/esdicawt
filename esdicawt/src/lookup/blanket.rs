@@ -5,14 +5,17 @@ use crate::{
     spec::{CustomClaims, EsdicawtSpecResult, Select, issuance::SdCwtIssued, key_binding::KbtCwt, verified::KbtCwtVerified},
 };
 use ciborium::Value;
-use esdicawt_spec::blinded_claims::SaltedArrayHashing;
+use esdicawt_spec::blinded_claims::{SaltedArray, SaltedArrayHashing};
 
 impl<PayloadClaims: Select, Hasher: digest::Digest + digest::FixedOutputReset + Clone + 'static, ProtectedClaims: CustomClaims, UnprotectedClaims: CustomClaims> TokenQuery
     for SdCwtIssued<PayloadClaims, Hasher, ProtectedClaims, UnprotectedClaims>
 {
     fn query(&self, token_query: Query) -> EsdicawtSpecResult<Option<Value>> {
         let payload = self.payload.upcast_value()?;
-        self.disclosures().map(|d| query::<Hasher>(&mut d.to_verify()?, &payload, token_query)).unwrap_or(Ok(None))
+        // an absent 'sd_claims' is equivalent to no disclosure
+        let no_disclosures = SaltedArray::default();
+        let disclosures = self.disclosures().unwrap_or(&no_disclosures);
+        query::<Hasher>(&mut disclosures.to_verify()?, &payload, token_query)
     }
 }
 
@@ -21,7 +24,10 @@ impl<PayloadClaims: Select, Hasher: digest::Digest + digest::FixedOutputReset + 
 {
     fn query(&self, token_query: Query) -> EsdicawtSpecResult<Option<Value>> {
         let payload = self.payload.upcast_value()?;
-        self.disclosures().map(|d| query::<Hasher>(&mut d.to_verify()?, &payload, token_query)).unwrap_or(Ok(None))
+        // an absent 'sd_claims' is equivalent to no disclosure
+        let no_disclosures = SaltedArray::default();
+        let disclosures = self.disclosures().unwrap_or(&no_disclosures);
+        query::<Hasher>(&mut disclosures.to_verify()?, &payload, token_query)
     }
 }
 

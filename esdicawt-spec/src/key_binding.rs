@@ -113,11 +113,8 @@ impl<
 
     #[cfg(any(test, feature = "test-utils"))]
     pub fn clear_disclosures(&mut self) -> EsdicawtSpecResult<()> {
-        self.protected.modify(|protected| {
-            if let Some(s) = protected.kcwt.disclosures_mut() {
-                s.clear()
-            }
-        })
+        // an empty 'sd_claims' is invalid
+        self.protected.modify(|protected| protected.kcwt.sd_unprotected.sd_claims = None)
     }
 }
 

@@ -1,3 +1,4 @@
+pub mod aead;
 pub mod alg;
 pub(crate) mod any_digest;
 pub mod blinded_claims;
@@ -92,6 +93,16 @@ pub enum EsdicawtSpecError {
     DigestError { reason: String, alg: SdHashAlg },
     #[error("{0}")]
     ImplementationError(&'static str),
+    #[error("The AEAD algorithm {0} MUST NOT be used for encrypted disclosures")]
+    ForbiddenAeadAlgorithm(u16),
+    #[error("An authentication tag of {len} octets is not allowed for the AEAD algorithm {alg}")]
+    InvalidAeadTagLength { alg: u16, len: usize },
+    #[error("A decrypted disclosure is not a valid bstr encoded disclosure")]
+    InvalidDecryptedDisclosure,
+    #[error("'sd_claims' MUST NOT be an empty array")]
+    EmptySdClaims,
+    #[error("'sd_aead_encrypted_claims' MUST NOT be an empty array")]
+    EmptyAeadEncryptedClaims,
 }
 
 impl From<Value> for EsdicawtSpecError {

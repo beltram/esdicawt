@@ -7,13 +7,21 @@ use crate::{
     any_digest::AnyDigest,
     elapsed_since_epoch,
     signature_verifier::cose_sign1_tbs,
-    spec::{CWT_CLAIM_KEY_CONFIRMATION, CustomClaims, CwtAny, SdHashAlg, Select, issuance::SdInnerPayload, key_binding::KbtCwt, reexports::coset, verified::KbtCwtVerified},
+    spec::{
+        CWT_CLAIM_KEY_CONFIRMATION, CustomClaims, CwtAny, SdHashAlg, Select,
+        aead::{AeadAlgorithm, AeadEncryptedDisclosure, disclosure_from_plaintext},
+        blinded_claims::SaltedArray,
+        issuance::SdInnerPayload,
+        key_binding::KbtCwt,
+        reexports::coset,
+        verified::KbtCwtVerified,
+    },
     time::verify_time_claims,
     verifier::error::SdCwtVerifierError,
 };
 use ciborium::{Value, value::Integer};
 use cose_key::confirmation::{CoseKeyConfirmationError, KeyConfirmation};
-use std::rc::Rc;
+use std::{borrow::Cow, rc::Rc};
 
 pub trait Verifier {
     type Error: core::error::Error + Send + Sync;
@@ -42,6 +50,19 @@ pub trait Verifier {
 
     #[cfg(not(any(feature = "ed25519", feature = "p256", feature = "p384")))]
     fn digest(&self, sd_hash_alg: SdHashAlg) -> Rc<dyn digest::DynDigest>;
+
+    /// Decrypts an AEAD encrypted disclosure (see https://datatracker.ietf.org/doc/html/draft-ietf-spice-sd-cwt#name-encrypted-disclosures).
+    ///
+    /// The decryption key is determined by local configuration, using the [AeadEncryptedDisclosure::key_context] if
+    /// present, or by looking up the authentication tag. The associated data MUST be zero-length.
+    ///
+    /// Returns [None] when this Verifier has no key for it or when the decryption fails. The encrypted disclosure is then
+    /// ignored and the claim it discloses stays redacted, for example for an inner Verifier to decrypt it.
+    /// By default, no encrypted disclosure is decrypted.
+    fn decrypt_disclosure(&self, alg: AeadAlgorithm, encrypted: &AeadEncryptedDisclosure) -> Option<Vec<u8>> {
+        let _ = (alg, encrypted);
+        None
+    }
 
     /// Only verify the signatures and the time claims without trying to rebuild the whole ClaimSet which
     /// is expensive by requiring a lot of hashes
@@ -92,11 +113,16 @@ pub trait Verifier {
         >,
         SdCwtVerifierError<Self::Error>,
     > {
-        __verify_sd_kbt_batch(&[(raw_sd_kbt, params, holder_verifier)], cks, |sd_hash_alg: SdHashAlg| self.digest(sd_hash_alg))
-            .pop()
-            .unwrap_or(Err(SdCwtVerifierError::ImplementationError(
-                "'__verify_sd_kbt_batch' should always return as much elements as given",
-            )))
+        __verify_sd_kbt_batch(
+            &[(raw_sd_kbt, params, holder_verifier)],
+            cks,
+            |sd_hash_alg: SdHashAlg| self.digest(sd_hash_alg),
+            |alg, encrypted| self.decrypt_disclosure(alg, encrypted),
+        )
+        .pop()
+        .unwrap_or(Err(SdCwtVerifierError::ImplementationError(
+            "'__verify_sd_kbt_batch' should always return as much elements as given",
+        )))
     }
 
     /// Like [self.verify_sd_kbt] but batches operations
@@ -118,7 +144,12 @@ pub trait Verifier {
             SdCwtVerifierError<Self::Error>,
         >,
     > {
-        __verify_sd_kbt_batch(raw_sd_kbts, cks, |sd_hash_alg: SdHashAlg| self.digest(sd_hash_alg))
+        __verify_sd_kbt_batch(
+            raw_sd_kbts,
+            cks,
+            |sd_hash_alg: SdHashAlg| self.digest(sd_hash_alg),
+            |alg, encrypted| self.decrypt_disclosure(alg, encrypted),
+        )
     }
 }
 
@@ -138,6 +169,7 @@ fn __verify_sd_kbt_batch<
     raw_sd_kbts: &[(&[u8], &VerifierParams, Option<&HolderVerifier>)],
     cks: &cose_key::keyset::CoseKeySet,
     digest: impl Fn(SdHashAlg) -> Rc<dyn digest::DynDigest>,
+    decrypt: impl Fn(AeadAlgorithm, &AeadEncryptedDisclosure) -> Option<Vec<u8>>,
 ) -> Vec<
     Result<
         KbtCwtVerified<IssuerPayloadClaims, KbtPayloadClaims, IssuerProtectedClaims, IssuerUnprotectedClaims, KbtProtectedClaims, KbtUnprotectedClaims>,
@@ -156,7 +188,7 @@ fn __verify_sd_kbt_batch<
         .zip(raw_sd_kbts)
         .map(|(shallow, (_, params, _))| {
             let (kbt, generic_sd_cwt_payload) = shallow?;
-            __verify_sd_kbt_claims(kbt, generic_sd_cwt_payload, params, &digest)
+            __verify_sd_kbt_claims(kbt, generic_sd_cwt_payload, params, &digest, &decrypt)
         })
         .collect()
 }
@@ -175,6 +207,7 @@ fn __verify_sd_kbt_claims<
     mut generic_sd_cwt_payload: Value,
     params: &VerifierParams,
     digest: &impl Fn(SdHashAlg) -> Rc<dyn digest::DynDigest>,
+    decrypt: &impl Fn(AeadAlgorithm, &AeadEncryptedDisclosure) -> Option<Vec<u8>>,
 ) -> Result<
     KbtCwtVerified<IssuerPayloadClaims, KbtPayloadClaims, IssuerProtectedClaims, IssuerUnprotectedClaims, KbtProtectedClaims, KbtUnprotectedClaims>,
     SdCwtVerifierError<Error>,
@@ -271,8 +304,26 @@ fn __verify_sd_kbt_claims<
 
     let sd_alg = kbt_protected.kcwt.protected.to_value()?.sd_alg;
 
+    // decrypted disclosures are processed as if they were in 'sd_claims'
+    let disclosures = match kbt_protected.kcwt.encrypted_disclosures() {
+        Some(encrypted_disclosures) => {
+            let alg = kbt_protected.kcwt.sd_aead();
+            alg.check_allowed()?;
+            let mut disclosures = kbt_protected.kcwt.disclosures().cloned().unwrap_or_default();
+            for encrypted in encrypted_disclosures.iter() {
+                alg.check_tag_len(encrypted.tag.len())?;
+                if let Some(plaintext) = decrypt(alg, encrypted) {
+                    disclosures.push(disclosure_from_plaintext(&plaintext)?);
+                }
+            }
+            Cow::Owned(disclosures)
+        }
+        // an absent 'sd_claims' is equivalent to no disclosure: undisclosed redacted claims still have to be removed
+        None => kbt_protected.kcwt.disclosures().map_or_else(|| Cow::Owned(SaltedArray::default()), Cow::Borrowed),
+    };
+
     // now verifying the disclosures
-    if let Some(disclosures) = kbt_protected.kcwt.disclosures() {
+    {
         // compute the hash of all disclosures
         let hasher = digest(sd_alg);
         let mut disclosures = disclosures.digested_detached_hasher(&hasher)?;
@@ -1442,6 +1493,7 @@ mod tests {
             extra_kbt_unprotected: None,
             extra_kbt_protected: None,
             extra_kbt_payload: None,
+            encryption: None,
             artificial_time: None,
             time_verification: Default::default(),
             leeway: Default::default(),

@@ -200,6 +200,35 @@ He does the presentation of this in a `SD-KBT` with only the 3 previous disclosu
 ])   / end of kbt /
 ```
 
+#### Encrypted disclosures
+
+The Holder can also encrypt some of the disclosures it presents
+(see [Encrypted Disclosures](https://ietf-wg-spice.github.io/draft-ietf-spice-sd-cwt/draft-ietf-spice-sd-cwt.html#name-encrypted-disclosures)),
+for example, so that only an inner Verifier holding the right AEAD key can read them. They are moved from `sd_claims` to
+`sd_aead_encrypted_claims` in the unprotected header of the SD-CWT:
+
+```text
+/ sd_aead_encrypted_claims / 171 : [
+    [
+        / nonce /      h'95d0040fe650e5baf51c907c',
+        / ciphertext / h'563a7d9f0f65d40b751fbc3fcc408e8fe27c375b60a4727b1f1e9572c07992eb5ec5a9',
+        / tag /        h'9f4d37da32187528416ed7ee95e0625f'
+    ],
+],
+/ sd_aead / 172 : 1, / AEAD_AES_128_GCM /
+```
+
+> [!WARNING]
+> Unlike the draft, which places it in the protected header, `sd_aead` is placed in the unprotected header of the
+> SD-CWT, next to `sd_aead_encrypted_claims`. The Holder sets it after the Issuer signed the SD-CWT; it is still
+> integrity protected by the signature of the SD-KBT.
+
+The AEAD is pluggable:
+* the Holder provides a `DisclosureEncryptor` and a predicate selecting the disclosures to encrypt through
+  `HolderParams::encryption`. The disclosures nested in an encrypted one are encrypted too.
+* the Verifier implements `Verifier::decrypt_disclosure`. Encrypted disclosures it cannot decrypt are ignored and their
+  claims stay redacted. The decrypted ones are then processed as if they were in `sd_claims`.
+
 #### Verifier
 
 Verifies the SD-KBT and reads the claims.

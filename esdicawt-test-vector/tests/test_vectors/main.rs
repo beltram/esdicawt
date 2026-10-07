@@ -202,6 +202,7 @@ fn test_vectors<P: Select>(payload: P, spec_sd_cwt_bytes: &[u8], spec_sd_kbt_byt
         extra_kbt_protected: None,
         extra_kbt_unprotected: None,
         extra_kbt_payload: None,
+        encryption: None,
     };
     let sd_cwt = sd_holder.verify_sd_cwt(&esdicawt_sd_cwt_bytes[..], Default::default(), &issuer_verifying_key()).unwrap();
 

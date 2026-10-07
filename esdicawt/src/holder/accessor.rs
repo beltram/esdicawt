@@ -1,6 +1,6 @@
 use crate::{
     SdCwtVerifierResult,
-    spec::{CWT_CLAIM_KEY_CONFIRMATION, CustomClaims, Select, issuance::SdInnerPayload, key_binding::KbtCwt},
+    spec::{CWT_CLAIM_KEY_CONFIRMATION, CustomClaims, Select, blinded_claims::SaltedArray, issuance::SdInnerPayload, key_binding::KbtCwt},
     verifier::walk::walk_payload,
 };
 use ciborium::{Value, value::Integer};
@@ -29,12 +29,12 @@ impl<
     fn claimset_unchecked(&self) -> SdCwtVerifierResult<Option<Self::Payload>, Infallible> {
         let sd_cwt = self.generic_sd_cwt()?;
         let mut payload = sd_cwt.payload.upcast_value()?;
-        if let Some(disclosures) = sd_cwt.disclosures() {
-            // compute the hash of all disclosures
-            let mut disclosures = disclosures.digested::<Hasher>()?;
-
-            walk_payload(Rc::new(Hasher::new()), &mut payload, &mut disclosures)?;
-        }
+        // an absent 'sd_claims' is equivalent to no disclosure: undisclosed redacted claims still have to be removed
+        let no_disclosures = SaltedArray::default();
+        let disclosures = sd_cwt.disclosures().unwrap_or(&no_disclosures);
+        // compute the hash of all disclosures
+        let mut disclosures = disclosures.digested::<Hasher>()?;
+        walk_payload(Rc::new(Hasher::new()), &mut payload, &mut disclosures)?;
         // puncture the 'cnf' claim before deserialization
         if let Some(map) = payload.as_map_mut() {
             map.retain(|(k, _)| !matches!(k, Value::Integer(i) if *i == Integer::from(CWT_CLAIM_KEY_CONFIRMATION)));

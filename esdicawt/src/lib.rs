@@ -7,13 +7,14 @@ pub use {
 };
 
 pub use crate::spec::reexports::coset;
+pub use aead::{AeadSealed, DisclosureEncryptor};
 pub use cose_key;
 pub use esdicawt_spec as spec;
 pub use holder::{
     Holder, SdCwtVerified,
     accessor::ClaimSetExt,
     error::{SdCwtHolderError, SdCwtHolderResult},
-    params::{CborPath, HolderParams, Presentation},
+    params::{CborPath, DisclosureEncryption, HolderParams, Presentation},
     validation::{HolderValidationParams, SdCwtHolderValidationError},
 };
 pub use issuer::{
@@ -31,6 +32,7 @@ pub use verifier::{
     params::{ShallowVerifierParams, VerifierParams},
 };
 
+mod aead;
 pub(crate) mod any_digest;
 mod holder;
 mod issuer;

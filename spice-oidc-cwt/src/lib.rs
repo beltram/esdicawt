@@ -744,6 +744,7 @@ mod tests {
                     artificial_time: None,
                     time_verification: Default::default(),
                     leeway: Default::default(),
+                    encryption: None,
                 },
             )
             .unwrap();

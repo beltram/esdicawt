@@ -181,6 +181,7 @@ fn holder_params() -> HolderParams<'static> {
         extra_kbt_protected: None,
         extra_kbt_unprotected: None,
         extra_kbt_payload: None,
+        encryption: None,
     }
 }
 

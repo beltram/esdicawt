@@ -326,6 +326,12 @@ impl SaltedArray {
     pub fn len(&self) -> usize {
         self.0.len()
     }
+
+    /// Splits the disclosures in 2, the ones satisfying the predicate then the others. Raw bytes are preserved
+    pub fn partition(self, predicate: impl FnMut(&InlinedCbor<SaltedEntry<Value>>) -> bool) -> (Self, Self) {
+        let (a, b): (Vec<_>, Vec<_>) = self.0.into_iter().partition(predicate);
+        (Self(a), Self(b))
+    }
 }
 
 impl From<Vec<InlinedCbor<SaltedEntry<Value>>>> for SaltedArray {

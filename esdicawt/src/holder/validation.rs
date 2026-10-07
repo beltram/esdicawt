@@ -34,6 +34,8 @@ pub enum SdCwtHolderValidationError<CustomError: Send + Sync> {
     DisclosureNotFound,
     #[error("Expected to find {expected} disclosures, found {actual}")]
     OrphanDisclosure { expected: usize, actual: usize },
+    #[error("The Issuer MUST NOT encrypt disclosures, only the Holder does")]
+    UnexpectedEncryptedDisclosures,
     #[error(transparent)]
     CborDeserializeError(#[from] ciborium::de::Error<std::io::Error>),
     #[error(transparent)]
