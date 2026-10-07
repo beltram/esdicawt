@@ -20,6 +20,8 @@ impl<Extra: CustomClaims> serde::Serialize for SdUnprotected<Extra> {
             .unwrap_or_default();
 
         let map_size = self.sd_claims.as_ref().map(|_| 1).unwrap_or_default() + extras.len();
+        #[cfg(feature = "aead")]
+        let map_size = map_size + usize::from(self.sd_aead_encrypted_claims.is_some()) + usize::from(self.sd_aead.is_some());
 
         let mut map = serializer.serialize_map(Some(map_size))?;
 
@@ -30,6 +32,16 @@ impl<Extra: CustomClaims> serde::Serialize for SdUnprotected<Extra> {
                 return Err(S::Error::custom(crate::EsdicawtSpecError::EmptySdClaims));
             }
             map.serialize_entry(&COSE_HEADER_SD_CLAIMS, sd_claims)?;
+        }
+
+        #[cfg(feature = "aead")]
+        if let Some(sd_aead_encrypted_claims) = &self.sd_aead_encrypted_claims {
+            map.serialize_entry(&crate::COSE_HEADER_SD_AEAD_ENCRYPTED_CLAIMS, sd_aead_encrypted_claims)?;
+        }
+
+        #[cfg(feature = "aead")]
+        if let Some(sd_aead) = &self.sd_aead {
+            map.serialize_entry(&crate::COSE_HEADER_SD_AEAD, sd_aead)?;
         }
 
         for (k, v) in extras {
@@ -54,6 +66,8 @@ impl<'de, Extra: CustomClaims> serde::Deserialize<'de> for SdUnprotected<Extra> 
                 use serde::de::Error as _;
                 let mut extra = vec![];
                 let mut sd_claims = None;
+                #[cfg(feature = "aead")]
+                let (mut sd_aead_encrypted_claims, mut sd_aead) = (None, None);
                 while let Some((k, v)) = map.next_entry::<Value, Value>()? {
                     if matches!(k, Value::Integer(label) if label == COSE_HEADER_SD_CLAIMS.into()) {
                         let salted_array = v
@@ -69,6 +83,14 @@ impl<'de, Extra: CustomClaims> serde::Deserialize<'de> for SdUnprotected<Extra> 
                         }
                         sd_claims.replace(salted_array);
                     } else {
+                        #[cfg(feature = "aead")]
+                        if k == Value::from(crate::COSE_HEADER_SD_AEAD_ENCRYPTED_CLAIMS) {
+                            decode_once(&mut sd_aead_encrypted_claims, &v, "sd_aead_encrypted_claims")?;
+                            continue;
+                        } else if k == Value::from(crate::COSE_HEADER_SD_AEAD) {
+                            decode_once(&mut sd_aead, &v, "sd_aead")?;
+                            continue;
+                        }
                         extra.push((k, v));
                     }
                 }
@@ -78,12 +100,29 @@ impl<'de, Extra: CustomClaims> serde::Deserialize<'de> for SdUnprotected<Extra> 
                 } else {
                     Some(Value::deserialized::<Extra>(&Value::Map(extra)).map_err(A::Error::custom)?)
                 };
-                Ok(SdUnprotected { sd_claims, extra })
+                Ok(SdUnprotected {
+                    sd_claims,
+                    #[cfg(feature = "aead")]
+                    sd_aead_encrypted_claims,
+                    #[cfg(feature = "aead")]
+                    sd_aead,
+                    extra,
+                })
             }
         }
 
         deserializer.deserialize_map(SdUnprotectedVisitor::<Extra>(Default::default()))
     }
+}
+
+/// Decodes a header parameter which must appear at most once
+#[cfg(feature = "aead")]
+fn decode_once<T: serde::de::DeserializeOwned, E: serde::de::Error>(slot: &mut Option<T>, value: &Value, name: &str) -> Result<(), E> {
+    let decoded = value.deserialized::<T>().map_err(|err| E::custom(format!("Cannot deserialize {name}: {err}")))?;
+    if slot.replace(decoded).is_some() {
+        return Err(E::custom(format!("Duplicate {name}")));
+    }
+    Ok(())
 }
 
 #[cfg(test)]
@@ -97,7 +136,14 @@ mod tests {
     use ciborium::cbor;
 
     fn unprotected(sd_claims: Option<SaltedArray>) -> SdUnprotected<NoClaims> {
-        SdUnprotected { sd_claims, extra: None }
+        SdUnprotected {
+            sd_claims,
+            #[cfg(feature = "aead")]
+            sd_aead_encrypted_claims: None,
+            #[cfg(feature = "aead")]
+            sd_aead: None,
+            extra: None,
+        }
     }
 
     #[test]
@@ -123,5 +169,85 @@ mod tests {
         // previous versions' Verifiers expect an empty 'sd_claims' when nothing is disclosed
         #[cfg(feature = "backward")]
         assert_eq!(unprotected(Some(SaltedArray::default())).to_cbor_bytes().unwrap(), empty);
+    }
+
+    #[cfg(feature = "aead")]
+    mod aead {
+        use super::*;
+        use crate::aead::{AeadAlgorithm, AeadEncryptedArray, AeadEncryptedDisclosure, AeadKeyContext};
+
+        fn salted_array() -> SaltedArray {
+            let decoy = SaltedEntry::<Value>::Decoy(Decoy { salt: Salt::empty() });
+            vec![InlinedCbor::from_bytes(decoy.to_cbor_bytes().unwrap())].into()
+        }
+
+        fn encrypted() -> AeadEncryptedArray {
+            AeadEncryptedArray::new(vec![AeadEncryptedDisclosure {
+                nonce: vec![1; 12],
+                ciphertext: vec![2; 35],
+                tag: vec![3; 16],
+                key_context: Some(AeadKeyContext::Uint(7)),
+            }])
+            .unwrap()
+        }
+
+        fn aead_unprotected(sd_claims: Option<SaltedArray>, sd_aead_encrypted_claims: Option<AeadEncryptedArray>, sd_aead: Option<AeadAlgorithm>) -> SdUnprotected<NoClaims> {
+            SdUnprotected {
+                sd_aead_encrypted_claims,
+                sd_aead,
+                ..unprotected(sd_claims)
+            }
+        }
+
+        #[test]
+        fn should_roundtrip() {
+            let cases = [
+                aead_unprotected(None, Some(encrypted()), Some(AeadAlgorithm::AES_256_GCM)),
+                aead_unprotected(Some(salted_array()), Some(encrypted()), Some(AeadAlgorithm::AES_128_GCM)),
+                aead_unprotected(Some(salted_array()), Some(encrypted()), None),
+            ];
+            for case in cases {
+                let bytes = case.to_cbor_bytes().unwrap();
+                assert_eq!(SdUnprotected::<NoClaims>::from_cbor_bytes(&bytes).unwrap(), case);
+            }
+        }
+
+        #[test]
+        fn should_use_registered_labels() {
+            let bytes = aead_unprotected(Some(salted_array()), Some(encrypted()), Some(AeadAlgorithm::CHACHA20_POLY1305))
+                .to_cbor_bytes()
+                .unwrap();
+            let map = Value::from_cbor_bytes(&bytes).unwrap().into_map().unwrap();
+            let labels = map.iter().map(|(k, _)| k.as_integer().unwrap()).map(i128::from).collect::<Vec<_>>();
+            assert_eq!(labels, vec![17, 171, 172]);
+            assert_eq!(map.get(2).unwrap().1, Value::from(29));
+        }
+
+        #[test]
+        fn should_reject_empty_encrypted_claims() {
+            let empty_encrypted = cbor!({ 171 => [] }).unwrap().to_cbor_bytes().unwrap();
+            assert!(SdUnprotected::<NoClaims>::from_cbor_bytes(&empty_encrypted).is_err());
+        }
+
+        #[test]
+        fn should_reject_duplicate_labels() {
+            let encrypted = Value::serialized(&encrypted()).unwrap();
+            let duplicates = [
+                Value::Map(vec![(Value::from(171), encrypted.clone()), (Value::from(171), encrypted)]),
+                Value::Map(vec![(Value::from(172), Value::from(1)), (Value::from(172), Value::from(2))]),
+            ];
+            for duplicate in duplicates {
+                let bytes = duplicate.to_cbor_bytes().unwrap();
+                assert!(SdUnprotected::<NoClaims>::from_cbor_bytes(&bytes).is_err());
+            }
+        }
+
+        #[test]
+        fn should_reject_invalid_sd_aead() {
+            for invalid in [Value::from(-1), Value::from(65536), Value::from("A128GCM")] {
+                let bytes = Value::Map(vec![(Value::from(172), invalid)]).to_cbor_bytes().unwrap();
+                assert!(SdUnprotected::<NoClaims>::from_cbor_bytes(&bytes).is_err());
+            }
+        }
     }
 }
