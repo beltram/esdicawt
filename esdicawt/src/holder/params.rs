@@ -1,8 +1,10 @@
 use crate::{
-    SdCwtHolderResult, TimeVerification,
-    holder::traverse::traverse_all_cbor_paths_in_salted_array,
+    SdCwtHolderError, SdCwtHolderResult, TimeVerification,
+    aead::{AeadSealed, DisclosureEncryptor},
+    holder::traverse::{traverse_all_cbor_paths_from_payload, traverse_all_cbor_paths_in_salted_array},
     spec::{
         CustomClaims, NoClaims, SdCwtClaim,
+        aead::{AeadEncryptedArray, AeadEncryptedDisclosure, AeadKeyContext, disclosure_to_plaintext},
         blinded_claims::{SaltedArray, SaltedEntry},
     },
     time::TimeArg,
@@ -27,6 +29,77 @@ pub struct HolderParams<'a, KbtPayloadClaims: CustomClaims = NoClaims, KbtProtec
     pub extra_kbt_protected: Option<KbtProtectedClaims>,
     pub extra_kbt_unprotected: Option<KbtUnprotectedClaims>,
     pub extra_kbt_payload: Option<KbtPayloadClaims>,
+    /// To encrypt some of the presented disclosures
+    pub encryption: Option<DisclosureEncryption<'a>>,
+}
+
+/// Which of the presented disclosures get encrypted and how.
+/// They are then moved from `sd_claims` to `sd_aead_encrypted_claims`.
+///
+/// See https://datatracker.ietf.org/doc/html/draft-ietf-spice-sd-cwt#name-encrypted-disclosures
+pub struct DisclosureEncryption<'a> {
+    pub encryptor: &'a dyn DisclosureEncryptor,
+    /// Optional context added to every encrypted disclosure to help the Verifier select the correct key
+    pub key_context: Option<AeadKeyContext>,
+    /// The presented disclosures whose path, from the root of the payload, is accepted by the function get encrypted,
+    /// along with the disclosures nested in them
+    #[allow(clippy::type_complexity)]
+    pub select: Box<dyn Fn(&[CborPath]) -> bool>,
+}
+
+impl DisclosureEncryption<'_> {
+    /// Returns the disclosures to keep in plaintext and the encrypted ones
+    pub(crate) fn try_encrypt_disclosures<Hasher: digest::Digest, E: core::error::Error + Send + Sync>(
+        &self,
+        payload: &Value,
+        disclosures: SaltedArray,
+    ) -> SdCwtHolderResult<(SaltedArray, Option<AeadEncryptedArray>), E> {
+        let alg = self.encryptor.algorithm();
+        alg.check_allowed()?;
+
+        let selected = {
+            let hashed_disclosures = disclosures.digested::<Hasher>()?;
+            // paths start at the root of the payload, hence disclosures not reachable from it are never encrypted
+            let cbor_paths = traverse_all_cbor_paths_from_payload::<Hasher, E>(payload, &hashed_disclosures)?;
+            let encrypted_paths = cbor_paths.iter().filter(|(path, _)| (self.select)(path)).map(|(path, _)| path.clone()).collect::<Vec<_>>();
+            // the disclosures nested in an encrypted one are also encrypted. Otherwise, a Verifier unable to decrypt the
+            // parent would consider them orphans and reject the whole presentation
+            cbor_paths
+                .into_iter()
+                .filter_map(|(path, salted)| encrypted_paths.iter().any(|encrypted| path.starts_with(encrypted)).then_some(salted))
+                .collect::<Vec<_>>()
+        };
+        // salts being unique, comparing the decoded disclosures is enough. This preserves the raw bytes of the disclosures
+        let (to_encrypt, plaintext) = disclosures.partition(|d| d.to_value().map(|d| selected.contains(d)).unwrap_or_default());
+
+        let encrypted = to_encrypt
+            .as_slice()
+            .iter()
+            .map(|disclosure| {
+                let plaintext = disclosure_to_plaintext(disclosure)?;
+                let AeadSealed { nonce, ciphertext, tag } = self.encryptor.encrypt(&plaintext).map_err(SdCwtHolderError::EncryptionError)?;
+                alg.check_tag_len(tag.len())?;
+                Ok(AeadEncryptedDisclosure {
+                    nonce: nonce.into(),
+                    ciphertext: ciphertext.into(),
+                    tag: tag.into(),
+                    key_context: self.key_context.clone(),
+                })
+            })
+            .collect::<SdCwtHolderResult<Vec<_>, E>>()?;
+
+        let encrypted = if encrypted.is_empty() { None } else { Some(AeadEncryptedArray::try_new(encrypted)?) };
+        Ok((plaintext, encrypted))
+    }
+}
+
+impl std::fmt::Debug for DisclosureEncryption<'_> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("DisclosureEncryption")
+            .field("algorithm", &self.encryptor.algorithm())
+            .field("key_context", &self.key_context)
+            .finish_non_exhaustive()
+    }
 }
 
 /// Which disclosures the holder presents to the verifier.

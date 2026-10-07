@@ -1,4 +1,11 @@
-use crate::{CustomClaims, CwtAny, NoClaims, SdHashAlg, Select, alg::Algorithm, blinded_claims::SaltedArray, inlined_cbor::InlinedCbor, redacted_claims::RedactedClaimKeys};
+use crate::{
+    CustomClaims, CwtAny, NoClaims, SdHashAlg, Select,
+    aead::{AeadAlgorithm, AeadEncryptedArray},
+    alg::Algorithm,
+    blinded_claims::SaltedArray,
+    inlined_cbor::InlinedCbor,
+    redacted_claims::RedactedClaimKeys,
+};
 
 mod accessors;
 mod sd_issued_codec;
@@ -36,7 +43,13 @@ pub struct SdProtected<Extra: CustomClaims> {
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct SdUnprotected<Extra: CustomClaims> {
+    /// `sd_claims`, never empty
     pub sd_claims: Option<SaltedArray>,
+    /// `sd_aead_encrypted_claims`
+    pub sd_aead_encrypted_claims: Option<AeadEncryptedArray>,
+    /// `sd_aead`. Placed in the unprotected header (and not in the protected one as the draft does) since the Holder
+    /// sets it after the Issuer signed the SD-CWT. It is still integrity protected by the SD-KBT signature.
+    pub sd_aead: Option<AeadAlgorithm>,
     pub extra: Option<Extra>,
 }
 
@@ -88,6 +101,15 @@ impl<PayloadClaims: Select, Hasher: digest::Digest + Clone, ProtectedClaims: Cus
 
     pub fn disclosures_mut(&mut self) -> Option<&mut SaltedArray> {
         self.sd_unprotected.sd_claims.as_mut()
+    }
+
+    pub fn encrypted_disclosures(&self) -> Option<&AeadEncryptedArray> {
+        self.sd_unprotected.sd_aead_encrypted_claims.as_ref()
+    }
+
+    /// The AEAD algorithm used for the encrypted disclosures, defaults to AEAD_AES_128_GCM when absent
+    pub fn sd_aead(&self) -> AeadAlgorithm {
+        self.sd_unprotected.sd_aead.unwrap_or_default()
     }
 }
 

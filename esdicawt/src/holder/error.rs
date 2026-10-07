@@ -39,6 +39,8 @@ pub enum SdCwtHolderError<CustomError: Send + Sync> {
     InvalidTyp,
     #[error("{0}")]
     ImplementationError(&'static str),
+    #[error("Failed encrypting a disclosure: {0}")]
+    EncryptionError(Box<dyn core::error::Error + Send + Sync>),
     #[error(transparent)]
     CustomError(CustomError),
 }

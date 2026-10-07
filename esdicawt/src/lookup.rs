@@ -254,6 +254,7 @@ mod tests {
             extra_kbt_protected: None,
             extra_kbt_unprotected: None,
             extra_kbt_payload: None,
+            encryption: None,
         };
         let sd_cwt = holder
             .verify_sd_cwt(sd_cwt, Default::default(), &CoseKeySet::builder().with(&issuer_verifying_key).unwrap().build())
