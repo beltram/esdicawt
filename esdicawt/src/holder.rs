@@ -4,6 +4,7 @@ use crate::{
     signature_verifier::validate_cose_sign1_signature,
     spec::{
         CustomClaims, CwtAny, NoClaims, Select,
+        blinded_claims::SaltedArray,
         key_binding::{KbtPayload, KbtProtected, KbtUnprotected},
         reexports::coset,
     },
@@ -148,9 +149,10 @@ pub trait Holder {
             return Err(SdCwtHolderError::ValidationError(SdCwtHolderValidationError::VerifyingKeyMismatch));
         }
 
-        // validate disclosure
-        let disclosures = sd_cwt.disclosures();
-        if let Some((raw_payload, disclosures)) = cose_sign1_sd_cwt.payload.as_deref().map(Value::from_cbor_bytes).transpose()?.zip(disclosures) {
+        // validate disclosure. An absent 'sd_claims' is equivalent to no disclosure
+        let no_disclosures = SaltedArray::default();
+        let disclosures = sd_cwt.disclosures().unwrap_or(&no_disclosures);
+        if let Some(raw_payload) = cose_sign1_sd_cwt.payload.as_deref().map(Value::from_cbor_bytes).transpose()? {
             let actual_disclosures = disclosures.digested::<Self::Hasher>()?;
             let expected_nb_disclosures = validate_disclosures(&raw_payload, &actual_disclosures)?;
 
@@ -165,9 +167,8 @@ pub trait Holder {
                     actual: actual_nb_disclosures,
                 }));
             }
-        } else if disclosures.map(|d| !d.is_empty()).unwrap_or_default() {
-            // SAFETY: we already checked 'disclosures' is Some
-            let actual = disclosures.unwrap().len();
+        } else if !disclosures.is_empty() {
+            let actual = disclosures.len();
             return Err(SdCwtHolderError::ValidationError(SdCwtHolderValidationError::OrphanDisclosure { expected: 0, actual }));
         }
 
@@ -198,11 +199,11 @@ pub trait Holder {
 
         // --- redaction of claims ---
         // select the claims to disclose
-        if let Some(sd_claims) = sd_cwt.0.sd_unprotected.sd_claims {
+        if let Some(sd_claims) = sd_cwt.0.sd_unprotected.sd_claims.take() {
             let sd_claims = params.presentation.try_select_disclosures::<Self::Hasher, Self::Error>(sd_claims)?;
 
-            // then replace them in the issued sd-cwt
-            sd_cwt.0.sd_unprotected.sd_claims = Some(sd_claims);
+            // then replace them in the issued sd-cwt. An empty 'sd_claims' is invalid
+            sd_cwt.0.sd_unprotected.sd_claims = (!sd_claims.is_empty()).then_some(sd_claims);
         }
 
         // --- protected ---

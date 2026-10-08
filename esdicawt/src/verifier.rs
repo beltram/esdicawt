@@ -7,7 +7,10 @@ use crate::{
     any_digest::AnyDigest,
     elapsed_since_epoch,
     signature_verifier::cose_sign1_tbs,
-    spec::{CWT_CLAIM_KEY_CONFIRMATION, CustomClaims, CwtAny, SdHashAlg, Select, issuance::SdInnerPayload, key_binding::KbtCwt, reexports::coset, verified::KbtCwtVerified},
+    spec::{
+        CWT_CLAIM_KEY_CONFIRMATION, CustomClaims, CwtAny, SdHashAlg, Select, blinded_claims::SaltedArray, issuance::SdInnerPayload, key_binding::KbtCwt, reexports::coset,
+        verified::KbtCwtVerified,
+    },
     time::verify_time_claims,
     verifier::error::SdCwtVerifierError,
 };
@@ -272,8 +275,12 @@ fn __verify_sd_kbt_claims<
 
     let sd_alg = kbt_protected.kcwt.protected.to_value()?.sd_alg;
 
+    // an absent 'sd_claims' is equivalent to no disclosure: undisclosed redacted claims still have to be removed
+    let no_disclosures = SaltedArray::default();
+    let disclosures = kbt_protected.kcwt.disclosures().unwrap_or(&no_disclosures);
+
     // now verifying the disclosures
-    if let Some(disclosures) = kbt_protected.kcwt.disclosures() {
+    {
         // compute the hash of all disclosures
         let hasher = digest(sd_alg);
         let mut disclosures = disclosures.digested_detached_hasher(&hasher)?;
@@ -962,6 +969,30 @@ mod tests {
         assert_eq!(verified.claimset.unwrap(), cbor!({ "array" => ["a"] }).unwrap());
     }
 
+    #[test]
+    #[wasm_bindgen_test::wasm_bindgen_test]
+    fn should_omit_empty_sd_claims() {
+        use crate::spec::key_binding::KbtCwt;
+
+        let payload = cbor!({ sd!("a") => "b", "array" => ["c", sd!("d")] }).unwrap();
+        let holder_signing_key = ed25519_dalek::SigningKey::generate(&mut rand::thread_rng());
+        let issuer_params = default_issuer_params(Some(payload), &holder_signing_key);
+        let mut holder_params = default_holder_params::<NoClaims>();
+        holder_params.presentation = Presentation::None;
+        let (cks, sd_kbt, ..) = generate_sd_kbt(issuer_params, holder_params, &holder_signing_key);
+
+        // an empty 'sd_claims' is invalid
+        let kbt = KbtCwt::<Value, sha2::Sha256>::from_cbor_bytes(&sd_kbt).unwrap();
+        assert!(kbt.disclosures().unwrap().is_none());
+
+        // undisclosed claims are removed
+        let verifier = HybridVerifier::<Value, NoClaims>::default();
+        let verified = verifier
+            .verify_sd_kbt(&sd_kbt, &Default::default(), Some(&holder_signing_key.verifying_key()), &cks)
+            .unwrap();
+        assert_eq!(verified.claimset.unwrap(), cbor!({ "array" => ["c"] }).unwrap());
+    }
+
     /// sorts the mappings' entries, recursively, to compare claim sets regardless of the order of disclosed claims
     fn sorted(value: Value) -> Value {
         match value {
@@ -1642,6 +1673,19 @@ mod backward {
             }
             .inspect_err(|err: &anyhow::Error| panic!("'{snapshot:?}' failed because: {err:?}"))
             .unwrap();
+        }
+    }
+
+    /// Previous versions encoded an empty 'sd_claims' instead of omitting it
+    #[test]
+    #[cfg(feature = "backward")]
+    fn should_ignore_empty_sd_claims() {
+        for legacy in [
+            include_str!("verifier/fixtures/sd-kbt-none-ed25519-empty-sd-claims.hex"),
+            include_str!("verifier/fixtures/sd-kbt-none-ed25519-draft08-empty-sd-claims.hex"),
+        ] {
+            let sd_kbt = hex::decode(legacy.trim()).unwrap();
+            sd_kbt_verification::<CustomTokenClaims>(&sd_kbt).unwrap();
         }
     }
 

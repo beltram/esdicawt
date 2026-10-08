@@ -97,7 +97,9 @@ pub trait Issuer {
             .as_mut()
             .map(|tbr| redact::<<Self as Issuer>::Error, <Self as Issuer>::Hasher>(csprng, tbr))
             .transpose()?
+            && !salted_array.is_empty()
         {
+            // an empty 'sd_claims' is invalid
             unprotected_builder = unprotected_builder.value(COSE_HEADER_SD_CLAIMS, salted_array.to_cbor_value()?);
         }
 
@@ -424,8 +426,8 @@ mod tests {
         assert!(model.age.is_some());
         assert!(model.name.is_some());
 
-        let mut disclosures = sd_cwt.disclosures().unwrap().iter().map(|d| d.unwrap());
-        assert!(disclosures.next().is_none());
+        // an empty 'sd_claims' is invalid hence it is omitted
+        assert!(sd_cwt.disclosures().is_none());
     }
 
     #[test]
