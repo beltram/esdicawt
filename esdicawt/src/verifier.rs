@@ -203,12 +203,13 @@ fn __verify_sd_kbt_claims<
     let kbt_payload = kbt.payload.try_into_value()?;
 
     // verify SD-KBT audience
-    if let Some(expected) = params.expected_kbt_audience {
+    let expected = params.expected_kbt_audience;
+    if !expected.is_empty() {
         let actual = &kbt_payload.audience;
-        if actual != expected {
+        if !expected.iter().any(|e| actual == e) {
             return Err(SdCwtVerifierError::KbtAudienceMismatch {
                 actual: actual.to_owned(),
-                expected: expected.to_owned(),
+                expected: expected.iter().map(|s| s.to_string()).collect(),
             });
         }
     }
@@ -847,19 +848,31 @@ mod tests {
         // === verify SD-KBT audience
         // ok when same
         let params = VerifierParams {
-            expected_kbt_audience: Some("kbt-aud-a"),
+            expected_kbt_audience: &["kbt-aud-a"],
+            ..Default::default()
+        };
+        verifier.verify_sd_kbt(&sd_kbt, &params, Some(&holder_verifying_key), &cks).unwrap();
+        // ok when one of many
+        let params = VerifierParams {
+            expected_kbt_audience: &["kbt-aud-b", "kbt-aud-a"],
+            ..Default::default()
+        };
+        verifier.verify_sd_kbt(&sd_kbt, &params, Some(&holder_verifying_key), &cks).unwrap();
+        // ok when empty (not verified)
+        let params = VerifierParams {
+            expected_kbt_audience: &[],
             ..Default::default()
         };
         verifier.verify_sd_kbt(&sd_kbt, &params, Some(&holder_verifying_key), &cks).unwrap();
         // fail when mismatch
         let params = VerifierParams {
-            expected_kbt_audience: Some("kbt-aud-b"),
+            expected_kbt_audience: &["kbt-aud-b"],
             ..Default::default()
         };
         std::assert_matches!(
         verifier.verify_sd_kbt(&sd_kbt, &params, Some(&holder_verifying_key), &cks),
             Err(SdCwtVerifierError::KbtAudienceMismatch { expected, actual })
-            if expected == "kbt-aud-b" && actual == "kbt-aud-a"
+            if expected == ["kbt-aud-b"] && actual == "kbt-aud-a"
         );
 
         // === verify SD-KBT cnonce
@@ -1024,7 +1037,7 @@ mod tests {
             expected_subject: None,
             expected_issuer: None,
             expected_audience: None,
-            expected_kbt_audience: None,
+            expected_kbt_audience: &[],
             expected_cnonce: None,
             sd_cwt_leeway: Default::default(),
             sd_kbt_leeway: Default::default(),
@@ -1273,11 +1286,11 @@ mod tests {
             let verifier = HybridVerifier::<Value, NoClaims>::default();
 
             let params = VerifierParams {
-                expected_kbt_audience: Some("bbb"),
+                expected_kbt_audience: &["bbb"],
                 ..Default::default()
             };
             let err = verifier.verify_sd_kbt(&sd_kbt, &params, Some(&holder_signing_key.verifying_key()), &cks).unwrap_err();
-            std::assert_matches!(err, SdCwtVerifierError::KbtAudienceMismatch { actual, expected } if &expected == "bbb" && &actual == "aaa");
+            std::assert_matches!(err, SdCwtVerifierError::KbtAudienceMismatch { actual, expected } if expected == ["bbb"] && &actual == "aaa");
         }
 
         #[test]
