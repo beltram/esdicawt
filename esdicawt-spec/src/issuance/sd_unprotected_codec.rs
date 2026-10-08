@@ -1,7 +1,7 @@
 use ciborium::Value;
 use serde::ser::SerializeMap;
 
-use crate::{COSE_HEADER_SD_CLAIMS, CustomClaims};
+use crate::{COSE_HEADER_SD_CLAIMS, CustomClaims, EsdicawtSpecError, blinded_claims::SaltedArray};
 
 use super::SdUnprotected;
 
@@ -24,6 +24,9 @@ impl<Extra: CustomClaims> serde::Serialize for SdUnprotected<Extra> {
         let mut map = serializer.serialize_map(Some(map_size))?;
 
         if let Some(sd_claims) = &self.sd_claims {
+            if sd_claims.is_empty() {
+                return Err(S::Error::custom(EsdicawtSpecError::EmptySdClaims));
+            }
             map.serialize_entry(&COSE_HEADER_SD_CLAIMS, sd_claims)?;
         }
 
@@ -51,7 +54,17 @@ impl<'de, Extra: CustomClaims> serde::Deserialize<'de> for SdUnprotected<Extra> 
                 let mut sd_claims = None;
                 while let Some((k, v)) = map.next_entry::<Value, Value>()? {
                     if matches!(k, Value::Integer(label) if label == COSE_HEADER_SD_CLAIMS.into()) {
-                        let salted_array = v.deserialized().map_err(|err| A::Error::custom(format!("Cannot deserialize sd_claims: {err}")))?;
+                        let salted_array = v
+                            .deserialized::<SaltedArray>()
+                            .map_err(|err| A::Error::custom(format!("Cannot deserialize sd_claims: {err}")))?;
+                        // see https://datatracker.ietf.org/doc/html/draft-ietf-spice-sd-cwt#name-kbt-and-sd-cwt-verifier-val
+                        if salted_array.is_empty() {
+                            // previous versions used to encode an empty 'sd_claims' instead of omitting it: treat it as absent
+                            #[cfg(feature = "backward")]
+                            continue;
+                            #[cfg(not(feature = "backward"))]
+                            return Err(A::Error::custom(EsdicawtSpecError::EmptySdClaims));
+                        }
                         sd_claims.replace(salted_array);
                     } else {
                         extra.push((k, v));
@@ -68,5 +81,41 @@ impl<'de, Extra: CustomClaims> serde::Deserialize<'de> for SdUnprotected<Extra> 
         }
 
         deserializer.deserialize_map(SdUnprotectedVisitor::<Extra>(Default::default()))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::{
+        CwtAny, NoClaims, Salt,
+        blinded_claims::{Decoy, SaltedEntry},
+        inlined_cbor::InlinedCbor,
+    };
+    use ciborium::cbor;
+
+    fn unprotected(sd_claims: Option<SaltedArray>) -> SdUnprotected<NoClaims> {
+        SdUnprotected { sd_claims, extra: None }
+    }
+
+    #[test]
+    fn should_roundtrip() {
+        let decoy = SaltedEntry::<Value>::Decoy(Decoy { salt: Salt::empty() });
+        let salted_array: SaltedArray = vec![InlinedCbor::from_bytes(decoy.to_cbor_bytes().unwrap())].into();
+        for case in [unprotected(None), unprotected(Some(salted_array))] {
+            let bytes = case.to_cbor_bytes().unwrap();
+            assert_eq!(SdUnprotected::<NoClaims>::from_cbor_bytes(&bytes).unwrap(), case);
+        }
+    }
+
+    #[test]
+    fn should_reject_empty_sd_claims() {
+        let empty = cbor!({ 17 => [] }).unwrap().to_cbor_bytes().unwrap();
+        #[cfg(not(feature = "backward"))]
+        assert!(SdUnprotected::<NoClaims>::from_cbor_bytes(&empty).is_err());
+        // previous versions encoded an empty 'sd_claims': it is ignored
+        #[cfg(feature = "backward")]
+        assert_eq!(SdUnprotected::<NoClaims>::from_cbor_bytes(&empty).unwrap(), unprotected(None));
+        assert!(unprotected(Some(SaltedArray::default())).to_cbor_bytes().is_err());
     }
 }

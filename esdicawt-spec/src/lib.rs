@@ -92,6 +92,8 @@ pub enum EsdicawtSpecError {
     DigestError { reason: String, alg: SdHashAlg },
     #[error("{0}")]
     ImplementationError(&'static str),
+    #[error("'sd_claims' MUST NOT be an empty array")]
+    EmptySdClaims,
 }
 
 impl From<Value> for EsdicawtSpecError {
