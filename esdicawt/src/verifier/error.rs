@@ -10,8 +10,8 @@ pub enum SdCwtVerifierError<CustomError: Send + Sync> {
     IssuerMismatch { expected: String, actual: String },
     #[error("Expected audience to be '{expected}' but was '{actual}'")]
     AudienceMismatch { expected: String, actual: String },
-    #[error("Expected SD-KBT audience to be '{expected}' but was '{actual}'")]
-    KbtAudienceMismatch { expected: String, actual: String },
+    #[error("Expected SD-KBT audience to be one of {expected:?} but was '{actual}'")]
+    KbtAudienceMismatch { expected: Vec<String>, actual: String },
     #[error("Expected cnonce to be '{expected:x?}' but was '{actual:x?}'")]
     CnonceMismatch { expected: Vec<u8>, actual: Vec<u8> },
     #[error("Signature encoding error")]
