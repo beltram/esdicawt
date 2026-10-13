@@ -87,14 +87,20 @@ fn verifier_batch_bench(c: &mut Criterion) {
 }
 
 fn bench_verifier_batch<H: digest::Digest + Clone>(group: &mut BenchmarkGroup<WallTime>, id: BenchmarkId, nb_claims: usize, nb_sd_kbt: usize) {
-    // verification does not consume its inputs so the batch is built once, outside of the measured routine
-    let (verifier, sd_kbts, params, cks) = verifier_batch::<H>(nb_claims, nb_sd_kbt);
-    let batch = sd_kbts.iter().map(|sd_kbt| (sd_kbt.as_slice(), &params, None)).collect::<Vec<_>>();
-    assert!(verifier.verify_sd_kbt_batch(&batch, &cks).into_iter().all(|r| r.is_ok()));
+    // building a batch is expensive so it is only done for the benchmarks selected by the filter, the first time criterion
+    // runs this one, then reused for the following runs since verification does not consume its inputs
+    let input = std::cell::OnceCell::new();
 
     // one function per claims count so that each gets its own "time vs. batch size" series
-    group.bench_with_input(id, &batch, |b, batch| {
-        b.iter(|| black_box(&verifier).verify_sd_kbt_batch(black_box(batch), black_box(&cks)))
+    group.bench_function(id, |b| {
+        let (verifier, sd_kbts, params, cks) = input.get_or_init(|| {
+            let (verifier, sd_kbts, params, cks) = verifier_batch::<H>(nb_claims, nb_sd_kbt);
+            let batch = sd_kbts.iter().map(|sd_kbt| (sd_kbt.as_slice(), &params, None)).collect::<Vec<_>>();
+            assert!(verifier.verify_sd_kbt_batch(&batch, &cks).into_iter().all(|r| r.is_ok()));
+            (verifier, sd_kbts, params, cks)
+        });
+        let batch = sd_kbts.iter().map(|sd_kbt| (sd_kbt.as_slice(), params, None)).collect::<Vec<_>>();
+        b.iter(|| black_box(verifier).verify_sd_kbt_batch(black_box(&batch), black_box(cks)))
     });
 }
 
