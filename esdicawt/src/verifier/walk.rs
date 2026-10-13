@@ -31,20 +31,25 @@ where
                 let (_, rcks) = mapping.swap_remove(pos);
                 let rcks = rcks.deserialized::<RedactedClaimKeys>()?;
 
+                // sized upfront to avoid rehashing/reallocating while disclosed claims are added
+                let mut keys = HashSet::with_capacity(mapping.len() + rcks.0.len());
+                mapping.reserve(rcks.0.len());
+
                 // prevents linear lookup when trying to catch `DuplicateMapKeys`
-                let mut keys = mapping.iter().filter_map(|(k, _)| SdCwtClaim::from_cbor_value(k).ok()).collect::<HashSet<_>>();
+                keys.extend(mapping.iter().filter_map(|(k, _)| SdCwtClaim::from_cbor_value(k).ok()));
 
                 for rck in rcks {
-                    if let Some(mut found) = disclosures.remove_lazy(&rck, &hasher) {
-                        match found.to_mut() {
-                            SaltedEntry::Claim(SaltedClaim { name, value, .. }) => {
+                    if let Some(found) = disclosures.remove_lazy(&rck, &hasher) {
+                        match found.into_owned() {
+                            SaltedEntry::Claim(SaltedClaim { name, mut value, .. }) => {
                                 if value.is_map() || value.is_array() {
-                                    walk_payload(hasher.clone(), value, disclosures)?;
+                                    walk_payload(hasher.clone(), &mut value, disclosures)?;
                                 }
-                                if !keys.insert(name.clone()) {
+                                let label = Value::from(&name);
+                                if !keys.insert(name) {
                                     return Err(SdCwtVerifierError::DuplicateMapKeys);
                                 }
-                                mapping.push((name.to_cbor_value()?, core::mem::replace(value, Value::Null)))
+                                mapping.push((label, value))
                             }
                             SaltedEntry::Decoy(_) => {} // nothing to do, validity of hash already checked
                             SaltedEntry::Element(_) => return Err(SdCwtVerifierError::MalformedSdCwt("'redacted_claim_keys' must not contain redacted elements")),
