@@ -571,15 +571,13 @@ pub trait VerifierWithStatus: Verifier {
     > {
         use crate::verifier::error::SdCwtStatusVerifierError;
 
-        let kbt = self.shallow_verify_sd_kbt(raw_sd_kbt, &params.shallow(), holder_verifier, cks)?;
-
-        let kbt_protected = kbt.protected.to_value()?;
-        let sd_cwt_payload = kbt_protected.kcwt.payload.to_value()?;
+        let kbt = self.verify_sd_kbt(raw_sd_kbt, &params, holder_verifier, cks)?;
 
         // Read the StatusClaim from the SD-CWT to know where to fetch the Status from
         // Note: no StatusList for the SD-KBT as it is self-issued by a Holder
-        let idx = sd_cwt_payload.inner.status.status_list.idx;
-        let status_url = &sd_cwt_payload.inner.status.status_list.uri;
+        let status_list = &kbt.protected.issuer_sd_cwt.payload.status.status_list;
+        let (idx, status_url) = (status_list.idx, &status_list.uri);
+
         // we then ask the Verifier to resolve the Status, so either:
         // - get it from a local in-memory cache
         // - get it from a database in case it was already set by another thread
@@ -608,7 +606,7 @@ pub trait VerifierWithStatus: Verifier {
             return Err(SdCwtStatusVerifierError::StatusNotFound(status_url.clone()).into());
         };
 
-        self.verify_sd_kbt(raw_sd_kbt, &params, holder_verifier, cks)
+        Ok(kbt)
     }
 
     /// Let's a consumer cache individual non-revoked statuses
