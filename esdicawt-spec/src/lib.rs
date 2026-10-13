@@ -232,14 +232,20 @@ impl std::fmt::Debug for SdCwtClaim {
 
 impl serde::Serialize for SdCwtClaim {
     fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
-        let value = match self {
-            Self::Int(i) => (*i).into(),
-            Self::Tstr(s) => s.as_str().into(),
-            Self::TaggedInteger(t, i) => Value::Tag(*t, Box::new((*i).into())),
-            Self::TaggedText(t, s) => Value::Tag(*t, Box::new(s.as_str().into())),
-            Self::SimpleValue(st) => Value::Simple(*st),
-        };
-        Value::serialize(&value, serializer)
+        Value::serialize(&self.into(), serializer)
+    }
+}
+
+/// Cheaper than [CwtAny::to_cbor_value] which goes through serde
+impl From<&SdCwtClaim> for Value {
+    fn from(claim: &SdCwtClaim) -> Self {
+        match claim {
+            SdCwtClaim::Int(i) => (*i).into(),
+            SdCwtClaim::Tstr(s) => s.as_str().into(),
+            SdCwtClaim::TaggedInteger(t, i) => Self::Tag(*t, Box::new((*i).into())),
+            SdCwtClaim::TaggedText(t, s) => Self::Tag(*t, Box::new(s.as_str().into())),
+            SdCwtClaim::SimpleValue(st) => Self::Simple(*st),
+        }
     }
 }
 
