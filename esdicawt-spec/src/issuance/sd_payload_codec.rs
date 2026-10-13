@@ -1,7 +1,7 @@
 use crate::{
     CWT_CLAIM_AUDIENCE, CWT_CLAIM_CNONCE, CWT_CLAIM_CTI, CWT_CLAIM_EXPIRES_AT, CWT_CLAIM_ISSUED_AT, CWT_CLAIM_ISSUER, CWT_CLAIM_KEY_CONFIRMATION, CWT_CLAIM_NOT_BEFORE,
     CWT_CLAIM_SUBJECT, CustomClaims, SdCwtClaim, SdCwtStandardClaim,
-    issuance::{SdInnerPayload, SdInnerPayloadBuilder, SdPayload, SdPayloadBuilder},
+    issuance::{SdInnerPayload, SdPayload},
     redacted_claims::RedactedClaimKeys,
 };
 use ciborium::Value;
@@ -66,11 +66,10 @@ impl<'de, Extra: CustomClaims> serde::Deserialize<'de> for SdPayload<Extra> {
             }
 
             fn visit_map<A: serde::de::MapAccess<'de>>(self, mut map: A) -> Result<Self::Value, A::Error> {
-                use ciborium::Value;
                 use serde::de::Error as _;
 
                 let mut extra = vec![];
-                let mut builder = SdPayloadBuilder::<Extra>::default();
+                let (mut cnf, mut redacted_claim_keys) = (None, None);
 
                 while let Some((k, v)) = map.next_entry::<Value, Value>()? {
                     let label = k.deserialized::<SdCwtClaim>().map_err(A::Error::custom)?;
@@ -80,17 +79,17 @@ impl<'de, Extra: CustomClaims> serde::Deserialize<'de> for SdPayload<Extra> {
                                 let kc = v
                                     .deserialized::<KeyConfirmation>()
                                     .map_err(|value| A::Error::custom(format!("cnf is not a map: {value:?}")))?;
-                                builder.cnf(kc);
+                                cnf = Some(kc);
                             }
                             _ => {
                                 extra.push((k, v));
                             }
                         },
                         SdCwtClaim::SimpleValue(label) if label == RedactedClaimKeys::CWT_LABEL => {
-                            let redacted_claim_keys = v
+                            let rcks = v
                                 .deserialized::<RedactedClaimKeys>()
                                 .map_err(|value| A::Error::custom(format!("redacted_claim_keys is not an array: {value:?}")))?;
-                            builder.redacted_claim_keys(redacted_claim_keys);
+                            redacted_claim_keys = Some(rcks);
                         }
                         _ => {
                             extra.push((k, v));
@@ -98,9 +97,15 @@ impl<'de, Extra: CustomClaims> serde::Deserialize<'de> for SdPayload<Extra> {
                     };
                 }
 
-                let inner = Value::Map(extra).deserialized::<SdInnerPayload<Extra>>().map_err(A::Error::custom)?;
+                // decoded as a ciborium error to keep the same error messages as when it was deserialized from a `Value`
+                let mut extra = extra.into_iter();
+                let inner = decode_sd_inner_payload::<Extra, ciborium::value::Error>(|| Ok(extra.next())).map_err(A::Error::custom)?;
 
-                builder.inner(inner).build().map_err(A::Error::custom)
+                Ok(SdPayload {
+                    cnf: crate::required(cnf, "cnf")?,
+                    redacted_claim_keys,
+                    inner,
+                })
             }
         }
 
@@ -183,81 +188,126 @@ impl<'de, Extra: CustomClaims> serde::Deserialize<'de> for SdInnerPayload<Extra>
             }
 
             fn visit_map<A: serde::de::MapAccess<'de>>(self, mut map: A) -> Result<Self::Value, A::Error> {
-                use ciborium::Value;
-                use serde::de::Error as _;
-
-                let mut extra = vec![];
-                let mut builder = SdInnerPayloadBuilder::<Extra>::default();
-
-                while let Some((k, v)) = map.next_entry::<Value, Value>()? {
-                    if v.is_null() {
-                        continue;
-                    }
-                    match k {
-                        ref label @ Value::Integer(_) => match SdCwtStandardClaim::try_from(label) {
-                            Ok(SdCwtStandardClaim::Issuer) => {
-                                builder.issuer(v.into_text().map_err(|value| A::Error::custom(format!("iss is not a string: {value:?}")))?);
-                            }
-                            Ok(SdCwtStandardClaim::Subject) => {
-                                builder.subject(v.into_text().map_err(|value| A::Error::custom(format!("sub is not a string: {value:?}")))?);
-                            }
-                            Ok(SdCwtStandardClaim::Audience) => {
-                                builder.audience(v.into_text().map_err(|value| A::Error::custom(format!("aud is not a string: {value:?}")))?);
-                            }
-                            Ok(SdCwtStandardClaim::ExpiresAt) => {
-                                let cbor_int = v.into_integer().map_err(|value| A::Error::custom(format!("exp is not an integer: {value:?}")))?;
-                                let int: i64 = cbor_int.try_into().map_err(|_| A::Error::custom("exp is not a 64-bit signed integer"))?;
-                                builder.expiration(int);
-                            }
-                            Ok(SdCwtStandardClaim::NotBefore) => {
-                                let cbor_int = v.into_integer().map_err(|value| A::Error::custom(format!("nbf is not an integer: {value:?}")))?;
-                                let int: i64 = cbor_int.try_into().map_err(|_| A::Error::custom("nbf is not a 64-bit signed integer"))?;
-                                builder.not_before(int);
-                            }
-                            Ok(SdCwtStandardClaim::IssuedAt) => {
-                                let cbor_int = v.into_integer().map_err(|value| A::Error::custom(format!("iat is not an integer: {value:?}")))?;
-                                let int: i64 = cbor_int.try_into().map_err(|_| A::Error::custom("iat is not a 64-bit signed integer"))?;
-                                builder.issued_at(int);
-                            }
-                            Ok(SdCwtStandardClaim::Cnonce) => {
-                                let cnonce = v.into_bytes().map_err(|value| A::Error::custom(format!("cnonce is not a bstr: {value:?}")))?;
-                                builder.cnonce(cnonce.into());
-                            }
-                            Ok(SdCwtStandardClaim::Cti) => {
-                                let cti = v.into_bytes().map_err(|value| A::Error::custom(format!("cti is not a bstr: {value:?}")))?;
-                                builder.cti(cti.into());
-                            }
-                            #[cfg(feature = "status")]
-                            Ok(SdCwtStandardClaim::Status) => {
-                                let status = v.deserialized().map_err(A::Error::custom)?;
-                                builder.status(status);
-                            }
-                            _ => {
-                                extra.push((k, v));
-                            }
-                        },
-                        Value::Text(_) | Value::Simple(_) => {
-                            extra.push((k, v));
-                        }
-                        // see https://ietf-wg-spice.github.io/draft-ietf-spice-sd-cwt/draft-ietf-spice-sd-cwt.html#name-update-to-the-cbor-web-toke
-                        Value::Tag(_, ref value) if value.is_integer() || value.is_text() => {
-                            extra.push((k, v));
-                        }
-                        _ => {
-                            return Err(A::Error::custom("Deserializing invalid claim label"));
-                        }
-                    };
-                }
-
-                if !extra.is_empty() {
-                    let extra = Value::deserialized::<Extra>(&Value::Map(extra)).map_err(A::Error::custom)?;
-                    builder.extra(extra);
-                }
-
-                builder.build().map_err(A::Error::custom)
+                decode_sd_inner_payload(|| map.next_entry::<Value, Value>())
             }
         }
 
         deserializer.deserialize_map(SdCwtPayloadVisitor(Default::default()))
+    }
+}
+
+/// Builds the payload from its entries
+fn decode_sd_inner_payload<Extra: CustomClaims, E: serde::de::Error>(mut next_entry: impl FnMut() -> Result<Option<(Value, Value)>, E>) -> Result<SdInnerPayload<Extra>, E> {
+    let (mut issuer, mut subject, mut audience, mut expiration, mut not_before, mut issued_at, mut cti, mut cnonce) = (None, None, None, None, None, None, None, None);
+    #[cfg(feature = "status")]
+    let mut status = None;
+    let mut extra = vec![];
+
+    while let Some((k, v)) = next_entry()? {
+        if v.is_null() {
+            continue;
+        }
+        match k {
+            ref label @ Value::Integer(_) => match SdCwtStandardClaim::try_from(label) {
+                Ok(SdCwtStandardClaim::Issuer) => {
+                    issuer = Some(v.into_text().map_err(|value| E::custom(format!("iss is not a string: {value:?}")))?);
+                }
+                Ok(SdCwtStandardClaim::Subject) => {
+                    subject = Some(v.into_text().map_err(|value| E::custom(format!("sub is not a string: {value:?}")))?);
+                }
+                Ok(SdCwtStandardClaim::Audience) => {
+                    audience = Some(v.into_text().map_err(|value| E::custom(format!("aud is not a string: {value:?}")))?);
+                }
+                Ok(SdCwtStandardClaim::ExpiresAt) => {
+                    let cbor_int = v.into_integer().map_err(|value| E::custom(format!("exp is not an integer: {value:?}")))?;
+                    let int: i64 = cbor_int.try_into().map_err(|_| E::custom("exp is not a 64-bit signed integer"))?;
+                    expiration = Some(int);
+                }
+                Ok(SdCwtStandardClaim::NotBefore) => {
+                    let cbor_int = v.into_integer().map_err(|value| E::custom(format!("nbf is not an integer: {value:?}")))?;
+                    let int: i64 = cbor_int.try_into().map_err(|_| E::custom("nbf is not a 64-bit signed integer"))?;
+                    not_before = Some(int);
+                }
+                Ok(SdCwtStandardClaim::IssuedAt) => {
+                    let cbor_int = v.into_integer().map_err(|value| E::custom(format!("iat is not an integer: {value:?}")))?;
+                    let int: i64 = cbor_int.try_into().map_err(|_| E::custom("iat is not a 64-bit signed integer"))?;
+                    issued_at = Some(int);
+                }
+                Ok(SdCwtStandardClaim::Cnonce) => {
+                    let bytes = v.into_bytes().map_err(|value| E::custom(format!("cnonce is not a bstr: {value:?}")))?;
+                    cnonce = Some(bytes.into());
+                }
+                Ok(SdCwtStandardClaim::Cti) => {
+                    let bytes = v.into_bytes().map_err(|value| E::custom(format!("cti is not a bstr: {value:?}")))?;
+                    cti = Some(bytes.into());
+                }
+                #[cfg(feature = "status")]
+                Ok(SdCwtStandardClaim::Status) => {
+                    status = Some(v.deserialized().map_err(E::custom)?);
+                }
+                _ => {
+                    extra.push((k, v));
+                }
+            },
+            Value::Text(_) | Value::Simple(_) => {
+                extra.push((k, v));
+            }
+            // see https://ietf-wg-spice.github.io/draft-ietf-spice-sd-cwt/draft-ietf-spice-sd-cwt.html#name-update-to-the-cbor-web-toke
+            Value::Tag(_, ref value) if value.is_integer() || value.is_text() => {
+                extra.push((k, v));
+            }
+            _ => {
+                return Err(E::custom("Deserializing invalid claim label"));
+            }
+        };
+    }
+
+    let extra = if extra.is_empty() {
+        None
+    } else {
+        Some(Value::deserialized::<Extra>(&Value::Map(extra)).map_err(E::custom)?)
+    };
+
+    Ok(SdInnerPayload {
+        issuer: crate::required(issuer, "issuer")?,
+        subject,
+        audience,
+        expiration,
+        not_before,
+        issued_at,
+        cti,
+        cnonce,
+        #[cfg(feature = "status")]
+        status: crate::required(status, "status")?,
+        extra,
+    })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::{CwtAny, key_binding::KbtPayload};
+
+    #[test]
+    fn missing_required_claims_should_fail() {
+        let no_issuer = Value::Map(vec![(Value::from(CWT_CLAIM_SUBJECT), Value::from("subject"))]);
+        let err = SdInnerPayload::<Value>::from_owned_cbor_value(no_issuer.clone()).unwrap_err();
+        assert!(err.to_string().contains("`issuer` must be initialized"), "{err}");
+        let err = SdInnerPayload::<Value>::from_cbor_bytes(&no_issuer.to_cbor_bytes().unwrap()).unwrap_err();
+        assert!(err.to_string().contains("`issuer` must be initialized"), "{err}");
+
+        // the inner payload is decoded first, as it was before
+        let err = SdPayload::<Value>::from_cbor_bytes(&no_issuer.to_cbor_bytes().unwrap()).unwrap_err();
+        assert!(err.to_string().contains("`issuer` must be initialized"), "{err}");
+        #[cfg(not(feature = "status"))]
+        {
+            let no_cnf = Value::Map(vec![(Value::from(CWT_CLAIM_ISSUER), Value::from("https://issuer.example"))]);
+            let err = SdPayload::<Value>::from_cbor_bytes(&no_cnf.to_cbor_bytes().unwrap()).unwrap_err();
+            assert!(err.to_string().contains("`cnf` must be initialized"), "{err}");
+        }
+
+        let no_iat = Value::Map(vec![(Value::from(CWT_CLAIM_AUDIENCE), Value::from("aud"))]);
+        let err = KbtPayload::<Value>::from_cbor_bytes(&no_iat.to_cbor_bytes().unwrap()).unwrap_err();
+        assert!(err.to_string().contains("`issued_at` must be initialized"), "{err}");
     }
 }

@@ -59,16 +59,6 @@ pub enum EsdicawtSpecError {
     #[error(transparent)]
     InvalidCwtIntKey(#[from] std::num::TryFromIntError),
     #[error(transparent)]
-    SdPayloadBuilderError(#[from] issuance::SdPayloadBuilderError),
-    #[error(transparent)]
-    SdInnerPayloadBuilderError(#[from] issuance::SdInnerPayloadBuilderError),
-    #[error(transparent)]
-    SdProtectedBuilderError(#[from] issuance::SdProtectedBuilderError),
-    #[error(transparent)]
-    KbtPayloadBuilderError(#[from] key_binding::KbtPayloadBuilderError),
-    #[error(transparent)]
-    KbtProtectedBuilderError(#[from] key_binding::KbtProtectedBuilderError),
-    #[error(transparent)]
     CborDeserializationError(#[from] ciborium::de::Error<String>),
     #[error(transparent)]
     CborSerializationError(#[from] ciborium::ser::Error<core::convert::Infallible>),
@@ -285,6 +275,16 @@ impl From<&str> for SdCwtClaim {
     }
 }
 
+/// For decoders checking that a required field was present
+pub(crate) fn required<T, E: serde::de::Error>(value: Option<T>, field: &str) -> Result<T, E> {
+    required_in(value, "", field)
+}
+
+/// Same as [required] with a context prepended to the error message
+pub(crate) fn required_in<T, E: serde::de::Error>(value: Option<T>, context: &str, field: &str) -> Result<T, E> {
+    value.ok_or_else(|| E::custom(format!("{context}`{field}` must be initialized")))
+}
+
 pub trait CwtAny: serde::Serialize + for<'de> serde::Deserialize<'de> + Clone {
     fn to_cbor_bytes(&self) -> EsdicawtSpecResult<Vec<u8>> {
         let mut buf = vec![];
@@ -325,6 +325,11 @@ pub trait CwtAny: serde::Serialize + for<'de> serde::Deserialize<'de> + Clone {
 
     fn from_cbor_value(value: &Value) -> EsdicawtSpecResult<Self> {
         Ok(value.deserialized::<Self>()?)
+    }
+
+    /// Same as [Self::from_cbor_value] but consumes the value
+    fn from_owned_cbor_value(value: Value) -> EsdicawtSpecResult<Self> {
+        Self::from_cbor_value(&value)
     }
 }
 

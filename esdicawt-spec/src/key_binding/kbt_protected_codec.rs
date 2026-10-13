@@ -3,7 +3,7 @@ use coset::AsCborValue;
 use serde::ser::SerializeMap;
 
 use super::KbtProtected;
-use crate::{COSE_HEADER_KCWT, CWT_CLAIM_ALG, CWT_MEDIA_TYPE, CustomClaims, CwtAny, MEDIA_TYPE_KB_CWT, Select, issuance::SdCwtIssued, key_binding::KbtProtectedBuilder};
+use crate::{COSE_HEADER_KCWT, CWT_CLAIM_ALG, CWT_MEDIA_TYPE, CustomClaims, CwtAny, MEDIA_TYPE_KB_CWT, Select, issuance::SdCwtIssued};
 
 impl<IssuerPayloadClaims: Select, Hasher: digest::Digest + Clone, IssuerProtectedClaims: CustomClaims, IssuerUnprotectedClaims: CustomClaims, Extra: CustomClaims> serde::Serialize
     for KbtProtected<IssuerPayloadClaims, Hasher, IssuerProtectedClaims, IssuerUnprotectedClaims, Extra>
@@ -64,7 +64,7 @@ impl<'de, IssuerPayloadClaims: Select, Hasher: digest::Digest + Clone, IssuerPro
 
             fn visit_map<A: serde::de::MapAccess<'de>>(self, mut map: A) -> Result<Self::Value, A::Error> {
                 use serde::de::Error as _;
-                let mut builder = KbtProtectedBuilder::<IssuerPayloadClaims, Hasher, IssuerProtectedClaims, IssuerUnprotectedClaims, Extra>::default();
+                let (mut alg, mut kcwt) = (None, None);
                 let mut extra = vec![];
                 while let Some((k, v)) = map.next_entry::<Value, Value>()? {
                     match k {
@@ -76,7 +76,7 @@ impl<'de, IssuerPayloadClaims: Select, Hasher: digest::Digest + Clone, IssuerPro
                                 }
                             }
                             Ok(CWT_CLAIM_ALG) => {
-                                builder.alg(coset::Algorithm::from_cbor_value(v).map_err(|e| A::Error::custom(format!("Cannot deserialize sd-protected.alg: {e}")))?);
+                                alg = Some(coset::Algorithm::from_cbor_value(v).map_err(|e| A::Error::custom(format!("Cannot deserialize sd-protected.alg: {e}")))?);
                             }
                             Ok(COSE_HEADER_KCWT) => {
                                 let issuer_sd_cwt = v
@@ -91,7 +91,7 @@ impl<'de, IssuerPayloadClaims: Select, Hasher: digest::Digest + Clone, IssuerPro
                                         .map_err(A::Error::custom)
                                 });
 
-                                builder.kcwt(issuer_sd_cwt?);
+                                kcwt = Some(issuer_sd_cwt?);
                             }
                             _ => {
                                 extra.push((k, v));
@@ -103,12 +103,18 @@ impl<'de, IssuerPayloadClaims: Select, Hasher: digest::Digest + Clone, IssuerPro
                     }
                 }
 
-                if !extra.is_empty() {
-                    let extra = Value::deserialized::<Extra>(&Value::Map(extra)).map_err(A::Error::custom)?;
-                    builder.extra(extra);
-                }
+                let extra = if extra.is_empty() {
+                    None
+                } else {
+                    Some(Value::deserialized::<Extra>(&Value::Map(extra)).map_err(A::Error::custom)?)
+                };
 
-                builder.build().map_err(|e| A::Error::custom(format!("Cannot build sd-protected: {e}")))
+                const CONTEXT: &str = "Cannot build sd-protected: ";
+                Ok(KbtProtected {
+                    alg: crate::required_in::<coset::Algorithm, _>(alg, CONTEXT, "alg")?.into(),
+                    kcwt: crate::required_in(kcwt, CONTEXT, "kcwt")?,
+                    extra,
+                })
             }
         }
 
