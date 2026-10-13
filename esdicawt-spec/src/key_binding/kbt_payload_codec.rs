@@ -1,7 +1,5 @@
 use super::KbtPayload;
-use crate::{
-    CWT_CLAIM_AUDIENCE, CWT_CLAIM_CNONCE, CWT_CLAIM_EXPIRES_AT, CWT_CLAIM_ISSUED_AT, CWT_CLAIM_NOT_BEFORE, CustomClaims, KbtStandardClaim, key_binding::KbtPayloadBuilder,
-};
+use crate::{CWT_CLAIM_AUDIENCE, CWT_CLAIM_CNONCE, CWT_CLAIM_EXPIRES_AT, CWT_CLAIM_ISSUED_AT, CWT_CLAIM_NOT_BEFORE, CustomClaims, KbtStandardClaim};
 use serde::ser::SerializeMap;
 
 impl<Extra: CustomClaims> serde::Serialize for KbtPayload<Extra> {
@@ -65,7 +63,7 @@ impl<'de, Extra: CustomClaims> serde::Deserialize<'de> for KbtPayload<Extra> {
                 use serde::de::Error as _;
 
                 let mut extra = vec![];
-                let mut sd_builder = KbtPayloadBuilder::<Extra>::default();
+                let (mut audience, mut expiration, mut not_before, mut issued_at, mut cnonce) = (None, None, None, None, None);
 
                 while let Some((k, v)) = map.next_entry::<Value, Value>()? {
                     match k {
@@ -73,28 +71,28 @@ impl<'de, Extra: CustomClaims> serde::Deserialize<'de> for KbtPayload<Extra> {
                             if let Ok(sd_claim_name) = KbtStandardClaim::try_from(label) {
                                 match sd_claim_name {
                                     KbtStandardClaim::Audience => {
-                                        sd_builder.audience(v.into_text().map_err(|value| A::Error::custom(format!("aud is not a string: {value:?}")))?);
+                                        audience = Some(v.into_text().map_err(|value| A::Error::custom(format!("aud is not a string: {value:?}")))?);
                                     }
                                     KbtStandardClaim::ExpiresAt => {
                                         let cbor_int = v.into_integer().map_err(|value| A::Error::custom(format!("exp is not an integer: {value:?}")))?;
                                         let int: i64 = cbor_int.try_into().map_err(|_| A::Error::custom("exp is not a 64-bit signed integer"))?;
-                                        sd_builder.expiration(int);
+                                        expiration = Some(int);
                                     }
                                     KbtStandardClaim::NotBefore => {
                                         let cbor_int = v.into_integer().map_err(|value| A::Error::custom(format!("nbf is not an integer: {value:?}")))?;
                                         let int: i64 = cbor_int.try_into().map_err(|_| A::Error::custom("nbf is not a 64-bit signed integer"))?;
-                                        sd_builder.not_before(int);
+                                        not_before = Some(int);
                                     }
                                     KbtStandardClaim::IssuedAt => {
                                         let cbor_int = v.into_integer().map_err(|value| A::Error::custom(format!("iat is not an integer: {value:?}")))?;
                                         let int: i64 = cbor_int.try_into().map_err(|_| A::Error::custom("iat is not a 64-bit signed integer"))?;
-                                        sd_builder.issued_at(int);
+                                        issued_at = Some(int);
                                     }
                                     KbtStandardClaim::Cnonce => {
-                                        let cnonce = v
+                                        let bytes = v
                                             .deserialized::<serde_bytes::ByteBuf>()
                                             .map_err(|value| A::Error::custom(format!("cnonce is not bstr: {value:?}")))?;
-                                        sd_builder.cnonce(cnonce);
+                                        cnonce = Some(bytes);
                                     }
                                 }
                             } else {
@@ -107,12 +105,20 @@ impl<'de, Extra: CustomClaims> serde::Deserialize<'de> for KbtPayload<Extra> {
                     };
                 }
 
-                if !extra.is_empty() {
-                    let extra = Value::deserialized::<Extra>(&Value::Map(extra)).map_err(A::Error::custom)?;
-                    sd_builder.extra(extra);
-                }
+                let extra = if extra.is_empty() {
+                    None
+                } else {
+                    Some(Value::deserialized::<Extra>(&Value::Map(extra)).map_err(A::Error::custom)?)
+                };
 
-                sd_builder.build().map_err(|err| A::Error::custom(format!("{err}")))
+                Ok(KbtPayload {
+                    audience: audience.unwrap_or_default(),
+                    expiration,
+                    not_before,
+                    issued_at: crate::required(issued_at, "issued_at")?,
+                    cnonce,
+                    extra,
+                })
             }
         }
 

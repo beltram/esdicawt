@@ -13,8 +13,7 @@ mod kbt_payload_codec;
 mod kbt_protected_codec;
 mod kbt_unprotected_codec;
 
-#[derive(Debug, Clone, derive_builder::Builder)]
-#[builder(pattern = "mutable")]
+#[derive(Debug, Clone)]
 pub struct KbtCwt<
     IssuerPayloadClaims: Select,
     Hasher: digest::Digest + Clone,
@@ -45,8 +44,7 @@ impl<
     }
 }
 
-#[derive(Debug, Clone, derive_builder::Builder)]
-#[builder(pattern = "mutable", setter(into, strip_option))]
+#[derive(Debug, Clone)]
 pub struct KbtProtected<
     IssuerPayloadClaims: Select,
     Hasher: digest::Digest + Clone,
@@ -57,7 +55,6 @@ pub struct KbtProtected<
     pub alg: Algorithm,
     /// See https://datatracker.ietf.org/doc/html/rfc9528#section-3.5.3.1
     pub kcwt: SdCwtIssued<IssuerPayloadClaims, Hasher, IssuerProtectedClaims, IssuerUnprotectedClaims>,
-    #[builder(default)]
     pub extra: Option<Extra>,
 }
 
@@ -76,19 +73,13 @@ pub struct KbtUnprotected<Extra: CustomClaims> {
     pub extra: Option<Extra>,
 }
 
-#[derive(Debug, Clone, PartialEq, derive_builder::Builder)]
-#[builder(pattern = "mutable", setter(into, strip_option))]
+#[derive(Debug, Clone, PartialEq)]
 pub struct KbtPayload<Extra: CustomClaims> {
-    #[builder(default)]
     pub audience: String,
-    #[builder(default)]
     pub expiration: Option<i64>,
-    #[builder(default)]
     pub not_before: Option<i64>,
     pub issued_at: i64,
-    #[builder(default)]
     pub cnonce: Option<serde_bytes::ByteBuf>,
-    #[builder(default)]
     pub extra: Option<Extra>,
 }
 

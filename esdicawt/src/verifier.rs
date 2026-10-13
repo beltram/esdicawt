@@ -309,7 +309,7 @@ fn __verify_sd_kbt_claims<
     }
 
     // TODO: this might fail if `Self::IssuerPayloadClaims` does not support unknown claims (serde flatten etc..)
-    let sd_cwt_payload = generic_sd_cwt_payload.deserialized::<SdInnerPayload<IssuerPayloadClaims>>()?;
+    let sd_cwt_payload = SdInnerPayload::<IssuerPayloadClaims>::from_owned_cbor_value(generic_sd_cwt_payload)?;
     let claimset = sd_cwt_payload.extra;
 
     let protected = kbt.protected.try_into_value()?.try_into()?;

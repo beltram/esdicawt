@@ -3,7 +3,7 @@ use coset::AsCborValue;
 use serde::ser::SerializeMap;
 
 use super::SdProtected;
-use crate::{COSE_HEADER_SD_ALG, CWT_CLAIM_ALG, CWT_MEDIA_TYPE, CustomClaims, MEDIA_TYPE_SD_CWT, SdHashAlg, issuance::SdProtectedBuilder};
+use crate::{COSE_HEADER_SD_ALG, CWT_CLAIM_ALG, CWT_MEDIA_TYPE, CustomClaims, MEDIA_TYPE_SD_CWT, SdHashAlg};
 
 impl<Extra: CustomClaims> serde::Serialize for SdProtected<Extra> {
     fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
@@ -50,7 +50,7 @@ impl<'de, Extra: CustomClaims> serde::Deserialize<'de> for SdProtected<Extra> {
 
             fn visit_map<A: serde::de::MapAccess<'de>>(self, mut map: A) -> Result<Self::Value, A::Error> {
                 use serde::de::Error as _;
-                let mut builder = SdProtectedBuilder::<Extra>::default();
+                let (mut alg, mut sd_alg) = (None, None);
                 let mut extra = vec![];
                 while let Some((k, v)) = map.next_entry::<Value, Value>()? {
                     match k {
@@ -62,10 +62,10 @@ impl<'de, Extra: CustomClaims> serde::Deserialize<'de> for SdProtected<Extra> {
                                 }
                             }
                             Ok(CWT_CLAIM_ALG) => {
-                                builder.alg(coset::Algorithm::from_cbor_value(v).map_err(|e| A::Error::custom(format!("Cannot deserialize sd-protected.alg: {e}")))?);
+                                alg = Some(coset::Algorithm::from_cbor_value(v).map_err(|e| A::Error::custom(format!("Cannot deserialize sd-protected.alg: {e}")))?);
                             }
                             Ok(COSE_HEADER_SD_ALG) => {
-                                builder.sd_alg(
+                                sd_alg = Some(
                                     v.deserialized::<SdHashAlg>()
                                         .map_err(|value| A::Error::custom(format!("sd_alg is not a correct enum value: {value:?}")))?,
                                 );
@@ -80,12 +80,18 @@ impl<'de, Extra: CustomClaims> serde::Deserialize<'de> for SdProtected<Extra> {
                     }
                 }
 
-                if !extra.is_empty() {
-                    let extra = Value::deserialized::<Extra>(&Value::Map(extra)).map_err(A::Error::custom)?;
-                    builder.extra(extra);
-                }
+                let extra = if extra.is_empty() {
+                    None
+                } else {
+                    Some(Value::deserialized::<Extra>(&Value::Map(extra)).map_err(A::Error::custom)?)
+                };
 
-                builder.build().map_err(|e| A::Error::custom(format!("Cannot build sd-protected: {e}")))
+                const CONTEXT: &str = "Cannot build sd-protected: ";
+                Ok(SdProtected {
+                    alg: crate::required_in::<coset::Algorithm, _>(alg, CONTEXT, "alg")?.into(),
+                    sd_alg: crate::required_in(sd_alg, CONTEXT, "sd_alg")?,
+                    extra,
+                })
             }
         }
 
