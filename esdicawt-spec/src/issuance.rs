@@ -26,8 +26,17 @@ impl<PayloadClaims: Select, Hasher: digest::Digest + Clone, ProtectedClaims: Cus
 #[derive(Debug, Clone, PartialEq)]
 pub struct SdProtected<Extra: CustomClaims> {
     pub alg: Algorithm,
-    pub sd_alg: SdHashAlg,
+    /// Optional, see [Self::sd_alg] for the effective hash algorithm
+    pub sd_alg: Option<SdHashAlg>,
     pub extra: Option<Extra>,
+}
+
+impl<Extra: CustomClaims> SdProtected<Extra> {
+    /// Hash algorithm of the Salted Disclosed Claims, SHA-256 when 'sd_alg' is absent
+    /// see https://datatracker.ietf.org/doc/html/draft-ietf-spice-sd-cwt#name-sd-cwt-issuance
+    pub fn sd_alg(&self) -> SdHashAlg {
+        self.sd_alg.unwrap_or(SdHashAlg::Sha256)
+    }
 }
 
 #[derive(Debug, Clone, PartialEq)]
