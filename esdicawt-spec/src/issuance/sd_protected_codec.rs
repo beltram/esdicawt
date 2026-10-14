@@ -20,7 +20,12 @@ impl<Extra: CustomClaims> serde::Serialize for SdProtected<Extra> {
             .map_err(|e| S::Error::custom(format!("{e:?} should have been a mapping")))?
             .unwrap_or_default();
 
-        let map_size = 2 + self.sd_alg.map(|_| 1).unwrap_or_default() + extras.len();
+        #[cfg(feature = "backward")]
+        let sd_alg_size = 1;
+        #[cfg(not(feature = "backward"))]
+        let sd_alg_size = self.sd_alg.map(|_| 1).unwrap_or_default();
+
+        let map_size = 2 + sd_alg_size + extras.len();
         let mut map = serializer.serialize_map(Some(map_size))?;
 
         map.serialize_entry(&CWT_MEDIA_TYPE, &MEDIA_TYPE_SD_CWT)?;
