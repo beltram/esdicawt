@@ -273,7 +273,7 @@ fn __verify_sd_kbt_claims<
         }
     }
 
-    let sd_alg = kbt_protected.kcwt.protected.to_value()?.sd_alg;
+    let sd_alg = kbt_protected.kcwt.protected.to_value()?.sd_alg();
 
     // an absent 'sd_claims' is equivalent to no disclosure: undisclosed redacted claims still have to be removed
     let no_disclosures = SaltedArray::default();
