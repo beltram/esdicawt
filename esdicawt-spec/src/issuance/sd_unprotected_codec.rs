@@ -25,6 +25,7 @@ impl<Extra: CustomClaims> serde::Serialize for SdUnprotected<Extra> {
 
         if let Some(sd_claims) = &self.sd_claims {
             if sd_claims.is_empty() {
+                #[cfg(not(feature = "backward"))]
                 return Err(S::Error::custom(EsdicawtSpecError::EmptySdClaims));
             }
             map.serialize_entry(&COSE_HEADER_SD_CLAIMS, sd_claims)?;
