@@ -85,12 +85,12 @@ impl<
 
     /// SD-KBT expiration, different from SD-CWT one !!!
     pub fn exp(&self) -> EsdicawtSpecResult<Option<u64>> {
-        Ok(self.payload.to_value()?.expiration.map(|e| e as u64))
+        unix_time("exp", self.payload.to_value()?.expiration)
     }
 
     /// SD-KBT issued at, different from SD-CWT one !!!
     pub fn iat(&self) -> EsdicawtSpecResult<Option<u64>> {
-        Ok(self.payload.to_value()?.iat_or_cti.iat().map(|i| i as u64))
+        unix_time("iat", self.payload.to_value()?.iat_or_cti.iat())
     }
 
     /// SD-KBT CWT ID, different from SD-CWT one !!!
@@ -100,7 +100,7 @@ impl<
 
     /// SD-KBT not before, different from SD-CWT one !!!
     pub fn nbf(&self) -> EsdicawtSpecResult<Option<u64>> {
-        Ok(self.payload.to_value()?.not_before.map(|e| e as u64))
+        unix_time("nbf", self.payload.to_value()?.not_before)
     }
 
     /// SD-KBT audience, different from SD-CWT one !!!
@@ -124,5 +124,23 @@ impl<
     #[cfg(feature = "status")]
     pub fn status(&self) -> EsdicawtSpecResult<Option<status_list::StatusClaim>> {
         Ok(self.sd_cwt()?.status())
+    }
+}
+
+/// Time claims are signed integers, a negative one does not fit
+fn unix_time(claim: &'static str, time: Option<i64>) -> EsdicawtSpecResult<Option<u64>> {
+    time.map(|t| u64::try_from(t).map_err(|_| EsdicawtSpecError::NegativeTime(claim))).transpose()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn should_reject_negative_time() {
+        assert_eq!(unix_time("iat", None).unwrap(), None);
+        assert_eq!(unix_time("iat", Some(0)).unwrap(), Some(0));
+        assert_eq!(unix_time("iat", Some(i64::MAX)).unwrap(), Some(i64::MAX as u64));
+        assert!(matches!(unix_time("iat", Some(-1)), Err(EsdicawtSpecError::NegativeTime("iat"))));
     }
 }
