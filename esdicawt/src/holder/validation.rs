@@ -133,7 +133,7 @@ mod tests {
     #[test]
     fn should_fail_when_std_claims_mismatch() {
         let issuer_signing_key = ed25519_dalek::SigningKey::generate(&mut rand::thread_rng());
-        let issuer_verifying_key = CoseKeySet::builder().with(&issuer_signing_key).unwrap().build();
+        let issuer_verifying_key = CoseKeySet::builder().with(&issuer_signing_key.verifying_key()).unwrap().build();
         let issuer = Ed25519Issuer::<Value>::new(issuer_signing_key);
 
         let holder_signing_key = ed25519_dalek::SigningKey::generate(&mut rand::thread_rng());
