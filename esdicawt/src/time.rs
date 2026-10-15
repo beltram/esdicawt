@@ -1,30 +1,23 @@
-pub fn verify_time_claims(
-    now: u64,
-    leeway: core::time::Duration,
-    iat: Option<i64>,
-    exp: Option<i64>,
-    nbf: Option<i64>,
-    verification: TimeVerification,
-) -> Result<(), CwtTimeError> {
+pub fn verify_time_claims(now: u64, leeway: core::time::Duration, claims: TimeClaims) -> Result<(), CwtTimeError> {
     let now = now as i64;
     let leeway = i64::try_from(leeway.as_secs()).map_err(|_| CwtTimeError::LeewayTooLarge)?;
 
     // see https://datatracker.ietf.org/doc/html/rfc7519#section-4.1.5
-    if let Some(nbf) = nbf.filter(|_| verification.verify_nbf)
+    if let Some(nbf) = claims.nbf
         && now.saturating_add(leeway) < nbf
     {
         return Err(CwtTimeError::NotValidYet);
     }
 
     // see https://datatracker.ietf.org/doc/html/rfc7519#section-4.1.6
-    if let Some(iat) = iat.filter(|_| verification.verify_iat)
+    if let Some(iat) = claims.iat
         && iat > now.saturating_add(leeway)
     {
         return Err(CwtTimeError::ClockDrift);
     }
 
     // see https://datatracker.ietf.org/doc/html/rfc7519#section-4.1.4
-    if let Some(exp) = exp.filter(|_| verification.verify_exp)
+    if let Some(exp) = claims.exp
         && now.saturating_sub(leeway) > exp
     {
         return Err(CwtTimeError::Expired);
@@ -146,33 +139,27 @@ mod tests {
     #[test]
     fn iat() {
         // no iat verification
-        verify_time_claims(10, Default::default(), None, None, None, Default::default()).unwrap();
+        verify_time_claims(10, Default::default(), t(None, None, None)).unwrap();
         // iat < now
-        verify_time_claims(10, Default::default(), Some(9), None, None, Default::default()).unwrap();
+        verify_time_claims(10, Default::default(), t(Some(9), None, None)).unwrap();
         // iat == now
-        verify_time_claims(10, Default::default(), Some(10), None, None, Default::default()).unwrap();
+        verify_time_claims(10, Default::default(), t(Some(10), None, None)).unwrap();
         // iat > now
-        std::assert_matches!(
-            verify_time_claims(10, Default::default(), Some(20), None, None, Default::default()),
-            Err(CwtTimeError::ClockDrift)
-        );
+        std::assert_matches!(verify_time_claims(10, Default::default(), t(Some(20), None, None)), Err(CwtTimeError::ClockDrift));
     }
 
     #[test]
     fn exp() {
         // no exp verification
-        verify_time_claims(10, Default::default(), None, None, None, Default::default()).unwrap();
+        verify_time_claims(10, Default::default(), t(None, None, None)).unwrap();
         // exp > now
-        verify_time_claims(10, Default::default(), None, Some(20), None, Default::default()).unwrap();
+        verify_time_claims(10, Default::default(), t(None, Some(20), None)).unwrap();
         // exp == now
-        verify_time_claims(10, Default::default(), None, Some(10), None, Default::default()).unwrap();
+        verify_time_claims(10, Default::default(), t(None, Some(10), None)).unwrap();
         // exp == now -leeway
-        verify_time_claims(10, Duration::from_secs(5), None, Some(5), None, Default::default()).unwrap();
+        verify_time_claims(10, Duration::from_secs(5), t(None, Some(5), None)).unwrap();
         // exp > now - leeway
-        std::assert_matches!(
-            verify_time_claims(10, Duration::from_secs(5), None, Some(4), None, Default::default()),
-            Err(CwtTimeError::Expired)
-        );
+        std::assert_matches!(verify_time_claims(10, Duration::from_secs(5), t(None, Some(4), None)), Err(CwtTimeError::Expired));
     }
 
     fn t(iat: Option<i64>, exp: Option<i64>, nbf: Option<i64>) -> TimeClaims {
@@ -250,17 +237,14 @@ mod tests {
     #[test]
     fn nbf() {
         // no nbf verification
-        verify_time_claims(10, Default::default(), None, None, None, Default::default()).unwrap();
+        verify_time_claims(10, Default::default(), t(None, None, None)).unwrap();
         // nbf < now
-        verify_time_claims(10, Default::default(), None, None, Some(5), Default::default()).unwrap();
+        verify_time_claims(10, Default::default(), t(None, None, Some(5))).unwrap();
         // nbf == now
-        verify_time_claims(10, Default::default(), None, None, Some(10), Default::default()).unwrap();
+        verify_time_claims(10, Default::default(), t(None, None, Some(10))).unwrap();
         // nbf == now + leeway
-        verify_time_claims(10, Duration::from_secs(5), None, None, Some(15), Default::default()).unwrap();
+        verify_time_claims(10, Duration::from_secs(5), t(None, None, Some(15))).unwrap();
         // nbf > now + leeway
-        std::assert_matches!(
-            verify_time_claims(10, Duration::from_secs(5), None, None, Some(16), Default::default()),
-            Err(CwtTimeError::NotValidYet)
-        );
+        std::assert_matches!(verify_time_claims(10, Duration::from_secs(5), t(None, None, Some(16))), Err(CwtTimeError::NotValidYet));
     }
 }

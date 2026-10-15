@@ -95,10 +95,9 @@ pub trait Holder {
         #[cfg(not(feature = "test-vectors"))] // FIXME: draft samples are expired
         {
             let now = params.artificial_time.unwrap_or_else(crate::elapsed_since_epoch);
-            let iat = payload.inner.issued_at;
-            let exp = payload.inner.expiration;
-            let nbf = payload.inner.not_before;
-            crate::time::verify_time_claims(now.as_secs(), params.leeway, iat, exp, nbf, params.time_verification)?;
+            let inner = &payload.inner;
+            let time = crate::time::TimeClaims::new(inner.issued_at, inner.expiration, inner.not_before, params.time_verification);
+            crate::time::verify_time_claims(now.as_secs(), params.leeway, time)?;
         }
 
         // subject
@@ -185,10 +184,9 @@ pub trait Holder {
         // verify again the time claims of the SD-CWT as time could have gone by between the last 'verify_sd_cwt'
         let payload = sd_cwt.payload.to_value()?;
         let now = params.artificial_time.unwrap_or_else(crate::elapsed_since_epoch);
-        let iat = payload.inner.issued_at;
         let exp = payload.inner.expiration;
-        let nbf = payload.inner.not_before;
-        crate::time::verify_time_claims(now.as_secs(), params.leeway, iat, exp, nbf, params.time_verification)?;
+        let time = crate::time::TimeClaims::new(payload.inner.issued_at, exp, payload.inner.not_before, params.time_verification);
+        crate::time::verify_time_claims(now.as_secs(), params.leeway, time)?;
 
         // --- building the kbt ---
         // --- unprotected ---
