@@ -159,6 +159,7 @@ mod tests {
     use ciborium::cbor;
 
     #[test]
+    #[cfg(not(feature = "backward"))]
     fn should_default_sd_alg_to_sha256_when_absent() {
         let bytes = cbor!({ CWT_MEDIA_TYPE => MEDIA_TYPE_SD_CWT, CWT_CLAIM_ALG => -8 }).unwrap().to_cbor_bytes().unwrap();
         let protected = SdProtected::<NoClaims>::from_cbor_bytes(&bytes).unwrap();
