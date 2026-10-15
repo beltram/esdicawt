@@ -203,7 +203,13 @@ pub trait Holder {
             let sd_claims = params.presentation.try_select_disclosures::<Self::Hasher, Self::Error>(sd_claims)?;
 
             // then replace them in the issued sd-cwt. An empty 'sd_claims' is invalid
-            sd_cwt.0.sd_unprotected.sd_claims = (!sd_claims.is_empty()).then_some(sd_claims);
+            #[cfg(not(feature = "backward"))]
+            let sd_claims = (!sd_claims.is_empty()).then_some(sd_claims);
+            // but previous versions' Verifiers only remove the undisclosed claims when 'sd_claims' is present, hence keep an empty one for them
+            #[cfg(feature = "backward")]
+            let sd_claims = Some(sd_claims);
+
+            sd_cwt.0.sd_unprotected.sd_claims = sd_claims;
         }
 
         // --- protected ---
