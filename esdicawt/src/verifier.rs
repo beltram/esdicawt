@@ -498,13 +498,12 @@ fn __shallow_batch_verify_sd_kbt<
             let kbt_payload = kbt.payload.to_value()?;
 
             // verify time claims of the SD-KBT
-            let kbt_time = TimeClaims {
-                iat: kbt_payload.iat_or_cti.iat(),
-                exp: kbt_payload.expiration,
-                nbf: kbt_payload.not_before,
-            };
-            verify_time_claims(validation_time, params.sd_kbt_leeway, kbt_time.iat, kbt_time.exp, kbt_time.nbf, params.sd_kbt_time_verification)?;
-            verify_time_consistency(TimeClaims { iat, exp, nbf }, kbt_time)?;
+            let (kbt_iat, kbt_exp, kbt_nbf) = (kbt_payload.iat_or_cti.iat(), kbt_payload.expiration, kbt_payload.not_before);
+            verify_time_claims(validation_time, params.sd_kbt_leeway, kbt_iat, kbt_exp, kbt_nbf, params.sd_kbt_time_verification)?;
+            // a disabled verification of a claim also disables its consistency checks
+            let sd_cwt_time = TimeClaims::new(iat, exp, nbf, params.sd_cwt_time_verification);
+            let kbt_time = TimeClaims::new(kbt_iat, kbt_exp, kbt_nbf, params.sd_kbt_time_verification);
+            verify_time_consistency(sd_cwt_time, params.sd_cwt_leeway, kbt_time, params.sd_kbt_leeway)?;
 
             Ok((kbt, generic_sd_cwt_payload))
         };
