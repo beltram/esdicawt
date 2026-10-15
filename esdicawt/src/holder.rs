@@ -228,9 +228,19 @@ pub trait Holder {
         #[cfg(not(feature = "test-vectors"))]
         let now = crate::elapsed_since_epoch();
 
-        let expiration = params.expiry.map(|exp| exp.to_absolute(now).as_secs() as i64);
-        let not_before = params.with_not_before.then_some(now.as_secs() as i64);
-        let iat_or_cti = IatOrCti::Iat(now.as_secs() as i64);
+        let issued_at = now.as_secs() as i64;
+        // the SD-KBT must not be valid for any time period when its SD-CWT is invalid
+        // see https://datatracker.ietf.org/doc/html/draft-ietf-spice-sd-cwt#name-creating-a-key-binding-toke
+        let expiration = params
+            .expiry
+            .map(|kbt_exp| kbt_exp.to_absolute(now).as_secs() as i64)
+            .map(|kbt_exp| exp.map_or(kbt_exp, |sd_cwt_exp| kbt_exp.min(sd_cwt_exp)));
+        // otherwise the SD-KBT would be invalid
+        if expiration.is_some_and(|exp| exp <= issued_at) {
+            return Err(crate::time::CwtTimeError::Expired.into());
+        }
+        let not_before = params.with_not_before.then_some(issued_at);
+        let iat_or_cti = IatOrCti::Iat(issued_at);
 
         let payload = KbtPayload {
             audience: params.audience.to_string(),

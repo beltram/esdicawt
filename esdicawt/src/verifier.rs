@@ -1438,10 +1438,38 @@ mod tests {
             params.expiry = Some(TimeArg::Relative(core::time::Duration::from_secs(120)));
             let (cks, sd_kbt, ..) = generate_sd_kbt(issuer_params, params, &holder_signing_key);
             let verifier = HybridVerifier::<Value, NoClaims>::default();
-            let err = verifier
+            // the Holder caps the SD-KBT expiry to the SD-CWT one
+            let verified = verifier
                 .verify_sd_kbt(&sd_kbt, &Default::default(), Some(&holder_signing_key.verifying_key()), &cks)
-                .unwrap_err();
-            std::assert_matches!(err, SdCwtVerifierError::TimeError(CwtTimeError::Inconsistent(_)));
+                .unwrap();
+            assert!(verified.payload.expiration.is_some());
+            assert_eq!(verified.payload.expiration, verified.sd_cwt().payload.expiration);
+        }
+
+        #[test]
+        #[wasm_bindgen_test::wasm_bindgen_test]
+        fn holder_should_not_present_expired_sd_cwt() {
+            let holder_signing_key = ed25519_dalek::SigningKey::generate(&mut rand::thread_rng());
+            let issuer_signing_key = ed25519_dalek::SigningKey::generate(&mut rand::thread_rng());
+            let cks = CoseKeySet::builder().with_signing_key(&issuer_signing_key).unwrap().build();
+
+            // SD-CWT expired 2s ago, which the Holder tolerates with its leeway
+            let mut issuer_params = default_issuer_params(None::<Value>, &holder_signing_key);
+            issuer_params.expiry = Some(TimeArg::Absolute(elapsed_since_epoch() - core::time::Duration::from_secs(2)));
+            issuer_params.with_issued_at = false;
+            issuer_params.with_not_before = false;
+            let sd_cwt = Ed25519Issuer::new(issuer_signing_key).issue_cwt(&mut rand::thread_rng(), issuer_params).unwrap();
+
+            let holder = Ed25519Holder::<Value, NoClaims>::new(holder_signing_key);
+            let leeway = core::time::Duration::from_secs(10);
+            let validation_params = crate::HolderValidationParams { leeway, ..Default::default() };
+            let sd_cwt = holder.verify_sd_cwt(&sd_cwt.to_cbor_bytes().unwrap(), validation_params, &cks).unwrap();
+
+            // capping the SD-KBT expiry to the SD-CWT one would make it expire before being issued
+            let mut params = default_holder_params::<NoClaims>();
+            params.leeway = leeway;
+            let err = holder.new_presentation(sd_cwt, params).unwrap_err();
+            std::assert_matches!(err, crate::SdCwtHolderError::TimeError(CwtTimeError::Expired));
         }
 
         #[test]
