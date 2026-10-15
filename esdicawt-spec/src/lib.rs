@@ -84,6 +84,8 @@ pub enum EsdicawtSpecError {
     ImplementationError(&'static str),
     #[error("'sd_claims' MUST NOT be an empty array")]
     EmptySdClaims,
+    #[error("'{0}' is before the UNIX epoch")]
+    NegativeTime(&'static str),
 }
 
 impl From<Value> for EsdicawtSpecError {
