@@ -1723,6 +1723,20 @@ mod backward {
         }
     }
 
+    #[test]
+    #[cfg(feature = "backward")]
+    fn should_tell_draft_08_sd_kbt() {
+        for snapshot in SdKbtSnapshots::iter() {
+            let sd_kbt = esdicawt_spec::key_binding::KbtCwt::<Value, sha2::Sha256>::from_cbor_bytes(&snapshot.sd_kbt()).unwrap();
+            let expected = match snapshot {
+                SdKbtSnapshots::Full => Some(false),
+                SdKbtSnapshots::FullDraft08 => Some(true),
+                SdKbtSnapshots::None | SdKbtSnapshots::NoneDraft08 => None,
+            };
+            assert_eq!(sd_kbt.is_draft_08(), expected, "{snapshot:?}");
+        }
+    }
+
     /// Previous versions encoded an empty 'sd_claims' instead of omitting it
     #[test]
     #[cfg(feature = "backward")]
