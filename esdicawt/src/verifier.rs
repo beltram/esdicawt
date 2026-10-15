@@ -419,7 +419,8 @@ fn __shallow_batch_verify_sd_kbt<
 
             // verify time claims of the SD-CWT
             let validation_time = params.artificial_time.map_or_else(|| elapsed_since_epoch().as_secs(), |t| t as u64);
-            verify_time_claims(validation_time, params.sd_cwt_leeway, iat, exp, nbf, params.sd_cwt_time_verification)?;
+            let sd_cwt_time = TimeClaims::new(iat, exp, nbf, params.sd_cwt_time_verification);
+            verify_time_claims(validation_time, params.sd_cwt_leeway, sd_cwt_time)?;
 
             let key_confirmation = &key_confirmation
                 .ok_or(SdCwtVerifierError::<Error>::MalformedSdCwt("Missing KeyConfirmation"))?
@@ -498,11 +499,14 @@ fn __shallow_batch_verify_sd_kbt<
             let kbt_payload = kbt.payload.to_value()?;
 
             // verify time claims of the SD-KBT
-            let (kbt_iat, kbt_exp, kbt_nbf) = (kbt_payload.iat_or_cti.iat(), kbt_payload.expiration, kbt_payload.not_before);
-            verify_time_claims(validation_time, params.sd_kbt_leeway, kbt_iat, kbt_exp, kbt_nbf, params.sd_kbt_time_verification)?;
+            let kbt_time = TimeClaims::new(
+                kbt_payload.iat_or_cti.iat(),
+                kbt_payload.expiration,
+                kbt_payload.not_before,
+                params.sd_kbt_time_verification,
+            );
+            verify_time_claims(validation_time, params.sd_kbt_leeway, kbt_time)?;
             // a disabled verification of a claim also disables its consistency checks
-            let sd_cwt_time = TimeClaims::new(iat, exp, nbf, params.sd_cwt_time_verification);
-            let kbt_time = TimeClaims::new(kbt_iat, kbt_exp, kbt_nbf, params.sd_kbt_time_verification);
             verify_time_consistency(sd_cwt_time, params.sd_cwt_leeway, kbt_time, params.sd_kbt_leeway)?;
 
             Ok((kbt, generic_sd_cwt_payload))
@@ -589,8 +593,8 @@ pub trait VerifierWithStatus: Verifier {
         if let Some(status_token) = self.get_status_token(status_url.as_str(), status_list_cks).await? {
             // verify time claims of the StatusListToken
             let validation_time = status_list_params.artificial_time.map_or_else(|| elapsed_since_epoch().as_secs(), |t| t as u64);
-            let (iat, exp, nbf) = (Some(status_token.iat), status_token.exp, None);
-            verify_time_claims(validation_time, status_list_params.leeway, iat, exp, nbf, status_list_params.time_verification)?;
+            let status_token_time = TimeClaims::new(Some(status_token.iat), status_token.exp, None, status_list_params.time_verification);
+            verify_time_claims(validation_time, status_list_params.leeway, status_token_time)?;
 
             // now let's verify the status of the SD-KBT in the StatusList
             if idx > status_token.status_list.max_index() {
