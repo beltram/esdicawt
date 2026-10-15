@@ -111,47 +111,6 @@ impl<'de, Extra: CustomClaims> serde::Deserialize<'de> for SdProtected<Extra> {
     }
 }
 
-impl<Extra: CustomClaims> TryFrom<SdProtected<Extra>> for coset::Header {
-    type Error = Box<dyn core::error::Error>;
-
-    fn try_from(sdp: SdProtected<Extra>) -> Result<Self, Self::Error> {
-        let mut builder = coset::HeaderBuilder::new();
-
-        // map alg
-        use coset::iana::EnumI64 as _;
-        let alg = match *sdp.alg {
-            coset::Algorithm::PrivateUse(i) => coset::iana::Algorithm::from_i64(i),
-            coset::Algorithm::Assigned(i) => coset::iana::Algorithm::from_i64(i.to_i64()),
-            _ => return Err("Only IANA registered or private use algorithms are supported".into()),
-        }
-        .ok_or_else::<Box<dyn core::error::Error>, _>(|| "Invalid IANA algorithm".into())?;
-        builder = builder.algorithm(alg);
-
-        // map extra claims
-        if let Some(claims) = sdp
-            .extra
-            .as_ref()
-            .map(Value::serialized)
-            .transpose()?
-            .map(|v| v.into_map().map_err(|_| "should have been a mapping"))
-            .transpose()?
-        {
-            for (k, v) in claims {
-                builder = match k {
-                    Value::Integer(i) => builder.value(i.try_into()?, v),
-                    Value::Text(t) => builder.text_value(t, v),
-                    _ => builder,
-                }
-            }
-        }
-
-        // map typ
-        let builder = builder.value(CWT_MEDIA_TYPE, Value::Integer(MEDIA_TYPE_SD_CWT.into()));
-
-        Ok(builder.build())
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
