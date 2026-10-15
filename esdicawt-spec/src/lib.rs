@@ -171,6 +171,7 @@ pub enum KbtStandardClaim {
     ExpiresAt = CWT_CLAIM_EXPIRES_AT,
     NotBefore = CWT_CLAIM_NOT_BEFORE,
     IssuedAt = CWT_CLAIM_ISSUED_AT,
+    Cti = CWT_CLAIM_CTI,
     Cnonce = CWT_CLAIM_CNONCE,
 }
 
@@ -182,6 +183,7 @@ impl TryFrom<ciborium::value::Integer> for KbtStandardClaim {
             Ok(CWT_CLAIM_EXPIRES_AT) => Self::ExpiresAt,
             Ok(CWT_CLAIM_NOT_BEFORE) => Self::NotBefore,
             Ok(CWT_CLAIM_ISSUED_AT) => Self::IssuedAt,
+            Ok(CWT_CLAIM_CTI) => Self::Cti,
             Ok(CWT_CLAIM_CNONCE) => Self::Cnonce,
             Err(_) => return Err(Self::Error::ImplementationError("Invalid CWT label")),
             Ok(label) => return Err(Self::Error::UnknownStandardClaim(label)),

@@ -499,7 +499,7 @@ fn __shallow_batch_verify_sd_kbt<
 
             // verify time claims of the SD-KBT
             let kbt_time = TimeClaims {
-                iat: Some(kbt_payload.issued_at),
+                iat: kbt_payload.iat_or_cti.iat(),
                 exp: kbt_payload.expiration,
                 nbf: kbt_payload.not_before,
             };
