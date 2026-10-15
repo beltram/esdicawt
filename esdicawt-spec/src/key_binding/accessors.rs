@@ -42,8 +42,13 @@ impl<
     }
 
     /// SD-KBT issued at, different from SD-CWT one !!!
-    pub fn iat(&self) -> EsdicawtSpecResult<u64> {
-        Ok(self.payload.to_value()?.issued_at as u64)
+    pub fn iat(&self) -> EsdicawtSpecResult<Option<u64>> {
+        Ok(self.payload.to_value()?.iat_or_cti.iat().map(|i| i as u64))
+    }
+
+    /// SD-KBT CWT ID, different from SD-CWT one !!!
+    pub fn cti(&self) -> EsdicawtSpecResult<Option<&[u8]>> {
+        Ok(self.payload.to_value()?.iat_or_cti.cti())
     }
 
     /// SD-KBT not before, different from SD-CWT one !!!

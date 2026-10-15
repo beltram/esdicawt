@@ -5,7 +5,7 @@ use crate::{
     spec::{
         CustomClaims, CwtAny, NoClaims, Select,
         blinded_claims::SaltedArray,
-        key_binding::{KbtPayload, KbtProtected, KbtUnprotected},
+        key_binding::{IatOrCti, KbtPayload, KbtProtected, KbtUnprotected},
         reexports::coset,
     },
 };
@@ -230,13 +230,13 @@ pub trait Holder {
 
         let expiration = params.expiry.map(|exp| exp.to_absolute(now).as_secs() as i64);
         let not_before = params.with_not_before.then_some(now.as_secs() as i64);
-        let issued_at = now.as_secs() as i64;
+        let iat_or_cti = IatOrCti::Iat(now.as_secs() as i64);
 
         let payload = KbtPayload {
             audience: params.audience.to_string(),
             expiration,
             not_before,
-            issued_at,
+            iat_or_cti,
             cnonce: params.cnonce.map(|b| b.to_owned().into()),
             extra: params.extra_kbt_payload,
         };
