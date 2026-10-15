@@ -1,7 +1,7 @@
 use ciborium::Value;
 use serde::ser::SerializeMap;
 
-use crate::{COSE_HEADER_SD_CLAIMS, CustomClaims, EsdicawtSpecError, blinded_claims::SaltedArray};
+use crate::{COSE_HEADER_SD_CLAIMS, CustomClaims, blinded_claims::SaltedArray};
 
 use super::SdUnprotected;
 
@@ -24,9 +24,10 @@ impl<Extra: CustomClaims> serde::Serialize for SdUnprotected<Extra> {
         let mut map = serializer.serialize_map(Some(map_size))?;
 
         if let Some(sd_claims) = &self.sd_claims {
+            // previous versions' Verifiers only remove the undisclosed claims when 'sd_claims' is present, hence an empty one is produced for them
+            #[cfg(not(feature = "backward"))]
             if sd_claims.is_empty() {
-                #[cfg(not(feature = "backward"))]
-                return Err(S::Error::custom(EsdicawtSpecError::EmptySdClaims));
+                return Err(S::Error::custom(crate::EsdicawtSpecError::EmptySdClaims));
             }
             map.serialize_entry(&COSE_HEADER_SD_CLAIMS, sd_claims)?;
         }
@@ -64,7 +65,7 @@ impl<'de, Extra: CustomClaims> serde::Deserialize<'de> for SdUnprotected<Extra> 
                             #[cfg(feature = "backward")]
                             continue;
                             #[cfg(not(feature = "backward"))]
-                            return Err(A::Error::custom(EsdicawtSpecError::EmptySdClaims));
+                            return Err(A::Error::custom(crate::EsdicawtSpecError::EmptySdClaims));
                         }
                         sd_claims.replace(salted_array);
                     } else {
@@ -117,6 +118,10 @@ mod tests {
         // previous versions encoded an empty 'sd_claims': it is ignored
         #[cfg(feature = "backward")]
         assert_eq!(SdUnprotected::<NoClaims>::from_cbor_bytes(&empty).unwrap(), unprotected(None));
+        #[cfg(not(feature = "backward"))]
         assert!(unprotected(Some(SaltedArray::default())).to_cbor_bytes().is_err());
+        // previous versions' Verifiers expect an empty 'sd_claims' when nothing is disclosed
+        #[cfg(feature = "backward")]
+        assert_eq!(unprotected(Some(SaltedArray::default())).to_cbor_bytes().unwrap(), empty);
     }
 }
