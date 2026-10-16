@@ -186,13 +186,10 @@ fn __verify_sd_kbt_claims<
 
     let kbt_protected = kbt.protected.to_value()?;
 
-    let (mut sub, mut iss, mut aud) = (None, None, None);
+    let (mut iss, mut aud) = (None, None);
 
     for (k, value) in generic_sd_cwt_payload_map {
         match (k.as_integer(), value) {
-            (Some(i), Value::Text(v)) if i == CwtStdLabel::Subject => {
-                sub.replace(v);
-            }
             (Some(i), Value::Text(v)) if i == CwtStdLabel::Issuer => {
                 iss.replace(v);
             }
@@ -226,14 +223,6 @@ fn __verify_sd_kbt_claims<
                 expected: expected.to_owned(),
             });
         }
-    }
-
-    // verify SD-CWT subject
-    if sub.map(String::as_str) != Some(params.expected_subject) {
-        return Err(SdCwtVerifierError::SubMismatch {
-            actual: sub.cloned().unwrap_or_default(),
-            expected: params.expected_subject.to_owned(),
-        });
     }
 
     // verify SD-CWT issuer
@@ -301,6 +290,14 @@ fn __verify_sd_kbt_claims<
 
     // TODO: this might fail if `Self::IssuerPayloadClaims` does not support unknown claims (serde flatten etc..)
     let sd_cwt_payload = SdInnerPayload::<IssuerPayloadClaims>::from_owned_cbor_value(generic_sd_cwt_payload)?;
+
+    // verify SD-CWT subject, once the disclosures are applied since it can be redacted
+    if sd_cwt_payload.subject.as_deref() != Some(params.expected_subject) {
+        return Err(SdCwtVerifierError::SubMismatch {
+            actual: sd_cwt_payload.subject.unwrap_or_default(),
+            expected: params.expected_subject.to_owned(),
+        });
+    }
     let claimset = sd_cwt_payload.extra;
 
     let protected = kbt.protected.try_into_value()?.try_into()?;
@@ -782,7 +779,7 @@ mod tests {
 
         let mut issuer_params = default_issuer_params(None::<Value>, &holder_signing_key);
         issuer_params.issuer = "iss-a";
-        issuer_params.subject = "sub-a";
+        issuer_params.subject = "sub-a".into();
         issuer_params.audience.replace("aud-a");
 
         let mut holder_params = default_holder_params::<NoClaims>();
@@ -1235,10 +1232,40 @@ mod tests {
 
         #[test]
         #[wasm_bindgen_test::wasm_bindgen_test]
+        fn redacted_sub() {
+            let holder_signing_key = ed25519_dalek::SigningKey::generate(&mut rand::thread_rng());
+            let mut issuer_params = default_issuer_params(None::<Value>, &holder_signing_key);
+            issuer_params.subject = crate::Subject::Redacted(SUBJECT);
+            let verifier = HybridVerifier::<Value, NoClaims>::default();
+
+            // disclosed
+            let (cks, sd_kbt, ..) = generate_sd_kbt(issuer_params.clone(), default_holder_params::<NoClaims>(), &holder_signing_key);
+            verifier
+                .verify_sd_kbt(&sd_kbt, &verifier_params(), Some(&holder_signing_key.verifying_key()), &cks)
+                .unwrap();
+            let params = VerifierParams {
+                expected_subject: "bbb",
+                ..verifier_params()
+            };
+            let err = verifier.verify_sd_kbt(&sd_kbt, &params, Some(&holder_signing_key.verifying_key()), &cks).unwrap_err();
+            std::assert_matches!(err, SdCwtVerifierError::SubMismatch { actual, expected } if &expected == "bbb" && actual == SUBJECT);
+
+            // not disclosed
+            let mut holder_params = default_holder_params::<NoClaims>();
+            holder_params.presentation = Presentation::None;
+            let (cks, sd_kbt, ..) = generate_sd_kbt(issuer_params, holder_params, &holder_signing_key);
+            let err = verifier
+                .verify_sd_kbt(&sd_kbt, &verifier_params(), Some(&holder_signing_key.verifying_key()), &cks)
+                .unwrap_err();
+            std::assert_matches!(err, SdCwtVerifierError::SubMismatch { actual, expected } if expected == SUBJECT && actual.is_empty());
+        }
+
+        #[test]
+        #[wasm_bindgen_test::wasm_bindgen_test]
         fn sub() {
             let holder_signing_key = ed25519_dalek::SigningKey::generate(&mut rand::thread_rng());
             let mut issuer_params = default_issuer_params(None::<Value>, &holder_signing_key);
-            issuer_params.subject = "aaa";
+            issuer_params.subject = "aaa".into();
 
             let (cks, sd_kbt, ..) = generate_sd_kbt(issuer_params, default_holder_params::<NoClaims>(), &holder_signing_key);
             let verifier = HybridVerifier::<Value, NoClaims>::default();
@@ -1534,7 +1561,7 @@ mod tests {
             protected_claims: None,
             unprotected_claims: None,
             payload,
-            subject: SUBJECT,
+            subject: SUBJECT.into(),
             issuer: "https://example.com/i/acme.io",
             audience: Default::default(),
             cti: Default::default(),

@@ -4,6 +4,20 @@ use crate::{
 };
 use cose_key::confirmation::KeyConfirmation;
 
+/// The 'sub' claim of a SD-CWT, it MUST be present either redacted or not
+/// see https://datatracker.ietf.org/doc/html/draft-ietf-spice-sd-cwt#name-sd-cwt-claims
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum Subject<'a> {
+    Redacted(&'a str),
+    Unredacted(&'a str),
+}
+
+impl<'a> From<&'a str> for Subject<'a> {
+    fn from(subject: &'a str) -> Self {
+        Self::Unredacted(subject)
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct IssuerParams<'a, PayloadClaims: Select, ProtectedClaims: CustomClaims = NoClaims, UnprotectedClaims: CustomClaims = NoClaims> {
     /// Extra claims in the protected header of the sd-cwt
@@ -15,7 +29,7 @@ pub struct IssuerParams<'a, PayloadClaims: Select, ProtectedClaims: CustomClaims
     /// Issuer, see https://www.rfc-editor.org/rfc/rfc8392.html#section-3.1.1
     pub issuer: &'a str,
     /// Subject, MUST be present, see https://datatracker.ietf.org/doc/html/draft-ietf-spice-sd-cwt#name-sd-cwt-claims
-    pub subject: &'a str,
+    pub subject: Subject<'a>,
     /// Subject, see https://www.rfc-editor.org/rfc/rfc8392.html#section-3.1.3
     pub audience: Option<&'a str>,
     /// Expiry, see https://www.rfc-editor.org/rfc/rfc8392.html#section-3.1.4

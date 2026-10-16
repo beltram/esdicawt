@@ -795,7 +795,7 @@ mod tests {
                     protected_claims: None,
                     unprotected_claims: None,
                     payload: Some(claims),
-                    subject,
+                    subject: subject.into(),
                     audience: Default::default(),
                     cti: Default::default(),
                     cnonce: Default::default(),

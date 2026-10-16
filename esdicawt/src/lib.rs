@@ -19,7 +19,7 @@ pub use holder::{
 pub use issuer::{
     Issuer,
     error::{SdCwtIssuerError, SdCwtIssuerResult},
-    params::IssuerParams,
+    params::{IssuerParams, Subject},
 };
 pub use lookup::*;
 pub use read::{EsdicawtReadError, EsdicawtReadResult, SdCwtRead};
