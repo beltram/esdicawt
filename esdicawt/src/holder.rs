@@ -783,6 +783,77 @@ mod backward {
         }
     }
 
+    /// Tokens from draft-08 implementations and from the current one can all be presented then verified:
+    /// - the SD-CWTs are presented, disclosing everything or nothing, then verified
+    /// - the SD-KBTs are verified, then the SD-CWT they carry is presented again when it has all its disclosures
+    #[test]
+    #[cfg(feature = "backward")]
+    fn should_present_and_verify_snapshots() {
+        use crate::{TimeVerification, Verifier as _, VerifierParams, snapshots::SdKbtSnapshots, spec::key_binding::KbtCwt, verifier::test_utils::HybridVerifier};
+
+        /// Keys used to generate the snapshots
+        fn keys() -> anyhow::Result<(CoseKeySet, ed25519_dalek::SigningKey)> {
+            let mut rng = dernged::Rng::default();
+            let issuer_signing_key = ed25519_dalek::SigningKey::generate(&mut rng);
+            let cks = CoseKeySet::builder().with(&issuer_signing_key.verifying_key())?.build();
+            Ok((cks, ed25519_dalek::SigningKey::generate(&mut rng)))
+        }
+
+        fn verify<T: Select>(sd_kbt: &[u8]) -> anyhow::Result<()> {
+            let (cks, holder_signing_key) = keys()?;
+            // the snapshots have expired
+            let no_time_verification = TimeVerification {
+                verify_exp: false,
+                verify_iat: false,
+                verify_nbf: false,
+            };
+            let params = VerifierParams {
+                expected_subject: "https://example.com/alice.smith",
+                sd_cwt_time_verification: no_time_verification,
+                sd_kbt_time_verification: no_time_verification,
+                ..Default::default()
+            };
+            HybridVerifier::<T, NoClaims>::default().verify_sd_kbt(sd_kbt, &params, Some(&holder_signing_key.verifying_key()), &cks)?;
+            Ok(())
+        }
+
+        fn present_and_verify<T: Select>(sd_cwt: &[u8]) -> anyhow::Result<()> {
+            let (cks, holder_signing_key) = keys()?;
+            let holder = Ed25519Holder::<T, NoClaims>::new(holder_signing_key);
+            for presentation in [Presentation::Full, Presentation::None] {
+                let sd_cwt_verified = holder.verify_sd_cwt(sd_cwt, Default::default(), &cks)?;
+                let sd_kbt = holder.new_presentation_raw(sd_cwt_verified, holder_params(presentation))?;
+                verify::<T>(&sd_kbt)?;
+            }
+            Ok(())
+        }
+
+        for snapshot in SdCwtSnapshots::iter() {
+            let sd_cwt = snapshot.sd_cwt();
+            match snapshot {
+                SdCwtSnapshots::Full | SdCwtSnapshots::FullDraft08 | SdCwtSnapshots::Empty | SdCwtSnapshots::EmptyDraft08 => present_and_verify::<FullClaims>(&sd_cwt),
+                SdCwtSnapshots::AllRedacted | SdCwtSnapshots::AllRedactedDraft08 => present_and_verify::<FullClaimsAllRedacted>(&sd_cwt),
+                SdCwtSnapshots::NoneRedacted | SdCwtSnapshots::NoneRedactedDraft08 => present_and_verify::<FullClaimsNoRedaction>(&sd_cwt),
+            }
+            .inspect_err(|err| panic!("'{snapshot:?}' failed because: {err:?}"))
+            .unwrap();
+        }
+
+        for snapshot in SdKbtSnapshots::iter() {
+            let verify_and_present_again = || -> anyhow::Result<()> {
+                let sd_kbt = snapshot.sd_kbt();
+                verify::<Value>(&sd_kbt)?;
+                // a Holder has all the disclosures, which is only the case of an SD-KBT disclosing everything
+                if matches!(snapshot, SdKbtSnapshots::Full | SdKbtSnapshots::FullDraft08) {
+                    let sd_cwt = KbtCwt::<Value, sha2::Sha256>::from_cbor_bytes(&sd_kbt)?.sd_cwt()?.to_cbor_bytes()?;
+                    present_and_verify::<Value>(&sd_cwt)?;
+                }
+                Ok(())
+            };
+            verify_and_present_again().inspect_err(|err| panic!("'{snapshot:?}' failed because: {err:?}")).unwrap();
+        }
+    }
+
     fn sd_kbt_presentation<T: Select>(sd_cwt: &[u8]) -> anyhow::Result<()> {
         let mut rng = dernged::Rng::default();
         let issuer_signing_key = ed25519_dalek::SigningKey::generate(&mut rng);
