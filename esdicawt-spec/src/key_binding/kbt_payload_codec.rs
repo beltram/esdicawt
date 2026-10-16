@@ -135,7 +135,8 @@ impl<'de, Extra: CustomClaims> serde::Deserialize<'de> for KbtPayload<Extra> {
                 };
 
                 Ok(KbtPayload {
-                    audience: audience.unwrap_or_default(),
+                    // see https://datatracker.ietf.org/doc/html/draft-ietf-spice-sd-cwt#name-creating-a-key-binding-toke
+                    audience: crate::required(audience, "aud")?,
                     expiration,
                     not_before,
                     iat_or_cti,
@@ -157,6 +158,15 @@ mod tests {
 
     fn decode(payload: Value) -> Result<KbtPayload<NoClaims>, crate::EsdicawtSpecError> {
         KbtPayload::from_cbor_bytes(&payload.to_cbor_bytes()?)
+    }
+
+    #[test]
+    fn should_require_aud() {
+        let (aud, iat) = (CWT_CLAIM_AUDIENCE, CWT_CLAIM_ISSUED_AT);
+        let err = decode(cbor!({ iat => 10 }).unwrap()).unwrap_err();
+        assert!(err.to_string().contains("`aud` must be initialized"), "{err}");
+        // an empty one is still present
+        assert_eq!(decode(cbor!({ aud => "", iat => 10 }).unwrap()).unwrap().audience, "");
     }
 
     #[test]
