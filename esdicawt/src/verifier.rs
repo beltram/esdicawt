@@ -229,20 +229,11 @@ fn __verify_sd_kbt_claims<
     }
 
     // verify SD-CWT subject
-    if let Some(expected) = params.expected_subject {
-        if let Some(actual) = sub {
-            if actual != expected {
-                return Err(SdCwtVerifierError::SubMismatch {
-                    actual: actual.to_owned(),
-                    expected: expected.to_owned(),
-                });
-            }
-        } else {
-            return Err(SdCwtVerifierError::SubMismatch {
-                actual: Default::default(),
-                expected: expected.to_owned(),
-            });
-        }
+    if sub.map(String::as_str) != Some(params.expected_subject) {
+        return Err(SdCwtVerifierError::SubMismatch {
+            actual: sub.cloned().unwrap_or_default(),
+            expected: params.expected_subject.to_owned(),
+        });
     }
 
     // verify SD-CWT issuer
@@ -699,7 +690,7 @@ mod tests {
         let claimset = verified.claimset.clone().unwrap();
         assert_eq!(claimset.name.as_deref(), Some("Alice Smith"));
         assert_eq!(claimset.stuffs, vec![Stuff { foo: "bar".into() }]);
-        assert_eq!(verified.sd_cwt().payload.subject, Some("https://example.com/u/alice.smith".into()));
+        assert_eq!(verified.sd_cwt().payload.subject.as_deref(), Some(SUBJECT));
 
         // should work without disclosures
         let issuer_params = default_issuer_params(None::<Value>, &holder_signing_key);
@@ -717,7 +708,7 @@ mod tests {
         // verifying Holder signature
         let holder_verifying_key_bis = ed25519_dalek::SigningKey::generate(&mut rand::thread_rng()).verifying_key();
         std::assert_matches!(
-            verifier.verify_sd_kbt(&sd_kbt, &Default::default(), Some(&holder_verifying_key_bis), &cks),
+            verifier.verify_sd_kbt(&sd_kbt, &verifier_params(), Some(&holder_verifying_key_bis), &cks),
             Err(SdCwtVerifierError::UnexpectedKeyConfirmation)
         );
 
@@ -744,7 +735,7 @@ mod tests {
         // signed by another issuer, not in the keyset
         let (_, other_sd_kbt, ..) = generate_sd_kbt(issuer_params, default_holder_params::<NoClaims>(), &holder_signing_key);
         let verifier = HybridVerifier::<Value, NoClaims>::default();
-        let params = VerifierParams::default();
+        let params = verifier_params();
 
         let results = verifier.verify_sd_kbt_batch(&[(&sd_kbt, &params, None), (&sd_kbt, &params, Some(&holder_verifying_key))], &cks);
         std::assert_matches!(results.as_slice(), [Ok(_), Ok(_)]);
@@ -774,7 +765,7 @@ mod tests {
         let issuer_signing_key = p256::ecdsa::SigningKey::random(&mut rand::thread_rng());
         let cks = CoseKeySet::builder().with_signing_key(&issuer_signing_key).unwrap().build();
         std::assert_matches!(
-            verifier.verify_sd_kbt(&sd_kbt, &Default::default(), None, &cks),
+            verifier.verify_sd_kbt(&sd_kbt, &verifier_params(), None, &cks),
             Err(SdCwtVerifierError::IssuerSignatureValidationError(SignatureVerifierError::NoSigner))
         );
         std::assert_matches!(
@@ -791,7 +782,7 @@ mod tests {
 
         let mut issuer_params = default_issuer_params(None::<Value>, &holder_signing_key);
         issuer_params.issuer = "iss-a";
-        issuer_params.subject.replace("sub-a");
+        issuer_params.subject = "sub-a";
         issuer_params.audience.replace("aud-a");
 
         let mut holder_params = default_holder_params::<NoClaims>();
@@ -801,20 +792,24 @@ mod tests {
         let (cks, sd_kbt, ..) = generate_sd_kbt(issuer_params.clone(), holder_params, &holder_signing_key);
         let verifier = HybridVerifier::<Value, NoClaims>::default();
 
-        // by default do not validate anything
-        verifier.verify_sd_kbt(&sd_kbt, &Default::default(), Some(&holder_verifying_key), &cks).unwrap();
+        // the subject is always verified, the rest only when expected
+        let base = VerifierParams {
+            expected_subject: "sub-a",
+            ..Default::default()
+        };
+        verifier.verify_sd_kbt(&sd_kbt, &base, Some(&holder_verifying_key), &cks).unwrap();
 
         // === verify SD-CWT subject
         // ok when same
         let params = VerifierParams {
-            expected_subject: Some("sub-a"),
-            ..Default::default()
+            expected_subject: "sub-a",
+            ..base
         };
         verifier.verify_sd_kbt(&sd_kbt, &params, Some(&holder_verifying_key), &cks).unwrap();
         // fail when mismatch
         let params = VerifierParams {
-            expected_subject: Some("sub-b"),
-            ..Default::default()
+            expected_subject: "sub-b",
+            ..base
         };
         std::assert_matches!(
         verifier.verify_sd_kbt(&sd_kbt, &params, Some(&holder_verifying_key), &cks),
@@ -826,13 +821,13 @@ mod tests {
         // ok when same
         let params = VerifierParams {
             expected_issuer: Some("iss-a"),
-            ..Default::default()
+            ..base
         };
         verifier.verify_sd_kbt(&sd_kbt, &params, Some(&holder_verifying_key), &cks).unwrap();
         // fail when mismatch
         let params = VerifierParams {
             expected_issuer: Some("iss-b"),
-            ..Default::default()
+            ..base
         };
         std::assert_matches!(
         verifier.verify_sd_kbt(&sd_kbt, &params, Some(&holder_verifying_key), &cks),
@@ -844,13 +839,13 @@ mod tests {
         // ok when same
         let params = VerifierParams {
             expected_audience: Some("aud-a"),
-            ..Default::default()
+            ..base
         };
         verifier.verify_sd_kbt(&sd_kbt, &params, Some(&holder_verifying_key), &cks).unwrap();
         // fail when mismatch
         let params = VerifierParams {
             expected_audience: Some("aud-b"),
-            ..Default::default()
+            ..base
         };
         std::assert_matches!(
         verifier.verify_sd_kbt(&sd_kbt, &params, Some(&holder_verifying_key), &cks),
@@ -862,25 +857,25 @@ mod tests {
         // ok when same
         let params = VerifierParams {
             expected_kbt_audience: &["kbt-aud-a"],
-            ..Default::default()
+            ..base
         };
         verifier.verify_sd_kbt(&sd_kbt, &params, Some(&holder_verifying_key), &cks).unwrap();
         // ok when one of many
         let params = VerifierParams {
             expected_kbt_audience: &["kbt-aud-b", "kbt-aud-a"],
-            ..Default::default()
+            ..base
         };
         verifier.verify_sd_kbt(&sd_kbt, &params, Some(&holder_verifying_key), &cks).unwrap();
         // ok when empty (not verified)
         let params = VerifierParams {
             expected_kbt_audience: &[],
-            ..Default::default()
+            ..base
         };
         verifier.verify_sd_kbt(&sd_kbt, &params, Some(&holder_verifying_key), &cks).unwrap();
         // fail when mismatch
         let params = VerifierParams {
             expected_kbt_audience: &["kbt-aud-b"],
-            ..Default::default()
+            ..base
         };
         std::assert_matches!(
         verifier.verify_sd_kbt(&sd_kbt, &params, Some(&holder_verifying_key), &cks),
@@ -892,13 +887,13 @@ mod tests {
         // ok when same
         let params = VerifierParams {
             expected_cnonce: Some(b"kbt-cnonce-a"),
-            ..Default::default()
+            ..base
         };
         verifier.verify_sd_kbt(&sd_kbt, &params, Some(&holder_verifying_key), &cks).unwrap();
         // fail when mismatch
         let params = VerifierParams {
             expected_cnonce: Some(b"kbt-cnonce-b"),
-            ..Default::default()
+            ..base
         };
         std::assert_matches!(
         verifier.verify_sd_kbt(&sd_kbt, &params, Some(&holder_verifying_key), &cks),
@@ -994,7 +989,7 @@ mod tests {
         // undisclosed claims are removed
         let verifier = HybridVerifier::<Value, NoClaims>::default();
         let verified = verifier
-            .verify_sd_kbt(&sd_kbt, &Default::default(), Some(&holder_signing_key.verifying_key()), &cks)
+            .verify_sd_kbt(&sd_kbt, &verifier_params(), Some(&holder_signing_key.verifying_key()), &cks)
             .unwrap();
         assert_eq!(verified.claimset.unwrap(), cbor!({ "array" => ["c"] }).unwrap());
     }
@@ -1071,7 +1066,7 @@ mod tests {
 
         let status_list_verifier_params = Default::default();
         let verifier_params = VerifierParams {
-            expected_subject: None,
+            expected_subject: SUBJECT,
             expected_issuer: None,
             expected_audience: None,
             expected_kbt_audience: &[],
@@ -1171,7 +1166,7 @@ mod tests {
 
         let verifier = HybridVerifier::<CustomTokenClaims, NoClaims>::default();
         let err = verifier
-            .verify_sd_kbt(&sd_kbt, &Default::default(), Some(&holder_signing_key.verifying_key()), &cks)
+            .verify_sd_kbt(&sd_kbt, &verifier_params(), Some(&holder_signing_key.verifying_key()), &cks)
             .unwrap_err();
         std::assert_matches!(err, SdCwtVerifierError::OrphanDisclosure);
     }
@@ -1211,7 +1206,7 @@ mod tests {
 
             let params = VerifierParams {
                 expected_cnonce: Some(b"bbb"),
-                ..Default::default()
+                ..verifier_params()
             };
             let err = verifier.verify_sd_kbt(&sd_kbt, &params, Some(&holder_signing_key.verifying_key()), &cks).unwrap_err();
             std::assert_matches!(err, SdCwtVerifierError::CnonceMismatch { actual, expected } if expected == b"bbb" && actual == b"aaa");
@@ -1232,7 +1227,7 @@ mod tests {
 
             let params = VerifierParams {
                 expected_cnonce: Some(b"cnonce"),
-                ..Default::default()
+                ..verifier_params()
             };
             let err = verifier.verify_sd_kbt(&sd_kbt, &params, Some(&holder_signing_key.verifying_key()), &cks).unwrap_err();
             std::assert_matches!(err, SdCwtVerifierError::CnonceMismatch { actual, expected } if expected == b"cnonce" && actual.is_empty());
@@ -1243,35 +1238,17 @@ mod tests {
         fn sub() {
             let holder_signing_key = ed25519_dalek::SigningKey::generate(&mut rand::thread_rng());
             let mut issuer_params = default_issuer_params(None::<Value>, &holder_signing_key);
-            issuer_params.subject = Some("aaa");
+            issuer_params.subject = "aaa";
 
             let (cks, sd_kbt, ..) = generate_sd_kbt(issuer_params, default_holder_params::<NoClaims>(), &holder_signing_key);
             let verifier = HybridVerifier::<Value, NoClaims>::default();
 
             let params = VerifierParams {
-                expected_subject: Some("bbb"),
-                ..Default::default()
+                expected_subject: "bbb",
+                ..verifier_params()
             };
             let err = verifier.verify_sd_kbt(&sd_kbt, &params, Some(&holder_signing_key.verifying_key()), &cks).unwrap_err();
             std::assert_matches!(err, SdCwtVerifierError::SubMismatch { actual, expected } if &expected == "bbb" && &actual == "aaa");
-        }
-
-        #[test]
-        #[wasm_bindgen_test::wasm_bindgen_test]
-        fn missing_sub() {
-            let holder_signing_key = ed25519_dalek::SigningKey::generate(&mut rand::thread_rng());
-            let mut issuer_params = default_issuer_params(None::<Value>, &holder_signing_key);
-            issuer_params.subject = None;
-
-            let (cks, sd_kbt, ..) = generate_sd_kbt(issuer_params, default_holder_params::<NoClaims>(), &holder_signing_key);
-            let verifier = HybridVerifier::<Value, NoClaims>::default();
-
-            let params = VerifierParams {
-                expected_subject: Some("bbb"),
-                ..Default::default()
-            };
-            let err = verifier.verify_sd_kbt(&sd_kbt, &params, Some(&holder_signing_key.verifying_key()), &cks).unwrap_err();
-            std::assert_matches!(err, SdCwtVerifierError::SubMismatch { actual, expected } if &expected == "bbb" && actual.is_empty());
         }
 
         #[test]
@@ -1286,7 +1263,7 @@ mod tests {
 
             let params = VerifierParams {
                 expected_audience: Some("bbb"),
-                ..Default::default()
+                ..verifier_params()
             };
             let err = verifier.verify_sd_kbt(&sd_kbt, &params, Some(&holder_signing_key.verifying_key()), &cks).unwrap_err();
             std::assert_matches!(err, SdCwtVerifierError::AudienceMismatch { actual, expected } if &expected == "bbb" && &actual == "aaa");
@@ -1304,7 +1281,7 @@ mod tests {
 
             let params = VerifierParams {
                 expected_audience: Some("bbb"),
-                ..Default::default()
+                ..verifier_params()
             };
             let err = verifier.verify_sd_kbt(&sd_kbt, &params, Some(&holder_signing_key.verifying_key()), &cks).unwrap_err();
             std::assert_matches!(err, SdCwtVerifierError::AudienceMismatch { actual, expected } if &expected == "bbb" && actual.is_empty());
@@ -1324,7 +1301,7 @@ mod tests {
 
             let params = VerifierParams {
                 expected_kbt_audience: &["bbb"],
-                ..Default::default()
+                ..verifier_params()
             };
             let err = verifier.verify_sd_kbt(&sd_kbt, &params, Some(&holder_signing_key.verifying_key()), &cks).unwrap_err();
             std::assert_matches!(err, SdCwtVerifierError::KbtAudienceMismatch { actual, expected } if expected == ["bbb"] && &actual == "aaa");
@@ -1342,7 +1319,7 @@ mod tests {
 
             let params = VerifierParams {
                 expected_issuer: Some("bbb"),
-                ..Default::default()
+                ..verifier_params()
             };
             let err = verifier.verify_sd_kbt(&sd_kbt, &params, Some(&holder_signing_key.verifying_key()), &cks).unwrap_err();
             std::assert_matches!(err, SdCwtVerifierError::IssuerMismatch { actual, expected } if &expected == "bbb" && &actual == "aaa");
@@ -1366,7 +1343,7 @@ mod tests {
             let later = (elapsed_since_epoch().as_secs() + 20) as i64;
             let params = VerifierParams {
                 artificial_time: Some(later),
-                ..Default::default()
+                ..verifier_params()
             };
             let err = verifier.verify_sd_kbt(&sd_kbt, &params, Some(&holder_signing_key.verifying_key()), &cks).unwrap_err();
             std::assert_matches!(err, SdCwtVerifierError::TimeError(CwtTimeError::Expired));
@@ -1385,7 +1362,7 @@ mod tests {
             let past = (elapsed_since_epoch().as_secs() - 20) as i64;
             let params = VerifierParams {
                 artificial_time: Some(past),
-                ..Default::default()
+                ..verifier_params()
             };
             let err = verifier.verify_sd_kbt(&sd_kbt, &params, Some(&holder_signing_key.verifying_key()), &cks).unwrap_err();
             std::assert_matches!(err, SdCwtVerifierError::TimeError(CwtTimeError::ClockDrift));
@@ -1404,7 +1381,7 @@ mod tests {
             let past = (elapsed_since_epoch().as_secs() - 20) as i64;
             let params = VerifierParams {
                 artificial_time: Some(past),
-                ..Default::default()
+                ..verifier_params()
             };
             let err = verifier.verify_sd_kbt(&sd_kbt, &params, Some(&holder_signing_key.verifying_key()), &cks).unwrap_err();
             std::assert_matches!(err, SdCwtVerifierError::TimeError(CwtTimeError::NotValidYet));
@@ -1425,7 +1402,7 @@ mod tests {
             let later = (elapsed_since_epoch().as_secs() + 20) as i64;
             let params = VerifierParams {
                 artificial_time: Some(later),
-                ..Default::default()
+                ..verifier_params()
             };
             let err = verifier.verify_sd_kbt(&sd_kbt, &params, Some(&holder_signing_key.verifying_key()), &cks).unwrap_err();
             std::assert_matches!(err, SdCwtVerifierError::TimeError(CwtTimeError::Expired));
@@ -1444,7 +1421,7 @@ mod tests {
             let verifier = HybridVerifier::<Value, NoClaims>::default();
             // the Holder caps the SD-KBT expiry to the SD-CWT one
             let verified = verifier
-                .verify_sd_kbt(&sd_kbt, &Default::default(), Some(&holder_signing_key.verifying_key()), &cks)
+                .verify_sd_kbt(&sd_kbt, &verifier_params(), Some(&holder_signing_key.verifying_key()), &cks)
                 .unwrap();
             assert!(verified.payload.expiration.is_some());
             assert_eq!(verified.payload.expiration, verified.sd_cwt().payload.expiration);
@@ -1492,7 +1469,7 @@ mod tests {
             let past = (elapsed_since_epoch().as_secs() - 20) as i64;
             let params = VerifierParams {
                 artificial_time: Some(past),
-                ..Default::default()
+                ..verifier_params()
             };
             let err = verifier.verify_sd_kbt(&sd_kbt, &params, Some(&holder_signing_key.verifying_key()), &cks).unwrap_err();
             std::assert_matches!(err, SdCwtVerifierError::TimeError(CwtTimeError::NotValidYet));
@@ -1506,7 +1483,7 @@ mod tests {
     ) -> Result<KbtCwtVerified<T, U>, SdCwtVerifierError<Infallible>> {
         let (cks, sd_kbt, ..) = generate_sd_kbt(issuer_params.clone(), holder_params, holder_signing_key);
         let verifier = HybridVerifier::<T, U>::default();
-        verifier.verify_sd_kbt(&sd_kbt, &Default::default(), Some(&holder_signing_key.verifying_key()), &cks)
+        verifier.verify_sd_kbt(&sd_kbt, &verifier_params(), Some(&holder_signing_key.verifying_key()), &cks)
     }
 
     #[allow(clippy::type_complexity)]
@@ -1525,6 +1502,15 @@ mod tests {
         let sd_cwt = holder.verify_sd_cwt(&sd_cwt, Default::default(), &cks).unwrap();
         let sd_kbt = holder.new_presentation(sd_cwt, holder_params).unwrap();
         (cks, sd_kbt.to_cbor_bytes().unwrap(), issuer_signing_key)
+    }
+
+    const SUBJECT: &str = "https://example.com/u/alice.smith";
+
+    fn verifier_params<'a>() -> VerifierParams<'a> {
+        VerifierParams {
+            expected_subject: SUBJECT,
+            ..Default::default()
+        }
     }
 
     fn default_holder_params<'a, U: CustomClaims>() -> HolderParams<'a, U> {
@@ -1548,7 +1534,7 @@ mod tests {
             protected_claims: None,
             unprotected_claims: None,
             payload,
-            subject: Some("https://example.com/u/alice.smith"),
+            subject: SUBJECT,
             issuer: "https://example.com/i/acme.io",
             audience: Default::default(),
             cti: Default::default(),
@@ -1762,6 +1748,7 @@ mod backward {
 
         let verifier = HybridVerifier::<T, NoClaims>::default();
         let params = VerifierParams {
+            expected_subject: "https://example.com/alice.smith",
             sd_cwt_time_verification: TimeVerification {
                 verify_exp: false,
                 verify_iat: false,

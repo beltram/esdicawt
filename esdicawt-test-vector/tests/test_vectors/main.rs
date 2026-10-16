@@ -220,7 +220,7 @@ fn issue<P: Select>(payload: P, salt_ranges: SaltRanges) -> Vec<u8> {
         unprotected_claims: None::<NoClaims>,
         payload: Some(payload),
         issuer: "https://issuer.example",
-        subject: Some("https://holder.example"),
+        subject: "https://holder.example",
         audience: Default::default(),
         cti: Default::default(),
         cnonce: Default::default(),

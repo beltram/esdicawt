@@ -114,12 +114,10 @@ pub trait Issuer {
             }
         }
 
-        let mut payload = Vec::with_capacity(1);
-
-        payload.push((Value::Integer(CWT_CLAIM_ISSUER.into()), params.issuer.into()));
-        if let Some(sub) = params.subject {
-            payload.push((Value::Integer(CWT_CLAIM_SUBJECT.into()), sub.into()));
-        }
+        let mut payload = vec![
+            (Value::Integer(CWT_CLAIM_ISSUER.into()), params.issuer.into()),
+            (Value::Integer(CWT_CLAIM_SUBJECT.into()), params.subject.into()),
+        ];
         if let Some(aud) = params.audience {
             payload.push((Value::Integer(CWT_CLAIM_AUDIENCE.into()), aud.into()));
         }
@@ -266,7 +264,7 @@ mod tests {
             unprotected_claims: None,
             payload: None::<Value>,
             issuer: "https://example.com/i/acme.io",
-            subject: Some("https://example.com/alice.smith"),
+            subject: "https://example.com/alice.smith",
             audience: Some("https://example.com/r/party"),
             cti: Some(b"cti"),
             cnonce: Some(b"cnonce"),
@@ -458,7 +456,7 @@ mod tests {
                     unprotected_claims: None,
                     payload,
                     issuer: "https://example.com/i/acme.io",
-                    subject: Some("https://example.com/alice.smith"),
+                    subject: "https://example.com/alice.smith",
                     audience: Default::default(),
                     cti: Default::default(),
                     cnonce: Default::default(),
@@ -748,7 +746,7 @@ pub mod snapshot {
             unprotected_claims: None,
             payload,
             issuer: "https://example.com/i/acme.io",
-            subject: Some("https://example.com/alice.smith"),
+            subject: "https://example.com/alice.smith",
             audience: Default::default(),
             cti: Default::default(),
             cnonce: Default::default(),
