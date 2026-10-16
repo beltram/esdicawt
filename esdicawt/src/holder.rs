@@ -115,16 +115,6 @@ pub trait Holder {
             crate::time::verify_time_claims(now.as_secs(), params.leeway, time)?;
         }
 
-        // subject
-        if let Some((actual, expected)) = payload.inner.subject.as_ref().zip(params.expected_subject)
-            && actual != expected
-        {
-            return Err(SdCwtHolderError::ValidationError(SdCwtHolderValidationError::SubMismatch {
-                actual: actual.to_owned(),
-                expected: expected.to_owned(),
-            }));
-        }
-
         // issuer
         if let Some(expected) = params.expected_issuer {
             let actual = &payload.inner.issuer;
@@ -166,25 +156,33 @@ pub trait Holder {
         // validate disclosure. An absent 'sd_claims' is equivalent to no disclosure
         let no_disclosures = SaltedArray::default();
         let disclosures = sd_cwt.disclosures().unwrap_or(&no_disclosures);
-        if let Some(raw_payload) = cose_sign1_sd_cwt.payload.as_deref().map(Value::from_cbor_bytes).transpose()? {
-            let hasher = self.digest(sd_cwt.protected.to_value()?.sd_alg())?;
-            let actual_disclosures = disclosures.digested_detached_hasher(&hasher)?;
-            let expected_nb_disclosures = validate_disclosures(&raw_payload, &actual_disclosures)?;
+        let raw_payload = cose_sign1_sd_cwt.payload.as_deref().map(Value::from_cbor_bytes).transpose()?.unwrap_or(Value::Map(vec![]));
+        let hasher = self.digest(sd_cwt.protected.to_value()?.sd_alg())?;
+        let actual_disclosures = disclosures.digested_detached_hasher(&hasher)?;
+        let (expected_nb_disclosures, subject) = validate_disclosures(&raw_payload, &actual_disclosures)?;
 
-            #[cfg(not(feature = "backward"))]
-            let actual_nb_disclosures = actual_disclosures.len();
-            #[cfg(feature = "backward")]
-            let actual_nb_disclosures = actual_disclosures.len() / 2;
+        #[cfg(not(feature = "backward"))]
+        let actual_nb_disclosures = actual_disclosures.len();
+        #[cfg(feature = "backward")]
+        let actual_nb_disclosures = actual_disclosures.len() / 2;
 
-            if expected_nb_disclosures != actual_nb_disclosures {
-                return Err(SdCwtHolderError::ValidationError(SdCwtHolderValidationError::OrphanDisclosure {
-                    expected: expected_nb_disclosures,
-                    actual: actual_nb_disclosures,
-                }));
-            }
-        } else if !disclosures.is_empty() {
-            let actual = disclosures.len();
-            return Err(SdCwtHolderError::ValidationError(SdCwtHolderValidationError::OrphanDisclosure { expected: 0, actual }));
+        if expected_nb_disclosures != actual_nb_disclosures {
+            return Err(SdCwtHolderError::ValidationError(SdCwtHolderValidationError::OrphanDisclosure {
+                expected: expected_nb_disclosures,
+                actual: actual_nb_disclosures,
+            }));
+        }
+
+        // subject, which MUST be present either in clear or redacted
+        // see https://datatracker.ietf.org/doc/html/draft-ietf-spice-sd-cwt#name-sd-cwt-claims
+        let subject = subject.ok_or(SdCwtHolderError::ValidationError(SdCwtHolderValidationError::MissingSubject))?;
+        if let Some(expected) = params.expected_subject
+            && subject != expected
+        {
+            return Err(SdCwtHolderError::ValidationError(SdCwtHolderValidationError::SubMismatch {
+                actual: subject,
+                expected: expected.to_owned(),
+            }));
         }
 
         Ok(SdCwtVerified(sd_cwt))
