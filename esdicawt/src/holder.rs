@@ -3,7 +3,7 @@ use crate::{
     holder::validation::validate_disclosures,
     signature_verifier::validate_cose_sign1_signature,
     spec::{
-        CustomClaims, CwtAny, NoClaims, Select,
+        CustomClaims, CwtAny, NoClaims, SdHashAlg, Select,
         blinded_claims::SaltedArray,
         key_binding::{IatOrCti, KbtPayload, KbtProtected, KbtUnprotected},
         reexports::coset,
@@ -14,6 +14,7 @@ use coset::{AsCborValue, TaggedCborSerializable};
 use crate::spec::{issuance::SdCwtIssued, key_binding::KbtCwt};
 use ciborium::Value;
 use cose_key::confirmation::{CoseKeyConfirmationError, KeyConfirmation};
+use std::rc::Rc;
 
 pub mod accessor;
 pub mod error;
@@ -43,6 +44,20 @@ pub trait Holder {
     type KbtPayloadClaims: CustomClaims;
 
     fn cwt_algorithm(&self) -> coset::iana::Algorithm;
+
+    #[cfg(any(feature = "ed25519", feature = "p256", feature = "p384"))]
+    fn digest(&self, sd_hash_alg: SdHashAlg) -> Result<Rc<dyn digest::DynDigest>, SdCwtHolderError<Self::Error>> {
+        Ok(match sd_hash_alg {
+            #[cfg(any(feature = "ed25519", feature = "p256"))]
+            SdHashAlg::Sha256 => Rc::new(sha2::Sha256::default()),
+            #[cfg(feature = "p384")]
+            SdHashAlg::Sha384 => Rc::new(sha2::Sha384::default()),
+            _ => return Err(SdCwtHolderError::HasherNotFound(sd_hash_alg)),
+        })
+    }
+
+    #[cfg(not(any(feature = "ed25519", feature = "p256", feature = "p384")))]
+    fn digest(&self, sd_hash_alg: SdHashAlg) -> Result<Rc<dyn digest::DynDigest>, SdCwtHolderError<Self::Error>>;
 
     /// Build a new instance of a Holder by providing a signing key
     fn new(signing_key: Self::Signer) -> Self
@@ -152,7 +167,8 @@ pub trait Holder {
         let no_disclosures = SaltedArray::default();
         let disclosures = sd_cwt.disclosures().unwrap_or(&no_disclosures);
         if let Some(raw_payload) = cose_sign1_sd_cwt.payload.as_deref().map(Value::from_cbor_bytes).transpose()? {
-            let actual_disclosures = disclosures.digested::<Self::Hasher>()?;
+            let hasher = self.digest(sd_cwt.protected.to_value()?.sd_alg())?;
+            let actual_disclosures = disclosures.digested_detached_hasher(&hasher)?;
             let expected_nb_disclosures = validate_disclosures(&raw_payload, &actual_disclosures)?;
 
             #[cfg(not(feature = "backward"))]
@@ -198,7 +214,8 @@ pub trait Holder {
         // --- redaction of claims ---
         // select the claims to disclose
         if let Some(sd_claims) = sd_cwt.0.sd_unprotected.sd_claims.take() {
-            let sd_claims = params.presentation.try_select_disclosures::<Self::Hasher, Self::Error>(sd_claims)?;
+            let hasher = self.digest(sd_cwt.0.protected.to_value()?.sd_alg())?;
+            let sd_claims = params.presentation.try_select_disclosures::<Self::Error>(sd_claims, &hasher)?;
 
             // then replace them in the issued sd-cwt. An empty 'sd_claims' is invalid
             #[cfg(not(feature = "backward"))]

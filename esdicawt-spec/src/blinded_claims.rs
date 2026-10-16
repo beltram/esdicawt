@@ -413,6 +413,23 @@ impl<'a> SaltedArrayHashing<'a> {
         }
     }
 
+    pub fn get_lazy(&'a self, key: &[u8], hasher: &Rc<dyn digest::DynDigest>) -> Option<&'a GenericSaltedEntry<'a>> {
+        match self {
+            Self::SaltedArrayWithDigests(m) => m.get(key),
+            Self::SaltedArrayToVerify(v) => v.iter().find_map(|(r, se)| {
+                r.or_init_detached_hasher(se.as_ref(), hasher);
+                #[cfg(feature = "backward")]
+                {
+                    r.get().and_then(|(new, old)| (new == key || old == key).then_some(se))
+                }
+                #[cfg(not(feature = "backward"))]
+                {
+                    r.get().and_then(|k| (k == key).then_some(se))
+                }
+            }),
+        }
+    }
+
     #[allow(dead_code)]
     pub fn remove(&mut self, key: &[u8]) -> Option<GenericSaltedEntry<'a>> {
         match self {

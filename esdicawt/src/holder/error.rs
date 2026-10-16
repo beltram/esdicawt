@@ -35,6 +35,8 @@ pub enum SdCwtHolderError<CustomError: Send + Sync> {
     ValidationError(#[from] SdCwtHolderValidationError<CustomError>),
     #[error("The issuer is not using an algorithm IANA registered")]
     UnregisteredAlgorithm,
+    #[error("No hasher configured by the holder for sd_alg: {0:?}")]
+    HasherNotFound(crate::spec::SdHashAlg),
     #[error("This hash algorithm is not supported")]
     InvalidTyp,
     #[error("{0}")]
