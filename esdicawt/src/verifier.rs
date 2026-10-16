@@ -33,18 +33,18 @@ pub trait Verifier {
     type KbtUnprotectedClaims: CustomClaims;
 
     #[cfg(any(feature = "ed25519", feature = "p256", feature = "p384"))]
-    fn digest(&self, sd_hash_alg: SdHashAlg) -> Rc<dyn digest::DynDigest> {
-        match sd_hash_alg {
+    fn digest(&self, sd_hash_alg: SdHashAlg) -> Result<Rc<dyn digest::DynDigest>, SdCwtVerifierError<Self::Error>> {
+        Ok(match sd_hash_alg {
             #[cfg(any(feature = "ed25519", feature = "p256"))]
             SdHashAlg::Sha256 => Rc::new(sha2::Sha256::default()),
             #[cfg(feature = "p384")]
             SdHashAlg::Sha384 => Rc::new(sha2::Sha384::default()),
-            _ => unreachable!(),
-        }
+            _ => return Err(SdCwtVerifierError::HasherNotFound(sd_hash_alg)),
+        })
     }
 
     #[cfg(not(any(feature = "ed25519", feature = "p256", feature = "p384")))]
-    fn digest(&self, sd_hash_alg: SdHashAlg) -> Rc<dyn digest::DynDigest>;
+    fn digest(&self, sd_hash_alg: SdHashAlg) -> Result<Rc<dyn digest::DynDigest>, SdCwtVerifierError<Self::Error>>;
 
     /// Only verify the signatures and the time claims without trying to rebuild the whole ClaimSet which
     /// is expensive by requiring a lot of hashes
@@ -140,7 +140,7 @@ fn __verify_sd_kbt_batch<
 >(
     raw_sd_kbts: &[(&[u8], &VerifierParams, Option<&HolderVerifier>)],
     cks: &cose_key::keyset::CoseKeySet,
-    digest: impl Fn(SdHashAlg) -> Rc<dyn digest::DynDigest>,
+    digest: impl Fn(SdHashAlg) -> Result<Rc<dyn digest::DynDigest>, SdCwtVerifierError<Error>>,
 ) -> Vec<
     Result<
         KbtCwtVerified<IssuerPayloadClaims, KbtPayloadClaims, IssuerProtectedClaims, IssuerUnprotectedClaims, KbtProtectedClaims, KbtUnprotectedClaims>,
@@ -177,7 +177,7 @@ fn __verify_sd_kbt_claims<
     kbt: KbtCwt<IssuerPayloadClaims, AnyDigest, KbtPayloadClaims, IssuerProtectedClaims, IssuerUnprotectedClaims, KbtProtectedClaims, KbtUnprotectedClaims>,
     mut generic_sd_cwt_payload: Value,
     params: &VerifierParams,
-    digest: &impl Fn(SdHashAlg) -> Rc<dyn digest::DynDigest>,
+    digest: &impl Fn(SdHashAlg) -> Result<Rc<dyn digest::DynDigest>, SdCwtVerifierError<Error>>,
 ) -> Result<
     KbtCwtVerified<IssuerPayloadClaims, KbtPayloadClaims, IssuerProtectedClaims, IssuerUnprotectedClaims, KbtProtectedClaims, KbtUnprotectedClaims>,
     SdCwtVerifierError<Error>,
@@ -262,7 +262,7 @@ fn __verify_sd_kbt_claims<
     // now verifying the disclosures
     {
         // compute the hash of all disclosures
-        let hasher = digest(sd_alg);
+        let hasher = digest(sd_alg)?;
         let mut disclosures = disclosures.digested_detached_hasher(&hasher)?;
         #[cfg(feature = "backward")]
         let disclosures_size = disclosures.len();

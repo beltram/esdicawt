@@ -1,4 +1,5 @@
 use crate::{signature_verifier::SignatureVerifierError, time::CwtTimeError};
+use esdicawt_spec::SdHashAlg;
 
 pub type SdCwtVerifierResult<T, CustomError> = Result<T, SdCwtVerifierError<CustomError>>;
 
@@ -54,6 +55,8 @@ pub enum SdCwtVerifierError<CustomError: Send + Sync> {
     DuplicateMapKeys,
     #[error("Malformed SD-CWT because {0}")]
     MalformedSdCwt(&'static str),
+    #[error("No hasher configured by the holder for sd_alg: {0:?}")]
+    HasherNotFound(SdHashAlg),
     #[error(transparent)]
     CustomError(CustomError),
     #[error("{0}")]
