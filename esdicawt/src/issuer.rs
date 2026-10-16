@@ -3,11 +3,15 @@ pub mod params;
 mod redaction;
 
 use crate::{
-    issuer::{error::SdCwtIssuerError, params::IssuerParams, redaction::redact},
+    issuer::{
+        error::SdCwtIssuerError,
+        params::{IssuerParams, Subject},
+        redaction::redact,
+    },
     spec::{
         COSE_HEADER_SD_ALG, COSE_HEADER_SD_CLAIMS, CWT_CLAIM_AUDIENCE, CWT_CLAIM_CNONCE, CWT_CLAIM_CTI, CWT_CLAIM_EXPIRES_AT, CWT_CLAIM_ISSUED_AT, CWT_CLAIM_ISSUER,
-        CWT_CLAIM_KEY_CONFIRMATION, CWT_CLAIM_NOT_BEFORE, CWT_CLAIM_SUBJECT, CWT_MEDIA_TYPE, CustomClaims, CwtAny, MEDIA_TYPE_SD_CWT, SdHashAlg, Select, issuance::SdCwtIssued,
-        reexports::coset,
+        CWT_CLAIM_KEY_CONFIRMATION, CWT_CLAIM_NOT_BEFORE, CWT_CLAIM_SUBJECT, CWT_MEDIA_TYPE, CustomClaims, CwtAny, MEDIA_TYPE_SD_CWT, SdHashAlg, Select, TO_BE_REDACTED_TAG,
+        issuance::SdCwtIssued, reexports::coset,
     },
 };
 use ciborium::Value;
@@ -91,6 +95,12 @@ pub trait Issuer {
 
         let mut to_be_redacted_payload = params.payload.map(Self::PayloadClaims::select).transpose()?;
 
+        if let Subject::Redacted(subject) = params.subject {
+            let claims = to_be_redacted_payload.get_or_insert_with(|| Value::Map(vec![]));
+            let claims = claims.as_map_mut().ok_or(SdCwtIssuerError::InputError)?;
+            claims.push((Value::Tag(TO_BE_REDACTED_TAG, Box::new(Value::Integer(CWT_CLAIM_SUBJECT.into()))), subject.into()));
+        }
+
         let mut unprotected_builder = coset::HeaderBuilder::new();
 
         if let Some(salted_array) = to_be_redacted_payload
@@ -114,10 +124,10 @@ pub trait Issuer {
             }
         }
 
-        let mut payload = vec![
-            (Value::Integer(CWT_CLAIM_ISSUER.into()), params.issuer.into()),
-            (Value::Integer(CWT_CLAIM_SUBJECT.into()), params.subject.into()),
-        ];
+        let mut payload = vec![(Value::Integer(CWT_CLAIM_ISSUER.into()), params.issuer.into())];
+        if let Subject::Unredacted(subject) = params.subject {
+            payload.push((Value::Integer(CWT_CLAIM_SUBJECT.into()), subject.into()));
+        }
         if let Some(aud) = params.audience {
             payload.push((Value::Integer(CWT_CLAIM_AUDIENCE.into()), aud.into()));
         }
@@ -217,6 +227,25 @@ mod tests {
 
     #[test]
     #[wasm_bindgen_test::wasm_bindgen_test]
+    fn should_redact_subject() {
+        let holder_signing_key = ed25519_dalek::SigningKey::generate(&mut rand::thread_rng());
+        let issuer = Ed25519Issuer::<Value>::new(ed25519_dalek::SigningKey::generate(&mut rand::thread_rng()));
+        let mut params = crate::issuer::snapshot::issuer_params(None, &(&holder_signing_key.verifying_key()).try_into().unwrap());
+        params.subject = crate::Subject::Redacted("https://example.com/alice.smith");
+        let sd_cwt = issuer.issue_cwt(&mut rand::thread_rng(), params).unwrap();
+
+        // not in clear in the payload
+        assert_eq!(sd_cwt.payload.to_value().unwrap().inner.subject, None);
+        let disclosures = sd_cwt.disclosures().unwrap().iter().collect::<Result<Vec<_>, _>>().unwrap();
+        let [SaltedEntry::Claim(SaltedClaim { name, value, .. })] = disclosures.as_slice() else {
+            unreachable!()
+        };
+        assert_eq!(name, &SdCwtClaim::Int(CwtStdLabel::Subject as i64));
+        assert_eq!(value, &cbor!("https://example.com/alice.smith").unwrap());
+    }
+
+    #[test]
+    #[wasm_bindgen_test::wasm_bindgen_test]
     fn should_generate_sd_cwt() {
         let payload = CustomTokenClaims { name: Some("Alice Smith".into()) };
         let (sd_cwt, _) = issue(Some(payload));
@@ -264,7 +293,7 @@ mod tests {
             unprotected_claims: None,
             payload: None::<Value>,
             issuer: "https://example.com/i/acme.io",
-            subject: "https://example.com/alice.smith",
+            subject: "https://example.com/alice.smith".into(),
             audience: Some("https://example.com/r/party"),
             cti: Some(b"cti"),
             cnonce: Some(b"cnonce"),
@@ -456,7 +485,7 @@ mod tests {
                     unprotected_claims: None,
                     payload,
                     issuer: "https://example.com/i/acme.io",
-                    subject: "https://example.com/alice.smith",
+                    subject: "https://example.com/alice.smith".into(),
                     audience: Default::default(),
                     cti: Default::default(),
                     cnonce: Default::default(),
@@ -746,7 +775,7 @@ pub mod snapshot {
             unprotected_claims: None,
             payload,
             issuer: "https://example.com/i/acme.io",
-            subject: "https://example.com/alice.smith",
+            subject: "https://example.com/alice.smith".into(),
             audience: Default::default(),
             cti: Default::default(),
             cnonce: Default::default(),

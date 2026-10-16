@@ -147,7 +147,7 @@ fn issuer<H: digest::Digest + Clone>(
         unprotected_claims: None,
         payload: Some(VarSizePayload::new(*nb_claims)),
         issuer: "",
-        subject: "subject",
+        subject: "subject".into(),
         audience: None,
         expiry: None,
         with_not_before: false,

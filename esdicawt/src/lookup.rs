@@ -219,7 +219,7 @@ mod tests {
             unprotected_claims: None,
             payload: Some(payload),
             issuer: "https://example.com/i/proton.me",
-            subject: "https://example.com/u/alice.smith",
+            subject: "https://example.com/u/alice.smith".into(),
             audience: Default::default(),
             cti: Default::default(),
             cnonce: Default::default(),
