@@ -1,5 +1,9 @@
 use crate::{
-    spec::{REDACTED_CLAIM_ELEMENT_TAG, redacted_claims::RedactedClaimKeys},
+    spec::{
+        CWT_CLAIM_SUBJECT, REDACTED_CLAIM_ELEMENT_TAG, SdCwtClaim,
+        blinded_claims::{SaltedClaim, SaltedEntry},
+        redacted_claims::RedactedClaimKeys,
+    },
     time::TimeVerification,
 };
 use ciborium::Value;
@@ -22,6 +26,8 @@ pub struct HolderValidationParams<'a> {
 pub enum SdCwtHolderValidationError<CustomError: Send + Sync> {
     #[error("Expected sub to be '{expected}' but was '{actual}'")]
     SubMismatch { expected: String, actual: String },
+    #[error("The SD-CWT has no 'sub', neither in clear nor redacted")]
+    MissingSubject,
     #[error("Expected issuer to be '{expected}' but was '{actual}'")]
     IssuerMismatch { expected: String, actual: String },
     #[error("Expected audience to be '{expected}' but was '{actual}'")]
@@ -52,56 +58,68 @@ pub enum SdCwtHolderValidationError<CustomError: Send + Sync> {
     CustomError(CustomError),
 }
 
-// wrapping "_validate" is required for fallible recursion
-pub fn validate_disclosures<E>(payload: &Value, disclosures: &SaltedArrayHashing<'_>) -> Result<usize, SdCwtHolderValidationError<E>>
+/// Verifies that every Redacted Claim Hash has its disclosure. Returns the number of disclosures and the 'sub' claim,
+/// either in clear or redacted at the root of the payload
+pub fn validate_disclosures<E>(payload: &Value, disclosures: &SaltedArrayHashing<'_>) -> Result<(usize, Option<String>), SdCwtHolderValidationError<E>>
 where
     E: core::error::Error + Send + Sync,
 {
-    _validate(payload, disclosures)
+    let mut subject = None;
+    let count = _validate(payload, disclosures, Some(&mut subject))?;
+    Ok((count, subject))
 }
 
-#[tailcall::tailcall]
-fn _validate<E>(payload: &Value, disclosures: &SaltedArrayHashing<'_>) -> Result<usize, SdCwtHolderValidationError<E>>
+/// `subject` is only looked for at the root of the payload
+fn _validate<E>(payload: &Value, disclosures: &SaltedArrayHashing<'_>, mut subject: Option<&mut Option<String>>) -> Result<usize, SdCwtHolderValidationError<E>>
 where
     E: core::error::Error + Send + Sync,
 {
+    let nested = |v: &Value| if v.is_map() || v.is_array() { _validate(v, disclosures, None) } else { Ok(0) };
+    // counts the disclosure and the ones nested in it
+    let disclosed = |hash: &[u8]| {
+        let disclosure = disclosures.get_unchecked(hash).ok_or(SdCwtHolderValidationError::DisclosureNotFound)?.as_ref();
+        Ok::<_, SdCwtHolderValidationError<E>>((disclosure, 1 + disclosure.value().map(nested).transpose()?.unwrap_or_default()))
+    };
+    let is_subject = |label: &ciborium::value::Integer| *label == ciborium::value::Integer::from(CWT_CLAIM_SUBJECT);
+
     let mut count = 0;
     match payload {
         Value::Map(mapping) => {
-            for entry in mapping {
-                match entry {
+            for (k, v) in mapping {
+                match (k, v) {
                     (Value::Simple(RedactedClaimKeys::CWT_LABEL), rcks) => {
-                        let rcks = rcks.deserialized::<RedactedClaimKeys>()?;
-                        count += rcks.len();
-                        for rck in rcks {
-                            let Some(d) = disclosures.get_unchecked(rck.as_ref()) else {
-                                return Err(SdCwtHolderValidationError::DisclosureNotFound);
-                            };
-                            if let Some(v) = d.as_ref().value().filter(|v| v.is_map() || v.is_array()) {
-                                count += validate_disclosures(v, disclosures)?
+                        for rck in rcks.deserialized::<RedactedClaimKeys>()? {
+                            let (disclosure, nb) = disclosed(&rck)?;
+                            count += nb;
+                            if let (
+                                Some(subject),
+                                SaltedEntry::Claim(SaltedClaim {
+                                    name: SdCwtClaim::Int(CWT_CLAIM_SUBJECT),
+                                    value: Value::Text(sub),
+                                    ..
+                                }),
+                            ) = (subject.as_deref_mut(), disclosure)
+                            {
+                                *subject = Some(sub.clone());
                             }
                         }
                     }
-                    (_, v) if v.is_map() || v.is_array() => count += validate_disclosures(v, disclosures)?,
-                    _ => {}
+                    (Value::Integer(label), Value::Text(sub)) if is_subject(label) => {
+                        if let Some(subject) = subject.as_deref_mut() {
+                            *subject = Some(sub.clone());
+                        }
+                    }
+                    (_, v) => count += nested(v)?,
                 }
             }
         }
         Value::Array(array) => {
             for element in array {
-                match element {
+                count += match element {
                     Value::Tag(REDACTED_CLAIM_ELEMENT_TAG, rce) => {
-                        let rce = rce.as_bytes().ok_or(SdCwtHolderValidationError::SpecError("RedactedClaimElement should be a bstr"))?;
-                        let Some(d) = disclosures.get_unchecked(rce) else {
-                            return Err(SdCwtHolderValidationError::DisclosureNotFound);
-                        };
-                        count += 1;
-                        if let Some(v) = d.as_ref().value().filter(|v| v.is_map() || v.is_array()) {
-                            count += validate_disclosures(v, disclosures)?
-                        }
+                        disclosed(rce.as_bytes().ok_or(SdCwtHolderValidationError::SpecError("RedactedClaimElement should be a bstr"))?)?.1
                     }
-                    e if e.is_map() || e.is_array() => count += validate_disclosures(e, disclosures)?,
-                    _ => {}
+                    e => nested(e)?,
                 }
             }
         }
@@ -129,6 +147,33 @@ mod tests {
     use ciborium::{Value, cbor};
     use cose_key::keyset::CoseKeySet;
     use std::ops::DerefMut;
+
+    #[test]
+    fn should_verify_redacted_subject() {
+        let issuer_signing_key = ed25519_dalek::SigningKey::generate(&mut rand::thread_rng());
+        let issuer_verifying_key = CoseKeySet::builder().with(&issuer_signing_key.verifying_key()).unwrap().build();
+        let issuer = Ed25519Issuer::<Value>::new(issuer_signing_key);
+
+        let holder_signing_key = ed25519_dalek::SigningKey::generate(&mut rand::thread_rng());
+        let holder = Ed25519Holder::<Value, NoClaims>::new(holder_signing_key.clone());
+
+        // a redacted 'sub' in a nested mapping is not the subject
+        let payload = cbor!({ "nested" => { crate::spec::sd!(crate::spec::CWT_CLAIM_SUBJECT) => "sub-x" } }).unwrap();
+        let mut issuer_params = default_issuer_params(&holder_signing_key, Some(payload));
+        issuer_params.subject = crate::Subject::Redacted("sub-a");
+        let sd_cwt = issuer.issue_cwt(&mut rand::thread_rng(), issuer_params).unwrap().to_cbor_bytes().unwrap();
+
+        let validation_params = |expected_subject| HolderValidationParams {
+            expected_subject,
+            ..Default::default()
+        };
+        holder.verify_sd_cwt(&sd_cwt, validation_params(None), &issuer_verifying_key).unwrap();
+        holder.verify_sd_cwt(&sd_cwt, validation_params(Some("sub-a")), &issuer_verifying_key).unwrap();
+        std::assert_matches!(
+            holder.verify_sd_cwt(&sd_cwt, validation_params(Some("sub-x")), &issuer_verifying_key),
+            Err(SdCwtHolderError::ValidationError(SdCwtHolderValidationError::SubMismatch { expected, actual })) if &expected == "sub-x" && &actual == "sub-a"
+        );
+    }
 
     #[test]
     fn should_fail_when_std_claims_mismatch() {
