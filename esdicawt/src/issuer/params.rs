@@ -14,8 +14,8 @@ pub struct IssuerParams<'a, PayloadClaims: Select, ProtectedClaims: CustomClaims
     pub payload: Option<PayloadClaims>,
     /// Issuer, see https://www.rfc-editor.org/rfc/rfc8392.html#section-3.1.1
     pub issuer: &'a str,
-    /// Subject, see https://www.rfc-editor.org/rfc/rfc8392.html#section-3.1.2
-    pub subject: Option<&'a str>,
+    /// Subject, MUST be present, see https://datatracker.ietf.org/doc/html/draft-ietf-spice-sd-cwt#name-sd-cwt-claims
+    pub subject: &'a str,
     /// Subject, see https://www.rfc-editor.org/rfc/rfc8392.html#section-3.1.3
     pub audience: Option<&'a str>,
     /// Expiry, see https://www.rfc-editor.org/rfc/rfc8392.html#section-3.1.4

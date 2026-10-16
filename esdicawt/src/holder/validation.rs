@@ -141,7 +141,7 @@ mod tests {
 
         let mut issuer_params = default_issuer_params(&holder_signing_key, None);
         issuer_params.issuer = "iss-a";
-        issuer_params.subject = Some("sub-a");
+        issuer_params.subject = "sub-a";
         issuer_params.audience = Some("aud-a");
         issuer_params.cnonce = Some(b"cnonce-a");
 
@@ -421,7 +421,7 @@ mod tests {
             unprotected_claims: None,
             payload,
             issuer: "issuer",
-            subject: None,
+            subject: "subject",
             audience: None,
             expiry: None,
             with_not_before: false,
