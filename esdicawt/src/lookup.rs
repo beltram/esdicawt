@@ -219,7 +219,7 @@ mod tests {
             unprotected_claims: None,
             payload: Some(payload),
             issuer: "https://example.com/i/proton.me",
-            subject: Some("https://example.com/u/alice.smith"),
+            subject: "https://example.com/u/alice.smith".into(),
             audience: Default::default(),
             cti: Default::default(),
             cnonce: Default::default(),
@@ -286,7 +286,15 @@ mod tests {
         }
         let verifier = Ed25519Verifier::new();
         verifier
-            .verify_sd_kbt(sd_kbt, &Default::default(), None, &CoseKeySet::builder().with(&issuer_verifying_key).unwrap().build())
+            .verify_sd_kbt(
+                sd_kbt,
+                &crate::VerifierParams {
+                    expected_subject: "https://example.com/u/alice.smith",
+                    ..Default::default()
+                },
+                None,
+                &CoseKeySet::builder().with(&issuer_verifying_key).unwrap().build(),
+            )
             .unwrap()
     }
 }

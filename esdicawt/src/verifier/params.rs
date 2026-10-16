@@ -2,7 +2,8 @@ use crate::time::TimeVerification;
 
 #[derive(Default, Debug, Copy, Clone)]
 pub struct VerifierParams<'a> {
-    pub expected_subject: Option<&'a str>,
+    /// SD-CWT `sub` must equal this, it is always verified
+    pub expected_subject: &'a str,
     pub expected_issuer: Option<&'a str>,
     pub expected_audience: Option<&'a str>,
     /// SD-KBT `aud` must equal one of these. When empty, the audience is not verified (always passes)

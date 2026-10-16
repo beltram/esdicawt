@@ -306,8 +306,8 @@ mod tests {
             assert!(err.to_string().contains("`cnf` must be initialized"), "{err}");
         }
 
-        let no_iat = Value::Map(vec![(Value::from(CWT_CLAIM_AUDIENCE), Value::from("aud"))]);
-        let err = KbtPayload::<Value>::from_cbor_bytes(&no_iat.to_cbor_bytes().unwrap()).unwrap_err();
-        assert!(err.to_string().contains("`issued_at` must be initialized"), "{err}");
+        let no_iat_nor_cti = Value::Map(vec![(Value::from(CWT_CLAIM_AUDIENCE), Value::from("aud"))]);
+        let err = KbtPayload::<Value>::from_cbor_bytes(&no_iat_nor_cti.to_cbor_bytes().unwrap()).unwrap_err();
+        assert!(err.to_string().contains("must contain either 'iat' or 'cti'"), "{err}");
     }
 }

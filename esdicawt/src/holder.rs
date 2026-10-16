@@ -3,9 +3,9 @@ use crate::{
     holder::validation::validate_disclosures,
     signature_verifier::validate_cose_sign1_signature,
     spec::{
-        CustomClaims, CwtAny, NoClaims, Select,
+        CustomClaims, CwtAny, NoClaims, SdHashAlg, Select,
         blinded_claims::SaltedArray,
-        key_binding::{KbtPayload, KbtProtected, KbtUnprotected},
+        key_binding::{IatOrCti, KbtPayload, KbtProtected, KbtUnprotected},
         reexports::coset,
     },
 };
@@ -14,6 +14,7 @@ use coset::{AsCborValue, TaggedCborSerializable};
 use crate::spec::{issuance::SdCwtIssued, key_binding::KbtCwt};
 use ciborium::Value;
 use cose_key::confirmation::{CoseKeyConfirmationError, KeyConfirmation};
+use std::rc::Rc;
 
 pub mod accessor;
 pub mod error;
@@ -43,6 +44,20 @@ pub trait Holder {
     type KbtPayloadClaims: CustomClaims;
 
     fn cwt_algorithm(&self) -> coset::iana::Algorithm;
+
+    #[cfg(any(feature = "ed25519", feature = "p256", feature = "p384"))]
+    fn digest(&self, sd_hash_alg: SdHashAlg) -> Result<Rc<dyn digest::DynDigest>, SdCwtHolderError<Self::Error>> {
+        Ok(match sd_hash_alg {
+            #[cfg(any(feature = "ed25519", feature = "p256"))]
+            SdHashAlg::Sha256 => Rc::new(sha2::Sha256::default()),
+            #[cfg(feature = "p384")]
+            SdHashAlg::Sha384 => Rc::new(sha2::Sha384::default()),
+            _ => return Err(SdCwtHolderError::HasherNotFound(sd_hash_alg)),
+        })
+    }
+
+    #[cfg(not(any(feature = "ed25519", feature = "p256", feature = "p384")))]
+    fn digest(&self, sd_hash_alg: SdHashAlg) -> Result<Rc<dyn digest::DynDigest>, SdCwtHolderError<Self::Error>>;
 
     /// Build a new instance of a Holder by providing a signing key
     fn new(signing_key: Self::Signer) -> Self
@@ -95,20 +110,9 @@ pub trait Holder {
         #[cfg(not(feature = "test-vectors"))] // FIXME: draft samples are expired
         {
             let now = params.artificial_time.unwrap_or_else(crate::elapsed_since_epoch);
-            let iat = payload.inner.issued_at;
-            let exp = payload.inner.expiration;
-            let nbf = payload.inner.not_before;
-            crate::time::verify_time_claims(now.as_secs(), params.leeway, iat, exp, nbf, params.time_verification)?;
-        }
-
-        // subject
-        if let Some((actual, expected)) = payload.inner.subject.as_ref().zip(params.expected_subject)
-            && actual != expected
-        {
-            return Err(SdCwtHolderError::ValidationError(SdCwtHolderValidationError::SubMismatch {
-                actual: actual.to_owned(),
-                expected: expected.to_owned(),
-            }));
+            let inner = &payload.inner;
+            let time = crate::time::TimeClaims::new(inner.issued_at, inner.expiration, inner.not_before, params.time_verification);
+            crate::time::verify_time_claims(now.as_secs(), params.leeway, time)?;
         }
 
         // issuer
@@ -152,24 +156,33 @@ pub trait Holder {
         // validate disclosure. An absent 'sd_claims' is equivalent to no disclosure
         let no_disclosures = SaltedArray::default();
         let disclosures = sd_cwt.disclosures().unwrap_or(&no_disclosures);
-        if let Some(raw_payload) = cose_sign1_sd_cwt.payload.as_deref().map(Value::from_cbor_bytes).transpose()? {
-            let actual_disclosures = disclosures.digested::<Self::Hasher>()?;
-            let expected_nb_disclosures = validate_disclosures(&raw_payload, &actual_disclosures)?;
+        let raw_payload = cose_sign1_sd_cwt.payload.as_deref().map(Value::from_cbor_bytes).transpose()?.unwrap_or(Value::Map(vec![]));
+        let hasher = self.digest(sd_cwt.protected.to_value()?.sd_alg())?;
+        let actual_disclosures = disclosures.digested_detached_hasher(&hasher)?;
+        let (expected_nb_disclosures, subject) = validate_disclosures(&raw_payload, &actual_disclosures)?;
 
-            #[cfg(not(feature = "backward"))]
-            let actual_nb_disclosures = actual_disclosures.len();
-            #[cfg(feature = "backward")]
-            let actual_nb_disclosures = actual_disclosures.len() / 2;
+        #[cfg(not(feature = "backward"))]
+        let actual_nb_disclosures = actual_disclosures.len();
+        #[cfg(feature = "backward")]
+        let actual_nb_disclosures = actual_disclosures.len() / 2;
 
-            if expected_nb_disclosures != actual_nb_disclosures {
-                return Err(SdCwtHolderError::ValidationError(SdCwtHolderValidationError::OrphanDisclosure {
-                    expected: expected_nb_disclosures,
-                    actual: actual_nb_disclosures,
-                }));
-            }
-        } else if !disclosures.is_empty() {
-            let actual = disclosures.len();
-            return Err(SdCwtHolderError::ValidationError(SdCwtHolderValidationError::OrphanDisclosure { expected: 0, actual }));
+        if expected_nb_disclosures != actual_nb_disclosures {
+            return Err(SdCwtHolderError::ValidationError(SdCwtHolderValidationError::OrphanDisclosure {
+                expected: expected_nb_disclosures,
+                actual: actual_nb_disclosures,
+            }));
+        }
+
+        // subject, which MUST be present either in clear or redacted
+        // see https://datatracker.ietf.org/doc/html/draft-ietf-spice-sd-cwt#name-sd-cwt-claims
+        let subject = subject.ok_or(SdCwtHolderError::ValidationError(SdCwtHolderValidationError::MissingSubject))?;
+        if let Some(expected) = params.expected_subject
+            && subject != expected
+        {
+            return Err(SdCwtHolderError::ValidationError(SdCwtHolderValidationError::SubMismatch {
+                actual: subject,
+                expected: expected.to_owned(),
+            }));
         }
 
         Ok(SdCwtVerified(sd_cwt))
@@ -185,10 +198,9 @@ pub trait Holder {
         // verify again the time claims of the SD-CWT as time could have gone by between the last 'verify_sd_cwt'
         let payload = sd_cwt.payload.to_value()?;
         let now = params.artificial_time.unwrap_or_else(crate::elapsed_since_epoch);
-        let iat = payload.inner.issued_at;
         let exp = payload.inner.expiration;
-        let nbf = payload.inner.not_before;
-        crate::time::verify_time_claims(now.as_secs(), params.leeway, iat, exp, nbf, params.time_verification)?;
+        let time = crate::time::TimeClaims::new(payload.inner.issued_at, exp, payload.inner.not_before, params.time_verification);
+        crate::time::verify_time_claims(now.as_secs(), params.leeway, time)?;
 
         // --- building the kbt ---
         // --- unprotected ---
@@ -200,7 +212,8 @@ pub trait Holder {
         // --- redaction of claims ---
         // select the claims to disclose
         if let Some(sd_claims) = sd_cwt.0.sd_unprotected.sd_claims.take() {
-            let sd_claims = params.presentation.try_select_disclosures::<Self::Hasher, Self::Error>(sd_claims)?;
+            let hasher = self.digest(sd_cwt.0.protected.to_value()?.sd_alg())?;
+            let sd_claims = params.presentation.try_select_disclosures::<Self::Error>(sd_claims, &hasher)?;
 
             // then replace them in the issued sd-cwt. An empty 'sd_claims' is invalid
             #[cfg(not(feature = "backward"))]
@@ -228,15 +241,25 @@ pub trait Holder {
         #[cfg(not(feature = "test-vectors"))]
         let now = crate::elapsed_since_epoch();
 
-        let expiration = params.expiry.map(|exp| exp.to_absolute(now).as_secs() as i64);
-        let not_before = params.with_not_before.then_some(now.as_secs() as i64);
         let issued_at = now.as_secs() as i64;
+        // the SD-KBT must not be valid for any time period when its SD-CWT is invalid
+        // see https://datatracker.ietf.org/doc/html/draft-ietf-spice-sd-cwt#name-creating-a-key-binding-toke
+        let expiration = params
+            .expiry
+            .map(|kbt_exp| kbt_exp.to_absolute(now).as_secs() as i64)
+            .map(|kbt_exp| exp.map_or(kbt_exp, |sd_cwt_exp| kbt_exp.min(sd_cwt_exp)));
+        // otherwise the SD-KBT would be invalid
+        if expiration.is_some_and(|exp| exp <= issued_at) {
+            return Err(crate::time::CwtTimeError::Expired.into());
+        }
+        let not_before = params.with_not_before.then_some(issued_at);
+        let iat_or_cti = IatOrCti::Iat(issued_at);
 
         let payload = KbtPayload {
             audience: params.audience.to_string(),
             expiration,
             not_before,
-            issued_at,
+            iat_or_cti,
             cnonce: params.cnonce.map(|b| b.to_owned().into()),
             extra: params.extra_kbt_payload,
         };
@@ -354,7 +377,7 @@ mod tests {
             unprotected_claims: None,
             payload: Some(payload),
             issuer: "https://example.com/i/acme.io",
-            subject: Some("https://example.com/u/alice.smith"),
+            subject: "https://example.com/u/alice.smith".into(),
             audience: Default::default(),
             cti: Default::default(),
             cnonce: Default::default(),
@@ -438,7 +461,7 @@ mod tests {
             unprotected_claims: None,
             payload: None,
             issuer: "https://example.com/i/acme.io",
-            subject: Some("https://example.com/u/alice.smith"),
+            subject: "https://example.com/u/alice.smith".into(),
             audience: Default::default(),
             cti: Default::default(),
             cnonce: Default::default(),
@@ -772,6 +795,77 @@ mod backward {
             }
             .inspect_err(|err| panic!("'{snapshot:?}' failed because: {err:?}"))
             .unwrap();
+        }
+    }
+
+    /// Tokens from draft-08 implementations and from the current one can all be presented then verified:
+    /// - the SD-CWTs are presented, disclosing everything or nothing, then verified
+    /// - the SD-KBTs are verified, then the SD-CWT they carry is presented again when it has all its disclosures
+    #[test]
+    #[cfg(feature = "backward")]
+    fn should_present_and_verify_snapshots() {
+        use crate::{TimeVerification, Verifier as _, VerifierParams, snapshots::SdKbtSnapshots, spec::key_binding::KbtCwt, verifier::test_utils::HybridVerifier};
+
+        /// Keys used to generate the snapshots
+        fn keys() -> anyhow::Result<(CoseKeySet, ed25519_dalek::SigningKey)> {
+            let mut rng = dernged::Rng::default();
+            let issuer_signing_key = ed25519_dalek::SigningKey::generate(&mut rng);
+            let cks = CoseKeySet::builder().with(&issuer_signing_key.verifying_key())?.build();
+            Ok((cks, ed25519_dalek::SigningKey::generate(&mut rng)))
+        }
+
+        fn verify<T: Select>(sd_kbt: &[u8]) -> anyhow::Result<()> {
+            let (cks, holder_signing_key) = keys()?;
+            // the snapshots have expired
+            let no_time_verification = TimeVerification {
+                verify_exp: false,
+                verify_iat: false,
+                verify_nbf: false,
+            };
+            let params = VerifierParams {
+                expected_subject: "https://example.com/alice.smith",
+                sd_cwt_time_verification: no_time_verification,
+                sd_kbt_time_verification: no_time_verification,
+                ..Default::default()
+            };
+            HybridVerifier::<T, NoClaims>::default().verify_sd_kbt(sd_kbt, &params, Some(&holder_signing_key.verifying_key()), &cks)?;
+            Ok(())
+        }
+
+        fn present_and_verify<T: Select>(sd_cwt: &[u8]) -> anyhow::Result<()> {
+            let (cks, holder_signing_key) = keys()?;
+            let holder = Ed25519Holder::<T, NoClaims>::new(holder_signing_key);
+            for presentation in [Presentation::Full, Presentation::None] {
+                let sd_cwt_verified = holder.verify_sd_cwt(sd_cwt, Default::default(), &cks)?;
+                let sd_kbt = holder.new_presentation_raw(sd_cwt_verified, holder_params(presentation))?;
+                verify::<T>(&sd_kbt)?;
+            }
+            Ok(())
+        }
+
+        for snapshot in SdCwtSnapshots::iter() {
+            let sd_cwt = snapshot.sd_cwt();
+            match snapshot {
+                SdCwtSnapshots::Full | SdCwtSnapshots::FullDraft08 | SdCwtSnapshots::Empty | SdCwtSnapshots::EmptyDraft08 => present_and_verify::<FullClaims>(&sd_cwt),
+                SdCwtSnapshots::AllRedacted | SdCwtSnapshots::AllRedactedDraft08 => present_and_verify::<FullClaimsAllRedacted>(&sd_cwt),
+                SdCwtSnapshots::NoneRedacted | SdCwtSnapshots::NoneRedactedDraft08 => present_and_verify::<FullClaimsNoRedaction>(&sd_cwt),
+            }
+            .inspect_err(|err| panic!("'{snapshot:?}' failed because: {err:?}"))
+            .unwrap();
+        }
+
+        for snapshot in SdKbtSnapshots::iter() {
+            let verify_and_present_again = || -> anyhow::Result<()> {
+                let sd_kbt = snapshot.sd_kbt();
+                verify::<Value>(&sd_kbt)?;
+                // a Holder has all the disclosures, which is only the case of an SD-KBT disclosing everything
+                if matches!(snapshot, SdKbtSnapshots::Full | SdKbtSnapshots::FullDraft08) {
+                    let sd_cwt = KbtCwt::<Value, sha2::Sha256>::from_cbor_bytes(&sd_kbt)?.sd_cwt()?.to_cbor_bytes()?;
+                    present_and_verify::<Value>(&sd_cwt)?;
+                }
+                Ok(())
+            };
+            verify_and_present_again().inspect_err(|err| panic!("'{snapshot:?}' failed because: {err:?}")).unwrap();
         }
     }
 

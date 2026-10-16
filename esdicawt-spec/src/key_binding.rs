@@ -78,9 +78,34 @@ pub struct KbtPayload<Extra: CustomClaims> {
     pub audience: String,
     pub expiration: Option<i64>,
     pub not_before: Option<i64>,
-    pub issued_at: i64,
+    pub iat_or_cti: IatOrCti,
     pub cnonce: Option<serde_bytes::ByteBuf>,
     pub extra: Option<Extra>,
+}
+
+/// A SD-KBT contains at least one of 'iat' or 'cti'
+/// see https://datatracker.ietf.org/doc/html/draft-ietf-spice-sd-cwt#name-creating-a-key-binding-toke
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum IatOrCti {
+    Iat(i64),
+    Cti(serde_bytes::ByteBuf),
+    Both { iat: i64, cti: serde_bytes::ByteBuf },
+}
+
+impl IatOrCti {
+    pub const fn iat(&self) -> Option<i64> {
+        match self {
+            Self::Iat(iat) | Self::Both { iat, .. } => Some(*iat),
+            Self::Cti(_) => None,
+        }
+    }
+
+    pub fn cti(&self) -> Option<&[u8]> {
+        match self {
+            Self::Cti(cti) | Self::Both { cti, .. } => Some(cti),
+            Self::Iat(_) => None,
+        }
+    }
 }
 
 impl<

@@ -20,7 +20,12 @@ impl<Extra: CustomClaims> serde::Serialize for SdProtected<Extra> {
             .map_err(|e| S::Error::custom(format!("{e:?} should have been a mapping")))?
             .unwrap_or_default();
 
-        let map_size = 3 + extras.len();
+        #[cfg(feature = "backward")]
+        let sd_alg_size = 1;
+        #[cfg(not(feature = "backward"))]
+        let sd_alg_size = self.sd_alg.map(|_| 1).unwrap_or_default();
+
+        let map_size = 2 + sd_alg_size + extras.len();
         let mut map = serializer.serialize_map(Some(map_size))?;
 
         map.serialize_entry(&CWT_MEDIA_TYPE, &MEDIA_TYPE_SD_CWT)?;
@@ -28,7 +33,14 @@ impl<Extra: CustomClaims> serde::Serialize for SdProtected<Extra> {
         let alg = (*self.alg).clone().to_cbor_value().map_err(|e| S::Error::custom(format!("Cannot set Alg: {e}")))?;
         map.serialize_entry(&CWT_CLAIM_ALG, &alg)?;
 
-        map.serialize_entry(&COSE_HEADER_SD_ALG, &self.sd_alg)?;
+        #[cfg(feature = "backward")]
+        map.serialize_entry(&COSE_HEADER_SD_ALG, &self.sd_alg())?;
+
+        // absent means SHA-256, it is not added to keep the encoding signed by the Issuer
+        #[cfg(not(feature = "backward"))]
+        if let Some(sd_alg) = &self.sd_alg {
+            map.serialize_entry(&COSE_HEADER_SD_ALG, sd_alg)?;
+        }
 
         for (k, v) in extras {
             map.serialize_entry(&k, &v)?;
@@ -89,7 +101,7 @@ impl<'de, Extra: CustomClaims> serde::Deserialize<'de> for SdProtected<Extra> {
                 const CONTEXT: &str = "Cannot build sd-protected: ";
                 Ok(SdProtected {
                     alg: crate::required_in::<coset::Algorithm, _>(alg, CONTEXT, "alg")?.into(),
-                    sd_alg: crate::required_in(sd_alg, CONTEXT, "sd_alg")?,
+                    sd_alg,
                     extra,
                 })
             }
@@ -99,43 +111,31 @@ impl<'de, Extra: CustomClaims> serde::Deserialize<'de> for SdProtected<Extra> {
     }
 }
 
-impl<Extra: CustomClaims> TryFrom<SdProtected<Extra>> for coset::Header {
-    type Error = Box<dyn core::error::Error>;
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::{COSE_HEADER_SD_ALG, CwtAny, NoClaims};
+    use ciborium::cbor;
 
-    fn try_from(sdp: SdProtected<Extra>) -> Result<Self, Self::Error> {
-        let mut builder = coset::HeaderBuilder::new();
+    #[test]
+    #[cfg(not(feature = "backward"))]
+    fn should_default_sd_alg_to_sha256_when_absent() {
+        let bytes = cbor!({ CWT_MEDIA_TYPE => MEDIA_TYPE_SD_CWT, CWT_CLAIM_ALG => -8 }).unwrap().to_cbor_bytes().unwrap();
+        let protected = SdProtected::<NoClaims>::from_cbor_bytes(&bytes).unwrap();
+        assert_eq!(protected.sd_alg, None);
+        assert_eq!(protected.sd_alg(), SdHashAlg::Sha256);
+        // must not be added back since it would alter what the Issuer signed
+        assert_eq!(protected.to_cbor_bytes().unwrap(), bytes);
+    }
 
-        // map alg
-        use coset::iana::EnumI64 as _;
-        let alg = match *sdp.alg {
-            coset::Algorithm::PrivateUse(i) => coset::iana::Algorithm::from_i64(i),
-            coset::Algorithm::Assigned(i) => coset::iana::Algorithm::from_i64(i.to_i64()),
-            _ => return Err("Only IANA registered or private use algorithms are supported".into()),
-        }
-        .ok_or_else::<Box<dyn core::error::Error>, _>(|| "Invalid IANA algorithm".into())?;
-        builder = builder.algorithm(alg);
-
-        // map extra claims
-        if let Some(claims) = sdp
-            .extra
-            .as_ref()
-            .map(Value::serialized)
-            .transpose()?
-            .map(|v| v.into_map().map_err(|_| "should have been a mapping"))
-            .transpose()?
-        {
-            for (k, v) in claims {
-                builder = match k {
-                    Value::Integer(i) => builder.value(i.try_into()?, v),
-                    Value::Text(t) => builder.text_value(t, v),
-                    _ => builder,
-                }
-            }
-        }
-
-        // map typ
-        let builder = builder.value(CWT_MEDIA_TYPE, Value::Integer(MEDIA_TYPE_SD_CWT.into()));
-
-        Ok(builder.build())
+    #[test]
+    fn should_use_sd_alg_when_present() {
+        let bytes = cbor!({ CWT_MEDIA_TYPE => MEDIA_TYPE_SD_CWT, CWT_CLAIM_ALG => -8, COSE_HEADER_SD_ALG => SdHashAlg::Sha384 as i64 })
+            .unwrap()
+            .to_cbor_bytes()
+            .unwrap();
+        let protected = SdProtected::<NoClaims>::from_cbor_bytes(&bytes).unwrap();
+        assert_eq!(protected.sd_alg(), SdHashAlg::Sha384);
+        assert_eq!(protected.to_cbor_bytes().unwrap(), bytes);
     }
 }

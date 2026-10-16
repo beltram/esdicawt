@@ -147,7 +147,7 @@ fn issuer<H: digest::Digest + Clone>(
         unprotected_claims: None,
         payload: Some(VarSizePayload::new(*nb_claims)),
         issuer: "",
-        subject: None,
+        subject: "subject".into(),
         audience: None,
         expiry: None,
         with_not_before: false,
@@ -198,7 +198,7 @@ fn verifier<H: digest::Digest + Clone>(nb_claims: &usize) -> (Ed25519Verifier<Va
     let verifier = Ed25519Verifier::<VarSizePayload>::new();
 
     let params = VerifierParams {
-        expected_subject: None,
+        expected_subject: "subject",
         expected_issuer: None,
         expected_audience: None,
         expected_kbt_audience: &[],
@@ -226,7 +226,7 @@ fn verifier_batch<H: digest::Digest + Clone>(nb_claims: usize, nb_sd_kbt: usize)
 
     let verifier = Ed25519Verifier::<VarSizePayload>::new();
     let params = VerifierParams {
-        expected_subject: None,
+        expected_subject: "subject",
         expected_issuer: None,
         expected_audience: None,
         expected_kbt_audience: &[],

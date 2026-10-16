@@ -12,7 +12,7 @@ use ciborium::Value;
 #[derive(Debug)]
 pub struct HolderParams<'a, KbtPayloadClaims: CustomClaims = NoClaims, KbtProtectedClaims: CustomClaims = NoClaims, KbtUnprotectedClaims: CustomClaims = NoClaims> {
     pub presentation: Presentation,
-    /// Subject, see https://www.rfc-editor.org/rfc/rfc8392.html#section-3.1.3
+    /// Audience, see https://www.rfc-editor.org/rfc/rfc8392.html#section-3.1.3
     pub audience: &'a str,
     /// Client Nonce, see https://www.rfc-editor.org/rfc/rfc9200.html#section-5.3.1
     pub cnonce: Option<&'a [u8]>,
@@ -58,14 +58,18 @@ impl std::fmt::Debug for Presentation {
 }
 
 impl Presentation {
-    pub(crate) fn try_select_disclosures<Hasher: digest::Digest, E: core::error::Error + Send + Sync>(&self, disclosures: SaltedArray) -> SdCwtHolderResult<SaltedArray, E> {
+    pub(crate) fn try_select_disclosures<E: core::error::Error + Send + Sync>(
+        &self,
+        disclosures: SaltedArray,
+        hasher: &std::rc::Rc<dyn digest::DynDigest>,
+    ) -> SdCwtHolderResult<SaltedArray, E> {
         let mut disclosures = match self {
             Self::Full => disclosures,
             Self::None => SaltedArray::default(),
             Self::Custom(f) => f(disclosures),
             Self::Path(f) => {
-                let hashed_disclosures = disclosures.digested::<Hasher>()?;
-                let cbor_paths = traverse_all_cbor_paths_in_salted_array::<Hasher, E>(&hashed_disclosures)?;
+                let hashed_disclosures = disclosures.digested_detached_hasher(hasher)?;
+                let cbor_paths = traverse_all_cbor_paths_in_salted_array::<E>(&hashed_disclosures, hasher)?;
                 cbor_paths
                     .into_iter()
                     .filter_map(|(path, salted, ..)| f(&path).then_some(salted.into()))
