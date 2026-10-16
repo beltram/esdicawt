@@ -12,7 +12,7 @@ use ciborium::Value;
 #[derive(Debug)]
 pub struct HolderParams<'a, KbtPayloadClaims: CustomClaims = NoClaims, KbtProtectedClaims: CustomClaims = NoClaims, KbtUnprotectedClaims: CustomClaims = NoClaims> {
     pub presentation: Presentation,
-    /// Subject, see https://www.rfc-editor.org/rfc/rfc8392.html#section-3.1.3
+    /// Audience, see https://www.rfc-editor.org/rfc/rfc8392.html#section-3.1.3
     pub audience: &'a str,
     /// Client Nonce, see https://www.rfc-editor.org/rfc/rfc9200.html#section-5.3.1
     pub cnonce: Option<&'a [u8]>,
