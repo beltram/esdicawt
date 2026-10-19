@@ -3,6 +3,7 @@ use crate::{
     spec::{
         CwtAny, Salt, SdCwtClaim, TO_BE_DECOY_TAG, TO_BE_REDACTED_TAG,
         blinded_claims::{Decoy, SaltedArray, SaltedClaimRef, SaltedElementRef},
+        is_container, is_safe_tag,
         redacted_claims::{RedactedClaimElement, RedactedClaimKeys},
     },
 };
@@ -87,13 +88,7 @@ where
             }
 
             // if we are ourselves in a mapping then redact the mapping itself
-            let parent_ctx = parent_ctx.map(|(l, rcks)| (l.untag(), rcks));
-            if let Some((Some(parent_label), rcks)) = parent_ctx {
-                let salt = new_salt(csprng)?;
-                let salted_claim = SaltedClaimRef { salt, name: &parent_label, value };
-                rcks.push::<H>(&salted_claim)?;
-                sd_claims.push_ref_bytes(salted_claim)?;
-            }
+            redact_claim::<E, H>(csprng, sd_claims, parent_ctx, value)?;
         }
         Value::Array(array) => {
             for element in array.iter_mut() {
@@ -101,15 +96,9 @@ where
             }
 
             // if we are in a mapping then redact the array itself
-            let parent_ctx = parent_ctx.map(|(l, rcks)| (l.untag(), rcks));
-            if let Some((Some(parent_label), rcks)) = parent_ctx {
-                let salt = new_salt(csprng)?;
-                let salted_claim = SaltedClaimRef { salt, name: &parent_label, value };
-                rcks.push::<H>(&salted_claim)?;
-                sd_claims.push_ref_bytes(salted_claim)?;
-            }
+            redact_claim::<E, H>(csprng, sd_claims, parent_ctx, value)?;
         }
-        Value::Tag(TO_BE_REDACTED_TAG, original_value) if (original_value.is_map() || original_value.is_array()) => {
+        Value::Tag(TO_BE_REDACTED_TAG, original_value) if is_container(original_value) => {
             let in_array = parent_ctx.is_none();
 
             redact_value::<E, H>(original_value, csprng, sd_claims, decoys, parent_ctx)?;
@@ -122,6 +111,11 @@ where
                 sd_claims.push_ref_bytes(salted_element)?;
                 *value = rce.to_cbor_value()?;
             }
+        }
+        // a tag not specific to SD-CWT can contain claims to redact, and be itself redacted
+        Value::Tag(tag, inner) if is_safe_tag(*tag) => {
+            redact_value::<E, H>(inner, csprng, sd_claims, decoys, None)?;
+            redact_claim::<E, H>(csprng, sd_claims, parent_ctx, value)?;
         }
         value => {
             match parent_ctx {
@@ -138,12 +132,7 @@ where
                         value => value,
                     };
 
-                    if let Some(parent_label) = parent_label.untag() {
-                        let salt = new_salt(csprng)?;
-                        let salted_claim = SaltedClaimRef { salt, name: &parent_label, value };
-                        rcks.push::<H>(&salted_claim)?;
-                        sd_claims.push_ref_bytes(salted_claim)?;
-                    }
+                    redact_claim::<E, H>(csprng, sd_claims, Some((parent_label, rcks)), value)?;
                 }
                 None => {
                     if let Value::Tag(TO_BE_DECOY_TAG, decoy_index) = value {
@@ -163,6 +152,31 @@ where
                 }
             }
         }
+    }
+    Ok(())
+}
+
+/// When in a mapping under a To Be Redacted label, discloses `value` and adds its digest to the mapping's 'redacted_claim_keys'
+fn redact_claim<E, H>(
+    csprng: &mut dyn rand_core::CryptoRngCore,
+    sd_claims: &mut SaltedArray,
+    parent_ctx: Option<(&SdCwtClaim, &mut RedactedClaimKeys)>,
+    value: &Value,
+) -> Result<(), SdCwtIssuerError<E>>
+where
+    E: core::error::Error + Send + Sync,
+    H: digest::Digest,
+{
+    if let Some((parent_label, rcks)) = parent_ctx
+        && let Some(parent_label) = parent_label.untag()
+    {
+        let salted_claim = SaltedClaimRef {
+            salt: new_salt(csprng)?,
+            name: &parent_label,
+            value,
+        };
+        rcks.push::<H>(&salted_claim)?;
+        sd_claims.push_ref_bytes(salted_claim)?;
     }
     Ok(())
 }

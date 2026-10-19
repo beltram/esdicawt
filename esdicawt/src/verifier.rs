@@ -967,6 +967,57 @@ mod tests {
         assert_eq!(verified.claimset.unwrap(), cbor!({ "array" => ["a"] }).unwrap());
     }
 
+    /// Tags not specific to SD-CWT are transparent: they can contain redacted claims and be redacted themselves
+    /// see `safe_tag` in https://datatracker.ietf.org/doc/html/draft-ietf-spice-sd-cwt#name-cddl
+    #[test]
+    #[wasm_bindgen_test::wasm_bindgen_test]
+    fn should_verify_redacted_claims_in_tags() {
+        let tag = |v: Value| Value::Tag(1000, Box::new(v));
+        let payload = cbor!({
+            "map" => tag(cbor!({ sd!("a") => 1, "b" => 2 }).unwrap()),
+            "array" => tag(cbor!(["c", sd!("d")]).unwrap()),
+            sd!("redacted") => tag(cbor!({ sd!("e") => 3 }).unwrap()),
+            "elements" => [sd!(tag(cbor!({ sd!("f") => 4 }).unwrap()))],
+        })
+        .unwrap();
+        let holder_signing_key = ed25519_dalek::SigningKey::generate(&mut rand::thread_rng());
+        let issuer_params = default_issuer_params(Some(payload), &holder_signing_key);
+
+        let present = |presentation| {
+            let mut holder_params = default_holder_params::<NoClaims>();
+            holder_params.presentation = presentation;
+            sorted(verify(issuer_params.clone(), holder_params, &holder_signing_key).unwrap().claimset.unwrap())
+        };
+
+        let all = cbor!({
+            "map" => tag(cbor!({ "a" => 1, "b" => 2 }).unwrap()),
+            "array" => tag(cbor!(["c", "d"]).unwrap()),
+            "redacted" => tag(cbor!({ "e" => 3 }).unwrap()),
+            "elements" => [tag(cbor!({ "f" => 4 }).unwrap())],
+        })
+        .unwrap();
+        assert_eq!(present(Presentation::Full), sorted(all));
+
+        let none = cbor!({
+            "map" => tag(cbor!({ "b" => 2 }).unwrap()),
+            "array" => tag(cbor!(["c"]).unwrap()),
+            "elements" => [],
+        })
+        .unwrap();
+        assert_eq!(present(Presentation::None), sorted(none));
+
+        // the path of a claim nested in a redacted one goes through the tag
+        let redacted = Presentation::Path(Box::new(|path| matches!(path, [crate::CborPath::Str(l), ..] if l == "redacted")));
+        let only_redacted = cbor!({
+            "map" => tag(cbor!({ "b" => 2 }).unwrap()),
+            "array" => tag(cbor!(["c"]).unwrap()),
+            "redacted" => tag(cbor!({ "e" => 3 }).unwrap()),
+            "elements" => [],
+        })
+        .unwrap();
+        assert_eq!(present(redacted), sorted(only_redacted));
+    }
+
     #[test]
     #[wasm_bindgen_test::wasm_bindgen_test]
     fn should_omit_empty_sd_claims() {
@@ -1000,6 +1051,7 @@ mod tests {
                 Value::Map(mapping)
             }
             Value::Array(array) => Value::Array(array.into_iter().map(sorted).collect()),
+            Value::Tag(tag, v) => Value::Tag(tag, Box::new(sorted(*v))),
             v => v,
         }
     }

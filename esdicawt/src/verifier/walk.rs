@@ -3,6 +3,7 @@ use crate::{
     spec::{
         CwtAny, REDACTED_CLAIM_ELEMENT_TAG,
         blinded_claims::{SaltedClaim, SaltedElement, SaltedEntry},
+        is_safe_tag,
         redacted_claims::{RedactedClaimElement, RedactedClaimKeys},
     },
 };
@@ -42,9 +43,7 @@ where
                     if let Some(found) = disclosures.remove_lazy(&rck, &hasher) {
                         match found.into_owned() {
                             SaltedEntry::Claim(SaltedClaim { name, mut value, .. }) => {
-                                if value.is_map() || value.is_array() {
-                                    walk_payload(hasher.clone(), &mut value, disclosures)?;
-                                }
+                                walk_payload(hasher.clone(), &mut value, disclosures)?;
                                 let label = Value::from(&name);
                                 if !keys.insert(name) {
                                     return Err(SdCwtVerifierError::DuplicateMapKeys);
@@ -73,9 +72,7 @@ where
                 if let Some(mut found) = disclosures.remove_lazy(&redacted_element, &hasher) {
                     match found.to_mut() {
                         SaltedEntry::Element(SaltedElement { value, .. }) => {
-                            if value.is_map() || value.is_array() {
-                                walk_payload(hasher.clone(), value, disclosures)?;
-                            }
+                            walk_payload(hasher.clone(), value, disclosures)?;
                             *element = core::mem::replace(value, Value::Null);
                         }
                         SaltedEntry::Decoy(_) => {} // nothing to do, validity of hash already checked
@@ -88,6 +85,7 @@ where
             // see step 10 of https://datatracker.ietf.org/doc/html/draft-ietf-spice-sd-cwt#name-kbt-and-sd-cwt-verifier-val
             array.retain(|element| !matches!(element, Value::Tag(REDACTED_CLAIM_ELEMENT_TAG, _)));
         }
+        Value::Tag(tag, inner) if is_safe_tag(*tag) => walk_payload(hasher, inner, disclosures)?,
         _ => {}
     }
     Ok(())

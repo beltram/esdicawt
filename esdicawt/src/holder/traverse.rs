@@ -5,7 +5,9 @@ use crate::{
         CWT_LABEL_REDACTED_TAG, REDACTED_CLAIM_ELEMENT_TAG,
         blinded_claims::SaltedArrayHashing,
         blinded_claims::{SaltedClaim, SaltedElement, SaltedEntry},
+        is_container,
         redacted_claims::ToRedacted,
+        untag,
     },
 };
 use ciborium::Value;
@@ -48,7 +50,7 @@ where
             let insert = previous_depth.is_none() || previous_depth.map(|prev| current.len() >= prev).unwrap_or_default() || retract_previous;
 
             match &**salted {
-                SaltedEntry::Claim(SaltedClaim { value, .. }) | SaltedEntry::Element(SaltedElement { value, .. }) if value.is_map() || value.is_array() => {
+                SaltedEntry::Claim(SaltedClaim { value, .. }) | SaltedEntry::Element(SaltedElement { value, .. }) if is_container(value) => {
                     if let SaltedEntry::Claim(SaltedClaim { name, .. }) = &**salted {
                         current.push(name.into());
                     }
@@ -86,10 +88,10 @@ where
                                 }
                             }
                             // complex in a mapping or array
-                            (label, value) if value.is_map() || value.is_array() => {
+                            (label, value) if is_container(value) => {
                                 let path = label.map(TryInto::try_into).transpose()?.unwrap_or(CborPath::Index(index as u64));
                                 current.push(path);
-                                __traverse::<E>(&value.into(), current.clone(), disclosures, hasher, paths)?;
+                                __traverse::<E>(&untag(value).into(), current.clone(), disclosures, hasher, paths)?;
                                 current.pop();
                             }
                             _ => {}
@@ -97,7 +99,7 @@ where
                         Ok(())
                     };
 
-                    match value {
+                    match untag(value) {
                         Value::Array(values) => {
                             for (index, value) in values.iter().enumerate() {
                                 traverse_salted_collection(index, None, value)?;
@@ -142,9 +144,9 @@ where
                             }
                         }
                     }
-                    (_, value) if value.is_map() || value.is_array() => {
+                    (_, value) if is_container(value) => {
                         current.push(label.try_into()?);
-                        __traverse::<E>(&value.into(), current.clone(), disclosures, hasher, paths)?;
+                        __traverse::<E>(&untag(value).into(), current.clone(), disclosures, hasher, paths)?;
                         current.pop();
                     }
                     _ => {}
@@ -164,9 +166,9 @@ where
                             current.pop();
                         }
                     }
-                    value if value.is_map() || value.is_array() => {
+                    value if is_container(value) => {
                         current.push(CborPath::Index(index as u64));
-                        __traverse::<E>(&value.into(), current.clone(), disclosures, hasher, paths)?;
+                        __traverse::<E>(&untag(value).into(), current.clone(), disclosures, hasher, paths)?;
                         current.pop();
                     }
                     _ => {}
