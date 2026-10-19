@@ -967,6 +967,37 @@ mod tests {
         assert_eq!(verified.claimset.unwrap(), cbor!({ "array" => ["a"] }).unwrap());
     }
 
+    #[test]
+    #[wasm_bindgen_test::wasm_bindgen_test]
+    fn should_reject_never_redacted_claims() {
+        use crate::spec::CWT_CLAIM_EXPIRES_AT;
+
+        let holder_signing_key = ed25519_dalek::SigningKey::generate(&mut rand::thread_rng());
+        let issuer_signing_key = ed25519_dalek::SigningKey::generate(&mut rand::thread_rng());
+        let cks = CoseKeySet::builder().with_signing_key(&issuer_signing_key).unwrap().build();
+        let verifier = HybridVerifier::<Value, NoClaims>::default();
+
+        let present = |payload: Value| {
+            let issuer_params = default_issuer_params(Some(payload), &holder_signing_key);
+            let sd_cwt = Ed25519Issuer::new(issuer_signing_key.clone()).issue_cwt(&mut rand::thread_rng(), issuer_params).unwrap();
+            // a Holder would refuse it, so its validation is skipped
+            let holder = Ed25519Holder::<Value, NoClaims>::new(holder_signing_key.clone());
+            holder.new_presentation(sd_cwt.into(), default_holder_params()).unwrap().to_cbor_bytes().unwrap()
+        };
+
+        let sd_kbt = present(cbor!({ sd!(CWT_CLAIM_EXPIRES_AT) => 1 }).unwrap());
+        let err = verifier
+            .verify_sd_kbt(&sd_kbt, &verifier_params(), Some(&holder_signing_key.verifying_key()), &cks)
+            .unwrap_err();
+        std::assert_matches!(err, SdCwtVerifierError::MustNotBeRedacted(crate::spec::SdCwtClaim::Int(CWT_CLAIM_EXPIRES_AT)));
+
+        // only applies to the root of the payload
+        let sd_kbt = present(cbor!({ "nested" => { sd!(CWT_CLAIM_EXPIRES_AT) => 1 } }).unwrap());
+        verifier
+            .verify_sd_kbt(&sd_kbt, &verifier_params(), Some(&holder_signing_key.verifying_key()), &cks)
+            .unwrap();
+    }
+
     /// Tags not specific to SD-CWT are transparent: they can contain redacted claims and be redacted themselves
     /// see `safe_tag` in https://datatracker.ietf.org/doc/html/draft-ietf-spice-sd-cwt#name-cddl
     #[test]

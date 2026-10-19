@@ -55,6 +55,8 @@ pub enum SdCwtVerifierError<CustomError: Send + Sync> {
     DuplicateMapKeys,
     #[error("Malformed SD-CWT because {0}")]
     MalformedSdCwt(&'static str),
+    #[error("The claim {0:?} must not be redacted")]
+    MustNotBeRedacted(esdicawt_spec::SdCwtClaim),
     #[error("No hasher configured by the holder for sd_alg: {0:?}")]
     HasherNotFound(SdHashAlg),
     #[error(transparent)]
