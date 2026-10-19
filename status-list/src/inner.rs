@@ -39,7 +39,7 @@ pub fn bit_offset<S: Status>(index: BitIndex) -> u8 {
 }
 
 /// Read a status from the list as bit.
-/// Might panic in case of overflow, prefer [crate::IntellijRustImportsMock::AnyLst::get_raw]
+/// Might panic in case of overflow, prefer [get]
 #[inline(always)]
 pub fn get_unchecked<S: Status>(status_list: &[u8], index: BitIndex) -> S {
     get(status_list, index).expect("Byte offset ouf of bounds")
