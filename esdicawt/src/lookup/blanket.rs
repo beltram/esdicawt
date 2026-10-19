@@ -15,7 +15,8 @@ impl<PayloadClaims: Select, Hasher: digest::Digest + digest::FixedOutputReset + 
         // an absent 'sd_claims' is equivalent to no disclosure
         let no_disclosures = SaltedArray::default();
         let disclosures = self.disclosures().unwrap_or(&no_disclosures);
-        query::<Hasher>(&mut disclosures.to_verify()?, &payload, token_query)
+        let hasher = super::sd_alg_hasher::<Hasher>(self.protected.to_value()?.sd_alg());
+        query(&mut disclosures.to_verify()?, &payload, token_query, hasher)
     }
 }
 
@@ -27,7 +28,8 @@ impl<PayloadClaims: Select, Hasher: digest::Digest + digest::FixedOutputReset + 
         // an absent 'sd_claims' is equivalent to no disclosure
         let no_disclosures = SaltedArray::default();
         let disclosures = self.disclosures().unwrap_or(&no_disclosures);
-        query::<Hasher>(&mut disclosures.to_verify()?, &payload, token_query)
+        let hasher = super::sd_alg_hasher::<Hasher>(self.protected.to_value()?.sd_alg());
+        query(&mut disclosures.to_verify()?, &payload, token_query, hasher)
     }
 }
 
@@ -57,7 +59,13 @@ impl<
 {
     fn query(&self, token_query: Query) -> EsdicawtSpecResult<Option<Value>> {
         if let Some(Ok(claimset)) = self.claimset.as_ref().map(|cs| cs.to_cbor_value()) {
-            query::<AnyDigest>(&mut SaltedArrayHashing::SaltedArrayToVerify(Default::default()), &claimset, token_query)
+            // the claimset has no redacted claims left, so nothing is hashed
+            query(
+                &mut SaltedArrayHashing::SaltedArrayToVerify(Default::default()),
+                &claimset,
+                token_query,
+                std::rc::Rc::new(AnyDigest),
+            )
         } else {
             Ok(None)
         }
