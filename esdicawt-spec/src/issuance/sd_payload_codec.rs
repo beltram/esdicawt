@@ -204,9 +204,6 @@ fn decode_sd_inner_payload<Extra: CustomClaims, E: serde::de::Error>(mut next_en
     let mut extra = vec![];
 
     while let Some((k, v)) = next_entry()? {
-        if v.is_null() {
-            continue;
-        }
         match k {
             ref label @ Value::Integer(_) => match SdCwtStandardClaim::try_from(label) {
                 Ok(SdCwtStandardClaim::Issuer) => {
@@ -287,6 +284,34 @@ fn decode_sd_inner_payload<Extra: CustomClaims, E: serde::de::Error>(mut next_en
 mod tests {
     use super::*;
     use crate::{CwtAny, key_binding::KbtPayload};
+
+    #[test]
+    fn should_keep_null_claims() {
+        // the required claims
+        let payload = |claims: Vec<(Value, Value)>| {
+            #[allow(unused_mut)]
+            let mut payload = vec![(Value::from(CWT_CLAIM_ISSUER), Value::from("https://issuer.example"))];
+            #[cfg(feature = "status")]
+            payload.push((
+                Value::from(crate::CWT_CLAIM_STATUS),
+                status_list::StatusClaim::new(0, "https://example.com/statuslists/1".parse().unwrap())
+                    .to_cbor_value()
+                    .unwrap(),
+            ));
+            payload.extend(claims);
+            Value::Map(payload).to_cbor_bytes().unwrap()
+        };
+
+        // a custom claim can be null
+        let decoded = SdInnerPayload::<Value>::from_cbor_bytes(&payload(vec![(Value::from("nothing"), Value::Null)])).unwrap();
+        assert_eq!(decoded.extra, Some(Value::Map(vec![(Value::from("nothing"), Value::Null)])));
+
+        // but not a standard claim
+        for claim in [CWT_CLAIM_ISSUER, CWT_CLAIM_SUBJECT, CWT_CLAIM_AUDIENCE, CWT_CLAIM_EXPIRES_AT, CWT_CLAIM_CTI] {
+            let err = SdInnerPayload::<Value>::from_cbor_bytes(&payload(vec![(Value::from(claim), Value::Null)])).unwrap_err();
+            assert!(err.to_string().contains("is not a"), "{claim}: {err}");
+        }
+    }
 
     #[test]
     fn missing_required_claims_should_fail() {
