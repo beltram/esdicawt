@@ -194,8 +194,11 @@ fn test_vectors<P: Select>(payload: P, spec_sd_cwt_bytes: &[u8], spec_sd_kbt_byt
         presentation: Presentation::Custom(Box::new(|issued| presented.iter().filter_map(|&i| issued.get(i).cloned()).collect::<Vec<_>>().into())),
         audience: "https://verifier.example/app",
         cnonce: Some(&hex::decode("8c0f5f523b95bea44a9a48c649240803").unwrap()),
-        expiry: None,
-        with_not_before: false,
+        iat_or_cti: esdicawt::KbtIatOrCti::Iat {
+            expiry: None,
+            with_not_before: false,
+            cti: None,
+        },
         artificial_time: Some(core::time::Duration::from_secs(NOW + 37)),
         time_verification: Default::default(),
         leeway: Default::default(),
