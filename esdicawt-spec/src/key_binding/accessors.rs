@@ -33,7 +33,7 @@ impl<
                 .try_into_value()
         });
 
-        sd_cwt
+        Ok(sd_cwt?)
     }
 
     /// Whether this SD-KBT comes from a draft-08 implementation, which computed the Redacted Claim Hashes over the raw
