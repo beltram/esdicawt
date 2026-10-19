@@ -451,27 +451,6 @@ impl<'a> SaltedArrayHashing<'a> {
         }
     }
 
-    pub fn remove_if<H: digest::Digest>(&mut self, condition: impl Fn(&[u8], &GenericSaltedEntry<'a>) -> bool) -> Option<GenericSaltedEntry<'a>> {
-        match self {
-            Self::SaltedArrayWithDigests(m) => m.iter().find_map(|(k, v)| condition(k, v).then_some(k)).cloned().and_then(|k| m.remove(&k)),
-            Self::SaltedArrayToVerify(v) => v
-                .iter()
-                .position(|(r, v)| {
-                    r.or_init::<H>(v.as_ref());
-                    #[cfg(feature = "backward")]
-                    {
-                        r.get().map(|(new, old)| condition(new, v) || condition(old, v)).unwrap_or_default()
-                    }
-                    #[cfg(not(feature = "backward"))]
-                    {
-                        r.get().map(|k| condition(k, v)).unwrap_or_default()
-                    }
-                })
-                .map(|pos| v.swap_remove(pos))
-                .map(|(_, se)| se),
-        }
-    }
-
     pub fn remove_lazy(&mut self, key: &[u8], hasher: &Rc<dyn digest::DynDigest>) -> Option<GenericSaltedEntry<'a>> {
         match self {
             Self::SaltedArrayWithDigests(m) => m.remove(key),
