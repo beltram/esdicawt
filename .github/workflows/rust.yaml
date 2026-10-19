@@ -25,25 +25,49 @@ jobs:
       - run: cargo fmt --all -- --check
 
   check:
+    name: check (${{ matrix.name }})
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: default
+            run: cargo check
+          - name: benches
+            run: cargo check --benches
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
-      - run: cargo check
-      - run: cargo check --benches
+        with:
+          # one cache per matrix entry since they do not build the same artifacts
+          key: ${{ matrix.name }}
+      - run: ${{ matrix.run }}
 
   build:
+    name: build (${{ matrix.name }})
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: build
+            run: cargo build --verbose
+          - name: clippy
+            run: cargo clippy --tests -- -D warnings
+          - name: clippy-backward
+            run: cargo clippy --tests --features backward -- -D warnings
+          - name: clippy-test-vectors
+            run: cargo clippy -p esdicawt-test-vector --tests -- -D warnings
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
+        with:
+          # one cache per matrix entry since they do not build the same artifacts
+          key: ${{ matrix.name }}
       - run: git submodule init && git submodule update --recursive --remote
-      - run: cargo build --verbose
-      - run: cargo clippy --tests --features backward -- -D warnings
-      - run: cargo clippy --tests -- -D warnings
-      - run: cargo clippy -p esdicawt-test-vector --tests -- -D warnings
+      - run: ${{ matrix.run }}
 
   test:
     name: test (${{ matrix.name }})
