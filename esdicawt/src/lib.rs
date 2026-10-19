@@ -69,7 +69,8 @@ pub(crate) fn elapsed_since_epoch() -> core::time::Duration {
 #[cfg(not(all(target_arch = "wasm32", target_os = "unknown")))]
 pub(crate) fn elapsed_since_epoch() -> core::time::Duration {
     let now = std::time::SystemTime::now();
-    now.duration_since(std::time::SystemTime::UNIX_EPOCH).expect("System clock is before UNIX_EPOCH")
+    // a clock before UNIX_EPOCH is broken, the UNIX_EPOCH itself makes every time verification fail instead of panicking
+    now.duration_since(std::time::SystemTime::UNIX_EPOCH).unwrap_or_default()
 }
 
 /// Helps managing CBOR integer labels declared in an enum.

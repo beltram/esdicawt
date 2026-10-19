@@ -105,7 +105,11 @@ where
     };
     match &query[..] {
         [] => {
-            walk_payload::<EsdicawtSpecError>(Rc::new(H::new()), &mut value, salted_array).unwrap();
+            walk_payload::<EsdicawtSpecError>(Rc::new(H::new()), &mut value, salted_array).map_err(|e| match e {
+                crate::SdCwtVerifierError::SpecError(e) => e,
+                crate::SdCwtVerifierError::CborValueError(e) => e.into(),
+                _ => EsdicawtSpecError::LookupError("Cannot apply the disclosures of the looked up claim"),
+            })?;
             Ok(Some(value))
         }
         _ => query_inner::<H>(salted_array, &mut value, query),
