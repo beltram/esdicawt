@@ -16,10 +16,8 @@ pub struct HolderParams<'a, KbtPayloadClaims: CustomClaims = NoClaims, KbtProtec
     pub audience: &'a str,
     /// Client Nonce, see https://www.rfc-editor.org/rfc/rfc9200.html#section-5.3.1
     pub cnonce: Option<&'a [u8]>,
-    /// Expiry, see https://www.rfc-editor.org/rfc/rfc8392.html#section-3.1.4
-    pub expiry: Option<TimeArg>,
-    /// Whether to include a not_before, see https://www.rfc-editor.org/rfc/rfc8392.html#section-3.1.5
-    pub with_not_before: bool,
+    /// Whether the SD-KBT is identified by its issuance time or by a CWT ID
+    pub iat_or_cti: KbtIatOrCti<'a>,
     pub artificial_time: Option<core::time::Duration>,
     pub time_verification: TimeVerification,
     // to accommodate clock skews, applies to exp & nbf
@@ -27,6 +25,24 @@ pub struct HolderParams<'a, KbtPayloadClaims: CustomClaims = NoClaims, KbtProtec
     pub extra_kbt_protected: Option<KbtProtectedClaims>,
     pub extra_kbt_unprotected: Option<KbtUnprotectedClaims>,
     pub extra_kbt_payload: Option<KbtPayloadClaims>,
+}
+
+/// An SD-KBT contains either an 'iat' or a 'cti'.
+///
+/// It can only have an 'exp' or a 'nbf' along with an 'iat', see https://datatracker.ietf.org/doc/html/draft-ietf-spice-sd-cwt#name-creating-a-key-binding-toke
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum KbtIatOrCti<'a> {
+    /// 'iat' set to the current time, preferred when the Holder has an accurate clock
+    Iat {
+        /// Expiry, see https://www.rfc-editor.org/rfc/rfc8392.html#section-3.1.4
+        expiry: Option<TimeArg>,
+        /// Whether to include a not_before, see https://www.rfc-editor.org/rfc/rfc8392.html#section-3.1.5
+        with_not_before: bool,
+        /// CWT ID, see https://www.rfc-editor.org/rfc/rfc8392.html#section-3.1.7
+        cti: Option<&'a [u8]>,
+    },
+    /// Only a CWT ID, when the Holder has no accurate clock
+    Cti(&'a [u8]),
 }
 
 /// Which disclosures the holder presents to the verifier.

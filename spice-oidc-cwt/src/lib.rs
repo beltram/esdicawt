@@ -736,8 +736,11 @@ mod tests {
                     presentation,
                     audience: "bob",
                     cnonce: None,
-                    expiry: Some(TimeArg::Relative(Duration::from_secs(86400))),
-                    with_not_before: false,
+                    iat_or_cti: esdicawt::KbtIatOrCti::Iat {
+                        expiry: Some(TimeArg::Relative(Duration::from_secs(86400))),
+                        with_not_before: false,
+                        cti: None,
+                    },
                     extra_kbt_unprotected: None,
                     extra_kbt_protected: None,
                     extra_kbt_payload: None,

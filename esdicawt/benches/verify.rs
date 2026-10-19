@@ -179,8 +179,11 @@ fn holder_params() -> HolderParams<'static> {
         presentation: Default::default(),
         audience: "",
         cnonce: None,
-        expiry: None,
-        with_not_before: false,
+        iat_or_cti: esdicawt::KbtIatOrCti::Iat {
+            expiry: None,
+            with_not_before: false,
+            cti: None,
+        },
         artificial_time: None,
         time_verification: Default::default(),
         leeway: Default::default(),

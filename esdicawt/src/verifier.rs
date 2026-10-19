@@ -1500,7 +1500,11 @@ mod tests {
 
             // SD-KBT valid for only 5 seconds
             let mut params = default_holder_params::<NoClaims>();
-            params.expiry = Some(TimeArg::Relative(core::time::Duration::from_secs(5)));
+            params.iat_or_cti = crate::KbtIatOrCti::Iat {
+                expiry: Some(TimeArg::Relative(core::time::Duration::from_secs(5))),
+                with_not_before: true,
+                cti: None,
+            };
             let (cks, sd_kbt, ..) = generate_sd_kbt(issuer_params, params, &holder_signing_key);
             let verifier = HybridVerifier::<Value, NoClaims>::default();
             let later = (elapsed_since_epoch().as_secs() + 20) as i64;
@@ -1520,7 +1524,11 @@ mod tests {
             issuer_params.expiry = Some(TimeArg::Relative(core::time::Duration::from_secs(60)));
 
             let mut params = default_holder_params::<NoClaims>();
-            params.expiry = Some(TimeArg::Relative(core::time::Duration::from_secs(120)));
+            params.iat_or_cti = crate::KbtIatOrCti::Iat {
+                expiry: Some(TimeArg::Relative(core::time::Duration::from_secs(120))),
+                with_not_before: true,
+                cti: None,
+            };
             let (cks, sd_kbt, ..) = generate_sd_kbt(issuer_params, params, &holder_signing_key);
             let verifier = HybridVerifier::<Value, NoClaims>::default();
             // the Holder caps the SD-KBT expiry to the SD-CWT one
@@ -1557,6 +1565,36 @@ mod tests {
             std::assert_matches!(err, crate::SdCwtHolderError::TimeError(CwtTimeError::Expired));
         }
 
+        /// A Holder without an accurate clock identifies its SD-KBT with a 'cti' instead of an 'iat'
+        #[test]
+        #[wasm_bindgen_test::wasm_bindgen_test]
+        fn verify_sd_kbt_iat_or_cti() {
+            use crate::{KbtIatOrCti, spec::key_binding::IatOrCti};
+
+            let holder_signing_key = ed25519_dalek::SigningKey::generate(&mut rand::thread_rng());
+            let verifier = HybridVerifier::<Value, NoClaims>::default();
+            let present = |iat_or_cti| {
+                let mut params = default_holder_params::<NoClaims>();
+                params.iat_or_cti = iat_or_cti;
+                let (cks, sd_kbt, ..) = generate_sd_kbt(default_issuer_params(None::<Value>, &holder_signing_key), params, &holder_signing_key);
+                let verified = verifier
+                    .verify_sd_kbt(&sd_kbt, &verifier_params(), Some(&holder_signing_key.verifying_key()), &cks)
+                    .unwrap();
+                verified.payload
+            };
+
+            let payload = present(KbtIatOrCti::Cti(b"kbt-id"));
+            assert_eq!(payload.iat_or_cti, IatOrCti::Cti(b"kbt-id".to_vec().into()));
+            assert_eq!((payload.expiration, payload.not_before), (None, None));
+
+            let payload = present(KbtIatOrCti::Iat {
+                expiry: None,
+                with_not_before: false,
+                cti: Some(b"kbt-id"),
+            });
+            std::assert_matches!(payload.iat_or_cti, IatOrCti::Both { cti, .. } if cti.as_slice() == b"kbt-id");
+        }
+
         #[test]
         #[wasm_bindgen_test::wasm_bindgen_test]
         fn verify_sd_kbt_nbf() {
@@ -1567,7 +1605,11 @@ mod tests {
             issuer_params.with_not_before = false;
 
             let mut params = default_holder_params::<NoClaims>();
-            params.with_not_before = true;
+            params.iat_or_cti = crate::KbtIatOrCti::Iat {
+                expiry: None,
+                with_not_before: true,
+                cti: None,
+            };
             let (cks, sd_kbt, ..) = generate_sd_kbt(issuer_params, params, &holder_signing_key);
             let verifier = HybridVerifier::<Value, NoClaims>::default();
             let past = (elapsed_since_epoch().as_secs() - 20) as i64;
@@ -1622,8 +1664,11 @@ mod tests {
             presentation: Presentation::Full,
             audience: "https://example.com/r/alice-bob-group",
             cnonce: None,
-            expiry: Some(TimeArg::Relative(core::time::Duration::from_secs(90 * 24 * 3600))),
-            with_not_before: true,
+            iat_or_cti: crate::KbtIatOrCti::Iat {
+                expiry: Some(TimeArg::Relative(core::time::Duration::from_secs(90 * 24 * 3600))),
+                with_not_before: true,
+                cti: None,
+            },
             extra_kbt_unprotected: None,
             extra_kbt_protected: None,
             extra_kbt_payload: None,

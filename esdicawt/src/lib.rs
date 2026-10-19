@@ -13,7 +13,7 @@ pub use holder::{
     Holder, SdCwtVerified,
     accessor::ClaimSetExt,
     error::{SdCwtHolderError, SdCwtHolderResult},
-    params::{CborPath, HolderParams, Presentation},
+    params::{CborPath, HolderParams, KbtIatOrCti, Presentation},
     validation::{HolderValidationParams, SdCwtHolderValidationError},
 };
 pub use issuer::{

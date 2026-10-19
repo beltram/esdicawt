@@ -242,8 +242,11 @@ mod tests {
             presentation: Presentation::Full,
             audience: "",
             cnonce: None,
-            expiry: None,
-            with_not_before: false,
+            iat_or_cti: crate::KbtIatOrCti::Iat {
+                expiry: None,
+                with_not_before: false,
+                cti: None,
+            },
             artificial_time: None,
             time_verification: Default::default(),
             leeway: Default::default(),

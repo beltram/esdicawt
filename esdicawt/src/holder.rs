@@ -1,5 +1,5 @@
 use crate::{
-    HolderParams, HolderValidationParams, SdCwtHolderError, SdCwtHolderValidationError,
+    HolderParams, HolderValidationParams, KbtIatOrCti, SdCwtHolderError, SdCwtHolderValidationError,
     holder::validation::validate_disclosures,
     signature_verifier::validate_cose_sign1_signature,
     spec::{
@@ -235,19 +235,23 @@ pub trait Holder {
         #[cfg(not(feature = "test-vectors"))]
         let now = crate::elapsed_since_epoch();
 
-        let issued_at = now.as_secs() as i64;
-        // the SD-KBT must not be valid for any time period when its SD-CWT is invalid
-        // see https://datatracker.ietf.org/doc/html/draft-ietf-spice-sd-cwt#name-creating-a-key-binding-toke
-        let expiration = params
-            .expiry
-            .map(|kbt_exp| kbt_exp.to_absolute(now).as_secs() as i64)
-            .map(|kbt_exp| exp.map_or(kbt_exp, |sd_cwt_exp| kbt_exp.min(sd_cwt_exp)));
-        // otherwise the SD-KBT would be invalid
-        if expiration.is_some_and(|exp| exp <= issued_at) {
-            return Err(crate::time::CwtTimeError::Expired.into());
-        }
-        let not_before = params.with_not_before.then_some(issued_at);
-        let iat_or_cti = IatOrCti::Iat(issued_at);
+        let (iat_or_cti, expiration, not_before) = match params.iat_or_cti {
+            KbtIatOrCti::Iat { expiry, with_not_before, cti } => {
+                let iat = now.as_secs() as i64;
+                // the SD-KBT must not be valid for any time period when its SD-CWT is invalid
+                // see https://datatracker.ietf.org/doc/html/draft-ietf-spice-sd-cwt#name-creating-a-key-binding-toke
+                let expiration = expiry
+                    .map(|kbt_exp| kbt_exp.to_absolute(now).as_secs() as i64)
+                    .map(|kbt_exp| exp.map_or(kbt_exp, |sd_cwt_exp| kbt_exp.min(sd_cwt_exp)));
+                // otherwise the SD-KBT would be invalid
+                if expiration.is_some_and(|exp| exp <= iat) {
+                    return Err(crate::time::CwtTimeError::Expired.into());
+                }
+                let iat_or_cti = cti.map_or(IatOrCti::Iat(iat), |cti| IatOrCti::Both { iat, cti: cti.to_vec().into() });
+                (iat_or_cti, expiration, with_not_before.then_some(iat))
+            }
+            KbtIatOrCti::Cti(cti) => (IatOrCti::Cti(cti.to_vec().into()), None, None),
+        };
 
         let payload = KbtPayload {
             audience: params.audience.to_string(),
@@ -407,8 +411,11 @@ mod tests {
             presentation,
             audience: "https://example.com/r/alice-bob-group",
             cnonce: None,
-            expiry: Some(TimeArg::Relative(core::time::Duration::from_secs(90 * 24 * 3600))),
-            with_not_before: false,
+            iat_or_cti: KbtIatOrCti::Iat {
+                expiry: Some(TimeArg::Relative(core::time::Duration::from_secs(90 * 24 * 3600))),
+                with_not_before: false,
+                cti: None,
+            },
             extra_kbt_unprotected: None,
             extra_kbt_protected: None,
             extra_kbt_payload: None,
@@ -485,8 +492,11 @@ mod tests {
             presentation: Presentation::Full,
             audience: "https://example.com/r/ab",
             cnonce: Some(b"cnonce"),
-            expiry: None,
-            with_not_before: true,
+            iat_or_cti: crate::KbtIatOrCti::Iat {
+                expiry: None,
+                with_not_before: true,
+                cti: None,
+            },
             extra_kbt_unprotected: None,
             extra_kbt_protected: None,
             extra_kbt_payload: None,
@@ -751,8 +761,11 @@ mod snapshot {
             presentation,
             audience: Default::default(),
             cnonce: Default::default(),
-            expiry: Some(TimeArg::Relative(core::time::Duration::from_secs(42))),
-            with_not_before: true,
+            iat_or_cti: crate::KbtIatOrCti::Iat {
+                expiry: Some(TimeArg::Relative(core::time::Duration::from_secs(42))),
+                with_not_before: true,
+                cti: None,
+            },
             leeway: core::time::Duration::from_secs(1),
             extra_kbt_protected: None,
             extra_kbt_unprotected: None,
