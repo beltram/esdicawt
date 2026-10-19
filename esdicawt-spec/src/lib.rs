@@ -232,6 +232,24 @@ impl SdCwtClaim {
             _ => None,
         }
     }
+
+    /// Claims which MUST NOT be redacted from the root of the payload
+    /// see https://datatracker.ietf.org/doc/html/draft-ietf-spice-sd-cwt#name-sd-cwt-claim-requirements
+    pub const fn is_never_redacted(&self) -> bool {
+        matches!(
+            self,
+            SdCwtClaim::Int(
+                CWT_CLAIM_ISSUER
+                    | CWT_CLAIM_AUDIENCE
+                    | CWT_CLAIM_EXPIRES_AT
+                    | CWT_CLAIM_NOT_BEFORE
+                    | CWT_CLAIM_ISSUED_AT
+                    | CWT_CLAIM_CTI
+                    | CWT_CLAIM_KEY_CONFIRMATION
+                    | CWT_CLAIM_CNONCE
+            )
+        )
+    }
 }
 
 impl std::fmt::Debug for SdCwtClaim {

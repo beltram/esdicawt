@@ -29,6 +29,8 @@ pub enum SdCwtHolderValidationError<CustomError: Send + Sync> {
     SubMismatch { expected: String, actual: String },
     #[error("The SD-CWT has no 'sub', neither in clear nor redacted")]
     MissingSubject,
+    #[error("The claim {0:?} must not be redacted")]
+    MustNotBeRedacted(SdCwtClaim),
     #[error("Expected issuer to be '{expected}' but was '{actual}'")]
     IssuerMismatch { expected: String, actual: String },
     #[error("Expected audience to be '{expected}' but was '{actual}'")]
@@ -92,6 +94,11 @@ where
                         for rck in rcks.deserialized::<RedactedClaimKeys>()? {
                             let (disclosure, nb) = disclosed(&rck)?;
                             count += nb;
+                            if let (Some(_), Some(name)) = (&subject, disclosure.name())
+                                && name.is_never_redacted()
+                            {
+                                return Err(SdCwtHolderValidationError::MustNotBeRedacted(name.clone()));
+                            }
                             if let (
                                 Some(subject),
                                 SaltedEntry::Claim(SaltedClaim {
@@ -149,6 +156,39 @@ mod tests {
     use ciborium::{Value, cbor};
     use cose_key::keyset::CoseKeySet;
     use std::ops::DerefMut;
+
+    #[test]
+    fn should_reject_never_redacted_claims() {
+        use crate::spec::{CWT_CLAIM_AUDIENCE, CWT_CLAIM_CNONCE, CWT_CLAIM_CTI, CWT_CLAIM_EXPIRES_AT, CWT_CLAIM_ISSUED_AT, CWT_CLAIM_NOT_BEFORE, sd};
+
+        let issuer_signing_key = ed25519_dalek::SigningKey::generate(&mut rand::thread_rng());
+        let issuer_verifying_key = CoseKeySet::builder().with(&issuer_signing_key.verifying_key()).unwrap().build();
+        let issuer = Ed25519Issuer::<Value>::new(issuer_signing_key);
+        let holder_signing_key = ed25519_dalek::SigningKey::generate(&mut rand::thread_rng());
+        let holder = Ed25519Holder::<Value, NoClaims>::new(holder_signing_key.clone());
+
+        let verify = |payload: Value| {
+            let issuer_params = default_issuer_params(&holder_signing_key, Some(payload));
+            let sd_cwt = issuer.issue_cwt(&mut rand::thread_rng(), issuer_params).unwrap().to_cbor_bytes().unwrap();
+            holder.verify_sd_cwt(&sd_cwt, Default::default(), &issuer_verifying_key)
+        };
+
+        for claim in [
+            CWT_CLAIM_AUDIENCE,
+            CWT_CLAIM_EXPIRES_AT,
+            CWT_CLAIM_NOT_BEFORE,
+            CWT_CLAIM_ISSUED_AT,
+            CWT_CLAIM_CTI,
+            CWT_CLAIM_CNONCE,
+        ] {
+            std::assert_matches!(
+                verify(cbor!({ sd!(claim) => 1 }).unwrap()),
+                Err(SdCwtHolderError::ValidationError(SdCwtHolderValidationError::MustNotBeRedacted(SdCwtClaim::Int(c)))) if c == claim
+            );
+            // only applies to the root of the payload
+            verify(cbor!({ "nested" => { sd!(claim) => 1 } }).unwrap()).unwrap();
+        }
+    }
 
     #[test]
     fn should_verify_redacted_subject() {
