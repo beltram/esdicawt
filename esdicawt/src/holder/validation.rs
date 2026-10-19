@@ -2,6 +2,7 @@ use crate::{
     spec::{
         CWT_CLAIM_SUBJECT, REDACTED_CLAIM_ELEMENT_TAG, SdCwtClaim,
         blinded_claims::{SaltedClaim, SaltedEntry},
+        is_safe_tag,
         redacted_claims::RedactedClaimKeys,
     },
     time::TimeVerification,
@@ -74,7 +75,7 @@ fn _validate<E>(payload: &Value, disclosures: &SaltedArrayHashing<'_>, mut subje
 where
     E: core::error::Error + Send + Sync,
 {
-    let nested = |v: &Value| if v.is_map() || v.is_array() { _validate(v, disclosures, None) } else { Ok(0) };
+    let nested = |v: &Value| _validate(v, disclosures, None);
     // counts the disclosure and the ones nested in it
     let disclosed = |hash: &[u8]| {
         let disclosure = disclosures.get_unchecked(hash).ok_or(SdCwtHolderValidationError::DisclosureNotFound)?.as_ref();
@@ -123,6 +124,7 @@ where
                 }
             }
         }
+        Value::Tag(tag, inner) if is_safe_tag(*tag) => count += nested(inner)?,
         _ => {}
     }
     Ok(count)

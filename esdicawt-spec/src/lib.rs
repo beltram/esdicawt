@@ -31,6 +31,28 @@ pub const TO_BE_REDACTED_TAG: u64 = 58;
 
 #[allow(dead_code)]
 pub const TO_BE_DECOY_TAG: u64 = 62;
+
+/// A tag not specific to SD-CWT, whose content can contain redacted claims as if it were not tagged
+/// see `safe_tag` in https://datatracker.ietf.org/doc/html/draft-ietf-spice-sd-cwt#name-cddl
+pub const fn is_safe_tag(tag: u64) -> bool {
+    !matches!(tag, TO_BE_REDACTED_TAG | REDACTED_CLAIM_ELEMENT_TAG | TO_BE_DECOY_TAG)
+}
+
+/// The value without its enclosing safe tags, see [is_safe_tag]
+pub fn untag(mut value: &Value) -> &Value {
+    while let Value::Tag(tag, inner) = value
+        && is_safe_tag(*tag)
+    {
+        value = inner;
+    }
+    value
+}
+
+/// Whether the value, once untagged, can contain redacted claims
+pub fn is_container(value: &Value) -> bool {
+    let value = untag(value);
+    value.is_map() || value.is_array()
+}
 pub const CWT_CLAIM_ALG: i64 = 1;
 #[allow(dead_code)]
 pub const CWT_CLAIM_VCT: i64 = 11;
