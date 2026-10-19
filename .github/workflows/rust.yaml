@@ -41,6 +41,7 @@ jobs:
       - uses: Swatinem/rust-cache@v2
       - run: git submodule init && git submodule update --recursive --remote
       - run: cargo build --verbose
+      - run: cargo clippy --tests --features backward -- -D warnings
       - run: cargo clippy --tests -- -D warnings
       - run: cargo clippy -p esdicawt-test-vector --tests -- -D warnings
 
