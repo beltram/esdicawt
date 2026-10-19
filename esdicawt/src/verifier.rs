@@ -34,13 +34,7 @@ pub trait Verifier {
 
     #[cfg(any(feature = "ed25519", feature = "p256", feature = "p384"))]
     fn digest(&self, sd_hash_alg: SdHashAlg) -> Result<Rc<dyn digest::DynDigest>, SdCwtVerifierError<Self::Error>> {
-        Ok(match sd_hash_alg {
-            #[cfg(any(feature = "ed25519", feature = "p256"))]
-            SdHashAlg::Sha256 => Rc::new(sha2::Sha256::default()),
-            #[cfg(feature = "p384")]
-            SdHashAlg::Sha384 => Rc::new(sha2::Sha384::default()),
-            _ => return Err(SdCwtVerifierError::HasherNotFound(sd_hash_alg)),
-        })
+        crate::default_digest(sd_hash_alg).ok_or(SdCwtVerifierError::HasherNotFound(sd_hash_alg))
     }
 
     #[cfg(not(any(feature = "ed25519", feature = "p256", feature = "p384")))]

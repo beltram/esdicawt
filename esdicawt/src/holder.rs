@@ -47,13 +47,7 @@ pub trait Holder {
 
     #[cfg(any(feature = "ed25519", feature = "p256", feature = "p384"))]
     fn digest(&self, sd_hash_alg: SdHashAlg) -> Result<Rc<dyn digest::DynDigest>, SdCwtHolderError<Self::Error>> {
-        Ok(match sd_hash_alg {
-            #[cfg(any(feature = "ed25519", feature = "p256"))]
-            SdHashAlg::Sha256 => Rc::new(sha2::Sha256::default()),
-            #[cfg(feature = "p384")]
-            SdHashAlg::Sha384 => Rc::new(sha2::Sha384::default()),
-            _ => return Err(SdCwtHolderError::HasherNotFound(sd_hash_alg)),
-        })
+        crate::default_digest(sd_hash_alg).ok_or(SdCwtHolderError::HasherNotFound(sd_hash_alg))
     }
 
     #[cfg(not(any(feature = "ed25519", feature = "p256", feature = "p384")))]
@@ -446,6 +440,13 @@ mod tests {
         let claimset = sd_kbt.claimset_unchecked().unwrap().unwrap();
         assert_eq!(&claimset.name.unwrap(), "Alice Smith");
         assert_eq!(&claimset.array, &["a".to_string(), "b".to_string()]);
+
+        // the disclosures are hashed with the 'sd_alg' of the SD-CWT (SHA-256), not with the type's Hasher
+        let sd_kbt = KbtCwt::<CustomTokenClaims, sha2::Sha512>::from_cbor_bytes(&sd_kbt.to_cbor_bytes().unwrap()).unwrap();
+        let claimset = sd_kbt.claimset_unchecked().unwrap().unwrap();
+        assert_eq!(&claimset.name.unwrap(), "Alice Smith");
+        assert_eq!(&claimset.array, &["a".to_string(), "b".to_string()]);
+        std::assert_matches!(sd_kbt.claimset_unchecked_with(|_| None), Err(crate::SdCwtVerifierError::HasherNotFound(SdHashAlg::Sha256)));
     }
 
     #[test]
