@@ -16,28 +16,29 @@ pub trait TokenQuery {
     fn query(&self, query: Query) -> EsdicawtSpecResult<Option<Value>>;
 }
 
-/// Allows reading claims in a SD-CWT even when they are redacted
-pub fn query<Hasher>(salted_array: &mut SaltedArrayHashing, payload: &Value, mut q: Query) -> EsdicawtSpecResult<Option<Value>>
-where
-    Hasher: digest::Digest + digest::FixedOutputReset + Clone + 'static,
-{
+/// Allows reading claims in a SD-CWT even when they are redacted. `hasher` is the one of the 'sd_alg' of the SD-CWT
+pub fn query(salted_array: &mut SaltedArrayHashing, payload: &Value, mut q: Query, hasher: Rc<dyn digest::DynDigest>) -> EsdicawtSpecResult<Option<Value>> {
     q.0.reverse();
-    query_inner::<Hasher>(salted_array, &mut payload.clone(), q.0)
+    query_inner(salted_array, payload, q.0, hasher)
 }
 
-/// Allows reading claims in a SD-CWT even when they are redacted
-pub fn query_encoded<Hasher>(salted_array: &mut SaltedArrayHashing, payload: &Value, query_cbor: &[u8]) -> EsdicawtSpecResult<Option<Value>>
-where
-    Hasher: digest::Digest + digest::FixedOutputReset + Clone + 'static,
-{
-    query::<Hasher>(salted_array, payload, Query::from_cbor_bytes(query_cbor)?)
+/// Allows reading claims in a SD-CWT even when they are redacted. `hasher` is the one of the 'sd_alg' of the SD-CWT
+pub fn query_encoded(salted_array: &mut SaltedArrayHashing, payload: &Value, query_cbor: &[u8], hasher: Rc<dyn digest::DynDigest>) -> EsdicawtSpecResult<Option<Value>> {
+    query(salted_array, payload, Query::from_cbor_bytes(query_cbor)?, hasher)
 }
 
-#[tailcall::tailcall]
-fn query_inner<H>(salted_array: &mut SaltedArrayHashing, payload: &mut Value, mut query: Vec<QueryElement>) -> EsdicawtSpecResult<Option<Value>>
-where
-    H: digest::Digest + digest::FixedOutputReset + Clone + 'static,
-{
+/// The hasher of the 'sd_alg' of a SD-CWT among the ones enabled by the features, otherwise the token's `Hasher`
+fn sd_alg_hasher<H: digest::Digest + digest::FixedOutputReset + Clone + 'static>(sd_alg: crate::spec::SdHashAlg) -> Rc<dyn digest::DynDigest> {
+    #[cfg(any(feature = "ed25519", feature = "p256", feature = "p384"))]
+    if let Some(hasher) = crate::default_digest(sd_alg) {
+        return hasher;
+    }
+    let _ = sd_alg;
+    Rc::new(H::new())
+}
+
+// recursion is as deep as the query is long
+fn query_inner(salted_array: &mut SaltedArrayHashing, payload: &Value, mut query: Vec<QueryElement>, hasher: Rc<dyn digest::DynDigest>) -> EsdicawtSpecResult<Option<Value>> {
     let mut value = match query.pop() {
         Some(QueryElement::ClaimName(claim_name)) => {
             let map = payload.as_map().ok_or(EsdicawtSpecError::LookupError("Query label not in an map"))?;
@@ -58,22 +59,14 @@ where
                         return Ok(None);
                     };
 
-                    let Some(mut found) = salted_array.remove_if::<H>(|r, se| {
-                        if let SaltedEntry::Claim(sc) = se.as_ref()
-                            && sc.name == claim_name
-                        {
-                            rcks.contains(r)
-                        } else {
-                            false
-                        }
+                    // the other claims of this mapping are not looked up any further, so they can be removed on the way
+                    let Some(value) = rcks.0.iter().find_map(|rck| match salted_array.remove_lazy(rck, &hasher)?.into_owned() {
+                        SaltedEntry::Claim(sc) if sc.name == claim_name => Some(sc.value),
+                        _ => None,
                     }) else {
                         return Ok(None);
                     };
-
-                    let SaltedEntry::Claim(sc) = found.to_mut() else {
-                        return Err(EsdicawtSpecError::ImplementationError("Query inner impl error. Should be SaltedClaim"));
-                    };
-                    sc.value.clone()
+                    value
                 }
             }
         }
@@ -81,21 +74,11 @@ where
             let array = payload.as_array().ok_or(EsdicawtSpecError::LookupError("Query index not in an array"))?;
             match array.get(index) {
                 Some(Value::Tag(REDACTED_CLAIM_ELEMENT_TAG, searched)) => {
-                    let Some(found) = salted_array.remove_if::<H>(|r, se| {
-                        if let SaltedEntry::Element(_) = se.as_ref() {
-                            searched.as_bytes().map(|v| v.as_slice() == r).unwrap_or_default()
-                        } else {
-                            false
-                        }
-                    }) else {
-                        return Ok(None);
-                    };
-
-                    let SaltedEntry::Element(sc) = found.as_ref() else {
-                        return Err(EsdicawtSpecError::ImplementationError("Query inner impl error. Should be SaltedElement"));
-                    };
-
-                    sc.value.clone()
+                    let searched = searched.as_bytes().ok_or(EsdicawtSpecError::LookupError("Redacted claim element should be a bstr"))?;
+                    match salted_array.remove_lazy(searched, &hasher).map(|found| found.into_owned()) {
+                        Some(SaltedEntry::Element(se)) => se.value,
+                        _ => return Ok(None),
+                    }
                 }
                 Some(v) => v.clone(),
                 None => return Ok(None),
@@ -105,14 +88,14 @@ where
     };
     match &query[..] {
         [] => {
-            walk_payload::<EsdicawtSpecError>(Rc::new(H::new()), &mut value, salted_array).map_err(|e| match e {
+            walk_payload::<EsdicawtSpecError>(hasher, &mut value, salted_array).map_err(|e| match e {
                 crate::SdCwtVerifierError::SpecError(e) => e,
                 crate::SdCwtVerifierError::CborValueError(e) => e.into(),
                 _ => EsdicawtSpecError::LookupError("Cannot apply the disclosures of the looked up claim"),
             })?;
             Ok(Some(value))
         }
-        _ => query_inner::<H>(salted_array, &mut value, query),
+        _ => query_inner(salted_array, &value, query, hasher),
     }
 }
 
@@ -197,6 +180,15 @@ mod tests {
             sd_kbt.clear_disclosures().unwrap();
             assert_eq!(sd_kbt.query(query.to_vec().into()).unwrap(), None);
         }
+    }
+
+    /// The disclosures are hashed with the 'sd_alg' of the SD-CWT (SHA-256), not with the type's Hasher
+    #[test]
+    fn should_query_with_the_sd_alg_hasher() {
+        let (sd_cwt, ..) = new_sd_cwt(cbor!({ sd!("a") => "b", "array" => [sd!("c")] }).unwrap());
+        let sd_cwt = SdCwtIssued::<Value, sha2::Sha512>::from_cbor_bytes(&sd_cwt.to_cbor_bytes().unwrap()).unwrap();
+        assert_eq!(sd_cwt.query(vec!["a".into()].into()).unwrap(), Some(cbor!("b").unwrap()));
+        assert_eq!(sd_cwt.query(vec!["array".into(), QueryElement::Index(0)].into()).unwrap(), Some(cbor!("c").unwrap()));
     }
 
     #[test]
