@@ -238,7 +238,7 @@ impl SdCwtClaim {
     pub const fn is_never_redacted(&self) -> bool {
         matches!(
             self,
-            SdCwtClaim::Int(
+            Self::Int(
                 CWT_CLAIM_ISSUER
                     | CWT_CLAIM_AUDIENCE
                     | CWT_CLAIM_EXPIRES_AT

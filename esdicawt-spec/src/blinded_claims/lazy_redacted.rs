@@ -32,8 +32,8 @@ impl LazyRedacted {
 
     pub fn or_init_detached_hasher(&self, to_redact: &impl ToRedacted, hasher: &Rc<dyn digest::DynDigest>) {
         self.0.get_or_init(|| {
-            let new = to_redact.to_redacted_detached_hasher(hasher.clone()).map(|r| r.to_vec()).unwrap_or_default();
-            let old = to_redact.old_to_redacted_detached_hasher(hasher.clone()).map(|r| r.to_vec()).unwrap_or_default();
+            let new = to_redact.to_redacted_detached_hasher(hasher.clone()).unwrap_or_default();
+            let old = to_redact.old_to_redacted_detached_hasher(hasher.clone()).unwrap_or_default();
             (new, old)
         });
     }

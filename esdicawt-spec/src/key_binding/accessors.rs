@@ -33,7 +33,7 @@ impl<
                 .try_into_value()
         });
 
-        Ok(sd_cwt?)
+        sd_cwt
     }
 
     /// Whether this SD-KBT comes from a draft-08 implementation, which computed the Redacted Claim Hashes over the raw
@@ -43,8 +43,8 @@ impl<
     pub fn is_draft_08(&self) -> Option<bool> {
         use crate::{blinded_claims::SaltedEntry, redacted_claims::ToRedacted as _};
 
-        let Some(disclosures) = self.disclosures().ok()? else { return None };
-        let Some(first) = disclosures.iter().next().transpose().ok()? else { return None };
+        let disclosures = self.disclosures().ok()??;
+        let first = disclosures.iter().next().transpose().ok()??;
 
         // the Redacted Claim Hash is either in the payload or nested in another disclosure
         let payload = self.sd_cwt().ok()?.payload.upcast_value().ok()?;
