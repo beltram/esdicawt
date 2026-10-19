@@ -47,6 +47,18 @@ pub mod test_utils {
     pub use crate::{holder::test_utils::*, issuer::test_utils::*};
 }
 
+/// Hasher of the Salted Disclosed Claims for the 'sd_alg' of an SD-CWT, among the ones enabled by the features
+#[cfg(any(feature = "ed25519", feature = "p256", feature = "p384"))]
+pub(crate) fn default_digest(sd_hash_alg: spec::SdHashAlg) -> Option<std::rc::Rc<dyn digest::DynDigest>> {
+    match sd_hash_alg {
+        #[cfg(any(feature = "ed25519", feature = "p256"))]
+        spec::SdHashAlg::Sha256 => Some(std::rc::Rc::new(sha2::Sha256::default())),
+        #[cfg(feature = "p384")]
+        spec::SdHashAlg::Sha384 => Some(std::rc::Rc::new(sha2::Sha384::default())),
+        _ => None,
+    }
+}
+
 #[cfg(all(target_arch = "wasm32", target_os = "unknown"))]
 pub(crate) fn elapsed_since_epoch() -> core::time::Duration {
     let js_date = js_sys::Date::new_0();
