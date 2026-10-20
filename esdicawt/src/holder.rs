@@ -207,7 +207,8 @@ pub trait Holder {
         // select the claims to disclose
         if let Some(sd_claims) = sd_cwt.0.sd_unprotected.sd_claims.take() {
             let hasher = self.digest(sd_cwt.0.protected.to_value()?.sd_alg())?;
-            let sd_claims = params.presentation.try_select_disclosures::<Self::Error>(sd_claims, &hasher)?;
+            let payload = sd_cwt.0.payload.upcast_value()?;
+            let sd_claims = params.presentation.try_select_disclosures::<Self::Error>(&payload, sd_claims, &hasher)?;
 
             // then replace them in the issued sd-cwt. An empty 'sd_claims' is invalid
             #[cfg(not(feature = "backward"))]

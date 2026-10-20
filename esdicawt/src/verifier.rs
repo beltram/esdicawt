@@ -1041,6 +1041,16 @@ mod tests {
         })
         .unwrap();
         assert_eq!(present(redacted), sorted(only_redacted));
+
+        // a path starts at the root of the payload, even through a non-redacted tagged mapping
+        let only_a = Presentation::Path(Box::new(|path| path == [crate::CborPath::Str("map".into()), crate::CborPath::Str("a".into())]));
+        let a = cbor!({
+            "map" => tag(cbor!({ "a" => 1, "b" => 2 }).unwrap()),
+            "array" => tag(cbor!(["c"]).unwrap()),
+            "elements" => [],
+        })
+        .unwrap();
+        assert_eq!(present(only_a), sorted(a));
     }
 
     #[test]
