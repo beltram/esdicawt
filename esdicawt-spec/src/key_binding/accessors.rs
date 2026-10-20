@@ -33,6 +33,7 @@ impl<
                 .try_into_value()
         });
 
+        #[allow(clippy::needless_question_mark)]
         Ok(sd_cwt?)
     }
 
