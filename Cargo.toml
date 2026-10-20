@@ -2,7 +2,7 @@
 members = ["esdicawt", "esdicawt-spec", "esdicawt-test-vector", "spice-oidc-cwt", "status-list"]
 # "esdicawt-test-vector" requires esdicawt without the "status" feature, which other members enable
 default-members = ["esdicawt", "esdicawt-spec", "spice-oidc-cwt", "status-list"]
-resolver = "2"
+resolver = "3"
 
 [workspace.package]
 version = "0.14.2"
