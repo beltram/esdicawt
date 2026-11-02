@@ -1,0 +1,30 @@
+[package]
+name = "interop"
+description = "esdicawt command line programs for the interop harness of draft-ietf-spice-sd-cwt"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+publish = false
+
+[[bin]]
+name = "interop"
+path = "src/main.rs"
+
+[dependencies]
+# without the "status" feature since no interop test case carries a status claim
+esdicawt = { workspace = true, features = ["test-vectors", "ed25519", "p256", "p384"] }
+ciborium.workspace = true
+clap = { version = "4", features = ["derive"] }
+ed25519-dalek = { workspace = true, features = ["pkcs8", "pem"] }
+eyre = "0.6"
+hex = { workspace = true, features = ["std"] }
+p256 = { workspace = true, features = ["ecdsa", "pem", "pkcs8"] }
+p384 = { workspace = true, features = ["ecdsa", "pem", "pkcs8"] }
+pkcs8 = { workspace = true, features = ["pem"] }
+rand.workspace = true
+rand_core.workspace = true
+sha2.workspace = true
+signature.workspace = true
+
+[lints]
+workspace = true
