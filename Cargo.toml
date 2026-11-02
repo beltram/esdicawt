@@ -1,6 +1,6 @@
 [workspace]
-members = ["esdicawt", "esdicawt-spec", "esdicawt-test-vector", "spice-oidc-cwt", "status-list"]
-# "esdicawt-test-vector" requires esdicawt without the "status" feature, which other members enable
+members = ["esdicawt", "esdicawt-spec", "esdicawt-test-vector", "interop", "spice-oidc-cwt", "status-list"]
+# "esdicawt-test-vector" and "interop" require esdicawt without the "status" feature, which other members enable
 default-members = ["esdicawt", "esdicawt-spec", "spice-oidc-cwt", "status-list"]
 resolver = "3"
 
