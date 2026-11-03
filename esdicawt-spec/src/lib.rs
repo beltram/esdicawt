@@ -1,3 +1,5 @@
+#[cfg(feature = "aead")]
+pub mod aead;
 pub mod alg;
 pub(crate) mod any_digest;
 pub mod blinded_claims;
@@ -108,6 +110,18 @@ pub enum EsdicawtSpecError {
     EmptySdClaims,
     #[error("'{0}' is before the UNIX epoch")]
     NegativeTime(&'static str),
+    #[cfg(feature = "aead")]
+    #[error("The AEAD algorithm {0} MUST NOT be used for encrypted disclosures")]
+    ForbiddenAeadAlgorithm(u16),
+    #[cfg(feature = "aead")]
+    #[error("An authentication tag of {len} octets is not allowed for the AEAD algorithm {alg}")]
+    InvalidAeadTagLength { alg: u16, len: usize },
+    #[cfg(feature = "aead")]
+    #[error("A decrypted disclosure is not a valid bstr encoded disclosure")]
+    InvalidDecryptedDisclosure,
+    #[cfg(feature = "aead")]
+    #[error("'sd_aead_encrypted_claims' MUST NOT be an empty array")]
+    EmptyAeadEncryptedClaims,
 }
 
 impl From<Value> for EsdicawtSpecError {

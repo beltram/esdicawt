@@ -40,6 +40,27 @@ pub trait Verifier {
     #[cfg(not(any(feature = "ed25519", feature = "p256", feature = "p384")))]
     fn digest(&self, sd_hash_alg: SdHashAlg) -> Result<Rc<dyn digest::DynDigest>, SdCwtVerifierError<Self::Error>>;
 
+    /// Decrypts an AEAD encrypted disclosure, see https://ietf-wg-spice.github.io/draft-ietf-spice-sd-cwt/draft-ietf-spice-sd-cwt.html#name-encrypted-disclosures
+    ///
+    /// The decryption key is determined by local configuration, using the [crate::spec::aead::AeadEncryptedDisclosure::key_context]
+    /// if present, or by looking up the nonce or the authentication tag. The associated data MUST be zero-length.
+    ///
+    /// Returns:
+    /// * `Ok(None)` when this Verifier has no suitable key for it or does not support `alg`. The encrypted disclosure is
+    ///   then ignored and the claim it discloses stays redacted, for example for an inner Verifier to decrypt it. This is
+    ///   the default
+    /// * an error when this Verifier has a key for it but the decryption fails, which invalidates the whole SD-CWT
+    #[cfg(feature = "aead")]
+    #[allow(clippy::type_complexity)]
+    fn decrypt_disclosure(
+        &self,
+        alg: crate::spec::aead::AeadAlgorithm,
+        encrypted: &crate::spec::aead::AeadEncryptedDisclosure,
+    ) -> Result<Option<Vec<u8>>, Box<dyn core::error::Error + Send + Sync>> {
+        let _ = (alg, encrypted);
+        Ok(None)
+    }
+
     /// Only verify the signatures and the time claims without trying to rebuild the whole ClaimSet which
     /// is expensive by requiring a lot of hashes
     #[allow(clippy::type_complexity)]
@@ -89,7 +110,7 @@ pub trait Verifier {
         >,
         SdCwtVerifierError<Self::Error>,
     > {
-        __verify_sd_kbt_batch(&[(raw_sd_kbt, params, holder_verifier)], cks, |sd_hash_alg: SdHashAlg| self.digest(sd_hash_alg))
+        __verify_sd_kbt_batch(&[(raw_sd_kbt, params, holder_verifier)], cks, self)
             .pop()
             .unwrap_or(Err(SdCwtVerifierError::ImplementationError(
                 "'__verify_sd_kbt_batch' should always return as much elements as given",
@@ -115,7 +136,7 @@ pub trait Verifier {
             SdCwtVerifierError<Self::Error>,
         >,
     > {
-        __verify_sd_kbt_batch(raw_sd_kbts, cks, |sd_hash_alg: SdHashAlg| self.digest(sd_hash_alg))
+        __verify_sd_kbt_batch(raw_sd_kbts, cks, self)
     }
 }
 
@@ -134,7 +155,7 @@ fn __verify_sd_kbt_batch<
 >(
     raw_sd_kbts: &[(&[u8], &VerifierParams, Option<&HolderVerifier>)],
     cks: &cose_key::keyset::CoseKeySet,
-    digest: impl Fn(SdHashAlg) -> Result<Rc<dyn digest::DynDigest>, SdCwtVerifierError<Error>>,
+    verifier: &(impl Verifier<Error = Error> + ?Sized),
 ) -> Vec<
     Result<
         KbtCwtVerified<IssuerPayloadClaims, KbtPayloadClaims, IssuerProtectedClaims, IssuerUnprotectedClaims, KbtProtectedClaims, KbtUnprotectedClaims>,
@@ -153,7 +174,7 @@ fn __verify_sd_kbt_batch<
         .zip(raw_sd_kbts)
         .map(|(shallow, (_, params, _))| {
             let (kbt, generic_sd_cwt_payload) = shallow?;
-            __verify_sd_kbt_claims(kbt, generic_sd_cwt_payload, params, &digest)
+            __verify_sd_kbt_claims(kbt, generic_sd_cwt_payload, params, verifier)
         })
         .collect()
 }
@@ -171,7 +192,7 @@ fn __verify_sd_kbt_claims<
     kbt: KbtCwt<IssuerPayloadClaims, AnyDigest, KbtPayloadClaims, IssuerProtectedClaims, IssuerUnprotectedClaims, KbtProtectedClaims, KbtUnprotectedClaims>,
     mut generic_sd_cwt_payload: Value,
     params: &VerifierParams,
-    digest: &impl Fn(SdHashAlg) -> Result<Rc<dyn digest::DynDigest>, SdCwtVerifierError<Error>>,
+    verifier: &(impl Verifier<Error = Error> + ?Sized),
 ) -> Result<
     KbtCwtVerified<IssuerPayloadClaims, KbtPayloadClaims, IssuerProtectedClaims, IssuerUnprotectedClaims, KbtProtectedClaims, KbtUnprotectedClaims>,
     SdCwtVerifierError<Error>,
@@ -252,11 +273,14 @@ fn __verify_sd_kbt_claims<
     // an absent 'sd_claims' is equivalent to no disclosure: undisclosed redacted claims still have to be removed
     let no_disclosures = SaltedArray::default();
     let disclosures = kbt_protected.kcwt.disclosures().unwrap_or(&no_disclosures);
+    // decrypted disclosures are processed as if they were in 'sd_claims'
+    #[cfg(feature = "aead")]
+    let disclosures = &crate::aead::decrypt_disclosures(verifier, &kbt_protected.kcwt.sd_unprotected, disclosures)?;
 
     // now verifying the disclosures
     {
         // compute the hash of all disclosures
-        let hasher = digest(sd_alg)?;
+        let hasher = verifier.digest(sd_alg)?;
         let mut disclosures = disclosures.digested_detached_hasher(&hasher)?;
         #[cfg(feature = "backward")]
         let disclosures_size = disclosures.len();

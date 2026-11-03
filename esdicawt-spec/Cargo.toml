@@ -10,6 +10,8 @@ default = []
 status = ["dep:status-list"]
 backward = []
 test-utils = []
+# encrypted disclosures, see https://ietf-wg-spice.github.io/draft-ietf-spice-sd-cwt/draft-ietf-spice-sd-cwt.html#name-encrypted-disclosures
+aead = []
 
 [dependencies]
 coset = { workspace = true, features = ["std"] }

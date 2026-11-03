@@ -147,6 +147,12 @@ pub trait Holder {
             return Err(SdCwtHolderError::ValidationError(SdCwtHolderValidationError::VerifyingKeyMismatch));
         }
 
+        // only the Holder encrypts disclosures, the Issuer MUST provide all of them in plaintext
+        #[cfg(feature = "aead")]
+        if sd_cwt.sd_unprotected.sd_aead_encrypted_claims.is_some() || sd_cwt.sd_unprotected.sd_aead.is_some() {
+            return Err(SdCwtHolderError::ValidationError(SdCwtHolderValidationError::UnexpectedEncryptedDisclosures));
+        }
+
         // validate disclosure. An absent 'sd_claims' is equivalent to no disclosure
         let no_disclosures = SaltedArray::default();
         let disclosures = sd_cwt.disclosures().unwrap_or(&no_disclosures);
@@ -295,6 +301,55 @@ pub trait Holder {
         SdCwtHolderError<Self::Error>,
     > {
         let sign1 = self.new_presentation_raw(sd_cwt, params)?;
+        Ok(KbtCwt::from_cbor_bytes(&sign1)?)
+    }
+
+    /// Like [Self::new_presentation_raw] but the presented disclosures selected by `encryption` are AEAD encrypted.
+    /// See https://ietf-wg-spice.github.io/draft-ietf-spice-sd-cwt/draft-ietf-spice-sd-cwt.html#name-encrypted-disclosures
+    #[cfg(feature = "aead")]
+    #[allow(clippy::type_complexity)]
+    fn new_encrypted_presentation_raw(
+        &self,
+        mut sd_cwt: SdCwtVerified<Self::IssuerPayloadClaims, Self::Hasher, Self::IssuerProtectedClaims, Self::IssuerUnprotectedClaims>,
+        params: HolderParams<Self::KbtPayloadClaims, Self::KbtProtectedClaims, Self::KbtUnprotectedClaims>,
+        encryption: &crate::DisclosureEncryption,
+    ) -> Result<Vec<u8>, SdCwtHolderError<Self::Error>> {
+        let unprotected = &mut sd_cwt.0.sd_unprotected;
+        if let Some(sd_claims) = unprotected.sd_claims.take() {
+            let hasher = self.digest(sd_cwt.0.protected.to_value()?.sd_alg())?;
+            let payload = sd_cwt.0.payload.upcast_value()?;
+            unprotected.sd_claims = Some(params.presentation.try_select_disclosures::<Self::Error>(&payload, sd_claims, &hasher)?);
+            encryption.try_encrypt::<_, Self::Error>(&payload, unprotected, &hasher)?;
+        }
+        // the remaining plaintext disclosures are already selected
+        let params = HolderParams {
+            presentation: crate::Presentation::Full,
+            ..params
+        };
+        self.new_presentation_raw(sd_cwt, params)
+    }
+
+    /// Like [Self::new_presentation] but the presented disclosures selected by `encryption` are AEAD encrypted.
+    #[cfg(feature = "aead")]
+    #[allow(clippy::type_complexity)]
+    fn new_encrypted_presentation(
+        &self,
+        sd_cwt: SdCwtVerified<Self::IssuerPayloadClaims, Self::Hasher, Self::IssuerProtectedClaims, Self::IssuerUnprotectedClaims>,
+        params: HolderParams<Self::KbtPayloadClaims, Self::KbtProtectedClaims, Self::KbtUnprotectedClaims>,
+        encryption: &crate::DisclosureEncryption,
+    ) -> Result<
+        KbtCwt<
+            Self::IssuerPayloadClaims,
+            Self::Hasher,
+            Self::KbtPayloadClaims,
+            Self::IssuerProtectedClaims,
+            Self::IssuerUnprotectedClaims,
+            Self::KbtProtectedClaims,
+            Self::KbtUnprotectedClaims,
+        >,
+        SdCwtHolderError<Self::Error>,
+    > {
+        let sign1 = self.new_encrypted_presentation_raw(sd_cwt, params, encryption)?;
         Ok(KbtCwt::from_cbor_bytes(&sign1)?)
     }
 }

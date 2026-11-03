@@ -7,6 +7,8 @@ pub use {
 };
 
 pub use crate::spec::reexports::coset;
+#[cfg(feature = "aead")]
+pub use aead::{AeadSealed, DisclosureEncryption, DisclosureEncryptor};
 pub use cose_key;
 pub use esdicawt_spec as spec;
 pub use holder::{
@@ -31,6 +33,8 @@ pub use verifier::{
     params::{ShallowVerifierParams, VerifierParams},
 };
 
+#[cfg(feature = "aead")]
+mod aead;
 pub(crate) mod any_digest;
 mod holder;
 mod issuer;

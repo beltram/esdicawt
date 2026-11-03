@@ -16,6 +16,8 @@ test-utils = ["esdicawt-spec/test-utils", "ed25519", "p256", "p384", "dep:sha2",
 status = ["dep:status-list", "esdicawt-spec/status"]
 backward = ["esdicawt-spec/backward"]
 test-vectors = []
+# encrypted disclosures, see https://ietf-wg-spice.github.io/draft-ietf-spice-sd-cwt/draft-ietf-spice-sd-cwt.html#name-encrypted-disclosures
+aead = ["esdicawt-spec/aead"]
 
 [dependencies]
 esdicawt-spec.workspace = true
@@ -63,6 +65,7 @@ strum.workspace = true
 strum_macros.workspace = true
 anyhow.workspace = true
 itertools = "0.15"
+aes-gcm = "0.10"
 
 [target.'cfg(not(target_arch = "wasm32"))'.dev-dependencies]
 criterion = "0.6"
