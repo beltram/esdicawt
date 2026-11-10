@@ -10,6 +10,8 @@ default = []
 status = ["dep:status-list"]
 backward = []
 test-utils = []
+# encrypted disclosures, see https://ietf-wg-spice.github.io/draft-ietf-spice-sd-cwt/draft-ietf-spice-sd-cwt.html#name-encrypted-disclosures
+aead = ["cose-key/thumbprint", "dep:subtle"]
 
 [dependencies]
 coset = { workspace = true, features = ["std"] }
@@ -25,6 +27,7 @@ serde_bytes.workspace = true
 thiserror.workspace = true
 hex.workspace = true
 seabored.workspace = true
+subtle = { workspace = true, optional = true }
 
 [dev-dependencies]
 sha2.workspace = true

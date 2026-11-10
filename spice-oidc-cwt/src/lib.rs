@@ -909,6 +909,13 @@ mod ed25519 {
         type IssuerUnprotectedClaims = NoClaims;
         type IssuerPayloadClaims = SpiceOidcClaims;
         type KbtUnprotectedClaims = NoClaims;
+        #[cfg(feature = "aead")]
+        type Aead = aes_gcm::Aes128Gcm;
+
+        #[cfg(feature = "aead")]
+        fn aead_algorithm(&self) -> esdicawt::spec::aead::AeadAlgorithm {
+            esdicawt::spec::aead::AeadAlgorithm::AES_128_GCM
+        }
         type KbtProtectedClaims = NoClaims;
 
         type KbtPayloadClaims = NoClaims;

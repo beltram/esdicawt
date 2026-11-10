@@ -42,6 +42,12 @@ impl<Extra: CustomClaims> SdProtected<Extra> {
 #[derive(Debug, Clone, PartialEq)]
 pub struct SdUnprotected<Extra: CustomClaims> {
     pub sd_claims: Option<SaltedArray>,
+    /// `sd_aead_encrypted_claims`, set by the Holder
+    #[cfg(feature = "aead")]
+    pub sd_aead_encrypted_claims: Option<crate::aead::AeadEncryptedArray>,
+    /// `sd_aead`, set by the Holder. AEAD_AES_128_GCM when absent
+    #[cfg(feature = "aead")]
+    pub sd_aead: Option<crate::aead::AeadAlgorithm>,
     pub extra: Option<Extra>,
 }
 
@@ -80,6 +86,11 @@ impl<PayloadClaims: Select, Hasher: digest::Digest + Clone, ProtectedClaims: Cus
 
     pub fn disclosures_mut(&mut self) -> Option<&mut SaltedArray> {
         self.sd_unprotected.sd_claims.as_mut()
+    }
+
+    #[cfg(feature = "aead")]
+    pub fn encrypted_disclosures(&self) -> Option<&crate::aead::AeadEncryptedArray> {
+        self.sd_unprotected.sd_aead_encrypted_claims.as_ref()
     }
 }
 

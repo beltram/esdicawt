@@ -350,6 +350,45 @@ assert_eq!(sd_kbt.query(vec!["postal_code".into()].into())?, None);
 
 `Presentation` variants: `Full` (default), `None`, `Path` (by CBOR path, above), `Custom` (filter the `SaltedArray`).
 
+#### Encrypted disclosures
+
+> Requires the `aead` feature
+
+The Holder can also encrypt some of the disclosures it presents
+(see [Encrypted Disclosures](https://ietf-wg-spice.github.io/draft-ietf-spice-sd-cwt/draft-ietf-spice-sd-cwt.html#name-encrypted-disclosures)),
+for example, so that only an inner Verifier holding the right AEAD key can read them. They are moved from `sd_claims` to
+`sd_aead_encrypted_claims` in the unprotected header of the SD-CWT:
+
+```text
+/ sd_aead_encrypted_claims / 171 : [
+    [
+        / nonce /      h'95d0040fe650e5baf51c907c',
+        / ciphertext / h'563a7d9f0f65d40b751fbc3fcc408e8fe27c375b60a4727b1f1e9572c07992eb5ec5a9',
+        / tag /        h'9f4d37da32187528416ed7ee95e0625f'
+    ],
+],
+/ sd_aead / 172 : 1, / AEAD_AES_128_GCM /
+```
+
+The AEAD comes from the [`aead`](https://docs.rs/aead) crate, as the `Aead` associated type of the `Holder` and the
+`Verifier`, along with `aead_algorithm`, the IANA AEAD algorithm it implements:
+
+```rust,ignore
+type Aead = aes_gcm::Aes128Gcm;
+
+fn aead_algorithm(&self) -> AeadAlgorithm {
+    AeadAlgorithm::AES_128_GCM
+}
+```
+
+* the Holder calls `Holder::new_encrypted_presentation` with a random number generator for the nonces, a
+  `DisclosureEncryption` (an optional key context and a predicate selecting the presented disclosures to encrypt) and a
+  reference to the key shared with the Verifier. The disclosures nested in an encrypted one are encrypted too.
+* the Verifier calls `Verifier::verify_encrypted_sd_kbt` with a reference to that key and its optional key context. It
+  only applies to the encrypted disclosures with this key context and the Verifier's algorithm: failing to decrypt one
+  of them invalidates the whole SD-CWT. The others are ignored and their claims stay redacted, as with
+  `Verifier::verify_sd_kbt`. The decrypted ones are then processed as if they were in `sd_claims`.
+
 #### Verifier
 
 ```rust,ignore
@@ -419,7 +458,7 @@ impl<T: Select, U: CustomClaims> Verifier for Ed25519Verifier<T, U> {
 }
 ```
 
-That is the whole impl — `digest` is defaulted when a cipher-suite feature is on. `Issuer` also needs `new`, `signer`, `cwt_algorithm`, `hash_algorithm`; `Holder` needs `new`, `signer`, `verifier`, `cwt_algorithm`. Ed25519 and P-256 impls are behind `feature = "test-utils"` and in `esdicawt/tests/crypto.rs`, the best thing to copy. Keys for the Holder and Verifier go in a COSE key set: `CoseKeySet::builder().with(&issuer_verifying_key)?.build()`.
+That is the whole impl — `digest` is defaulted when a cipher-suite feature is on. `Issuer` also needs `new`, `signer`, `cwt_algorithm`, `hash_algorithm`; `Holder` needs `new`, `signer`, `verifier`, `cwt_algorithm`. With the `aead` feature, the `Holder` and the `Verifier` also need `Aead` and `aead_algorithm` (see [Encrypted disclosures](#encrypted-disclosures)). Ed25519 and P-256 impls are behind `feature = "test-utils"` and in `esdicawt/tests/crypto.rs`, the best thing to copy. Keys for the Holder and Verifier go in a COSE key set: `CoseKeySet::builder().with(&issuer_verifying_key)?.build()`.
 
 ## Draft conformance
 

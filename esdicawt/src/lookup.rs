@@ -282,6 +282,13 @@ mod tests {
             type KbtPayloadClaims = U;
             type KbtProtectedClaims = NoClaims;
             type KbtUnprotectedClaims = NoClaims;
+            #[cfg(feature = "aead")]
+            type Aead = aes_gcm::Aes128Gcm;
+
+            #[cfg(feature = "aead")]
+            fn aead_algorithm(&self) -> crate::spec::aead::AeadAlgorithm {
+                crate::spec::aead::AeadAlgorithm::AES_128_GCM
+            }
         }
         let verifier = Ed25519Verifier::new();
         verifier

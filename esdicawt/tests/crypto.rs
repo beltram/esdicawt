@@ -63,6 +63,13 @@ pub mod ed25519 {
         type IssuerUnprotectedClaims = NoClaims;
         type KbtProtectedClaims = NoClaims;
         type KbtUnprotectedClaims = NoClaims;
+        #[cfg(feature = "aead")]
+        type Aead = aes_gcm::Aes128Gcm;
+
+        #[cfg(feature = "aead")]
+        fn aead_algorithm(&self) -> esdicawt::spec::aead::AeadAlgorithm {
+            esdicawt::spec::aead::AeadAlgorithm::AES_128_GCM
+        }
         type KbtPayloadClaims = NoClaims;
 
         fn cwt_algorithm(&self) -> Algorithm {
@@ -107,6 +114,13 @@ pub mod ed25519 {
         type KbtPayloadClaims = U;
         type KbtProtectedClaims = NoClaims;
         type KbtUnprotectedClaims = NoClaims;
+        #[cfg(feature = "aead")]
+        type Aead = aes_gcm::Aes128Gcm;
+
+        #[cfg(feature = "aead")]
+        fn aead_algorithm(&self) -> esdicawt::spec::aead::AeadAlgorithm {
+            esdicawt::spec::aead::AeadAlgorithm::AES_128_GCM
+        }
     }
 }
 
@@ -133,6 +147,13 @@ pub mod es_256 {
         type IssuerUnprotectedClaims = NoClaims;
         type KbtProtectedClaims = NoClaims;
         type KbtUnprotectedClaims = NoClaims;
+        #[cfg(feature = "aead")]
+        type Aead = aes_gcm::Aes128Gcm;
+
+        #[cfg(feature = "aead")]
+        fn aead_algorithm(&self) -> esdicawt::spec::aead::AeadAlgorithm {
+            esdicawt::spec::aead::AeadAlgorithm::AES_128_GCM
+        }
         type KbtPayloadClaims = NoClaims;
 
         fn cwt_algorithm(&self) -> Algorithm {

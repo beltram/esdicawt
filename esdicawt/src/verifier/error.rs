@@ -59,6 +59,9 @@ pub enum SdCwtVerifierError<CustomError: Send + Sync> {
     MustNotBeRedacted(esdicawt_spec::SdCwtClaim),
     #[error("No hasher configured by the holder for sd_alg: {0:?}")]
     HasherNotFound(SdHashAlg),
+    #[cfg(feature = "aead")]
+    #[error("Failed decrypting a disclosure: {0}")]
+    DecryptionError(::aead::Error),
     #[error(transparent)]
     CustomError(CustomError),
     #[error("{0}")]

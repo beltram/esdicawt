@@ -41,6 +41,9 @@ pub enum SdCwtHolderError<CustomError: Send + Sync> {
     InvalidTyp,
     #[error("{0}")]
     ImplementationError(&'static str),
+    #[cfg(feature = "aead")]
+    #[error("Failed encrypting a disclosure: {0}")]
+    EncryptionError(::aead::Error),
     #[error(transparent)]
     CustomError(CustomError),
 }

@@ -6,6 +6,8 @@ pub use {
     verifier::{VerifiedStatusListToken, VerifierWithStatus, error::SdCwtStatusVerifierError, params::StatusListVerifierParams},
 };
 
+#[cfg(feature = "aead")]
+pub use crate::aead::DisclosureEncryption;
 pub use crate::spec::reexports::coset;
 pub use cose_key;
 pub use esdicawt_spec as spec;
@@ -31,6 +33,8 @@ pub use verifier::{
     params::{ShallowVerifierParams, VerifierParams},
 };
 
+#[cfg(feature = "aead")]
+mod aead;
 pub(crate) mod any_digest;
 mod holder;
 mod issuer;
