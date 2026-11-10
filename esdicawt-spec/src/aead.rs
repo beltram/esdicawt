@@ -3,6 +3,7 @@
 //! See https://ietf-wg-spice.github.io/draft-ietf-spice-sd-cwt/draft-ietf-spice-sd-cwt.html#name-encrypted-disclosures
 use crate::{EsdicawtSpecError, EsdicawtSpecResult, blinded_claims::SaltedEntry, inlined_cbor::InlinedCbor};
 use ciborium::Value;
+use cose_key::thumbprint::CoseKeyThumbprint;
 use serde::ser::SerializeSeq;
 
 /// An AEAD algorithm from the [IANA AEAD Algorithms registry](https://www.iana.org/assignments/aead-parameters/aead-parameters.xhtml),
@@ -74,8 +75,7 @@ impl From<AeadAlgorithm> for u16 {
 pub enum AeadKeyContext {
     Uint(u64),
     Text(String),
-    /// A COSE Key Thumbprint, see https://www.rfc-editor.org/rfc/rfc9679.html
-    Thumbprint(serde_bytes::ByteBuf),
+    Thumbprint(AeadKeyThumbprint),
 }
 
 impl<'de> serde::Deserialize<'de> for AeadKeyContext {
@@ -84,9 +84,89 @@ impl<'de> serde::Deserialize<'de> for AeadKeyContext {
         match Value::deserialize(deserializer)? {
             Value::Integer(i) => u64::try_from(i).map(Self::Uint).map_err(|_| D::Error::custom("An AEAD key context integer must be a uint")),
             Value::Text(s) => Ok(Self::Text(s)),
-            Value::Bytes(b) => Ok(Self::Thumbprint(b.into())),
+            Value::Bytes(b) => AeadKeyThumbprint::try_from(b).map(Self::Thumbprint).map_err(D::Error::custom),
             _ => Err(D::Error::custom("An AEAD key context must be a uint, a tstr or a bstr")),
         }
+    }
+}
+
+/// A COSE Key Thumbprint, see https://www.rfc-editor.org/rfc/rfc9679.html, of any of the digest
+/// sizes a [CoseKeyThumbprint] can be computed with
+#[derive(Debug, Clone, Copy, serde::Serialize)]
+#[serde(untagged)]
+pub enum AeadKeyThumbprint {
+    /// e.g. SHA-256
+    Bytes32(CoseKeyThumbprint<32>),
+    /// e.g. SHA-384
+    Bytes48(CoseKeyThumbprint<48>),
+    /// e.g. SHA-512
+    Bytes64(CoseKeyThumbprint<64>),
+}
+
+impl PartialEq for AeadKeyThumbprint {
+    /// in constant time when both thumbprints have the same size
+    fn eq(&self, other: &Self) -> bool {
+        use subtle::ConstantTimeEq as _;
+        match (self, other) {
+            (Self::Bytes32(a), Self::Bytes32(b)) => a.ct_eq(b).into(),
+            (Self::Bytes48(a), Self::Bytes48(b)) => a.ct_eq(b).into(),
+            (Self::Bytes64(a), Self::Bytes64(b)) => a.ct_eq(b).into(),
+            _ => false,
+        }
+    }
+}
+
+impl Eq for AeadKeyThumbprint {}
+
+impl std::hash::Hash for AeadKeyThumbprint {
+    /// sizes differ between variants, so hashing the bytes is consistent with [PartialEq]
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        (**self).hash(state);
+    }
+}
+
+impl std::ops::Deref for AeadKeyThumbprint {
+    type Target = [u8];
+
+    fn deref(&self) -> &[u8] {
+        match self {
+            Self::Bytes32(t) => t,
+            Self::Bytes48(t) => t,
+            Self::Bytes64(t) => t,
+        }
+    }
+}
+
+macro_rules! thumbprint_from {
+    ($($variant:ident: $n:literal),+) => {$(
+        impl From<CoseKeyThumbprint<$n>> for AeadKeyThumbprint {
+            fn from(thumbprint: CoseKeyThumbprint<$n>) -> Self {
+                Self::$variant(thumbprint)
+            }
+        }
+
+        impl From<[u8; $n]> for AeadKeyThumbprint {
+            fn from(thumbprint: [u8; $n]) -> Self {
+                Self::$variant(thumbprint.into())
+            }
+        }
+    )+};
+}
+
+thumbprint_from!(Bytes32: 32, Bytes48: 48, Bytes64: 64);
+
+impl TryFrom<Vec<u8>> for AeadKeyThumbprint {
+    type Error = EsdicawtSpecError;
+
+    fn try_from(bytes: Vec<u8>) -> Result<Self, Self::Error> {
+        let len = bytes.len();
+        let invalid = |_| EsdicawtSpecError::InvalidAeadKeyThumbprintLength(len);
+        Ok(match len {
+            32 => <[u8; 32]>::try_from(bytes).map_err(invalid)?.into(),
+            48 => <[u8; 48]>::try_from(bytes).map_err(invalid)?.into(),
+            64 => <[u8; 64]>::try_from(bytes).map_err(invalid)?.into(),
+            _ => return Err(invalid(bytes)),
+        })
     }
 }
 
@@ -298,7 +378,9 @@ mod tests {
             None,
             Some(AeadKeyContext::Uint(42)),
             Some(AeadKeyContext::Text("kid".into())),
-            Some(AeadKeyContext::Thumbprint(vec![4; 32].into())),
+            Some(AeadKeyContext::Thumbprint([4; 32].into())),
+            Some(AeadKeyContext::Thumbprint([5; 48].into())),
+            Some(AeadKeyContext::Thumbprint([6; 64].into())),
         ];
         for key_context in key_contexts {
             let expected_len = if key_context.is_some() { 4 } else { 3 };
@@ -344,6 +426,10 @@ mod tests {
             // invalid key context type
             Value::Array(vec![b(12), b(35), b(16), Value::Array(vec![])]),
             Value::Array(vec![b(12), b(35), b(16), Value::Bool(true)]),
+            // thumbprint of an unsupported size
+            Value::Array(vec![b(12), b(35), b(16), b(0)]),
+            Value::Array(vec![b(12), b(35), b(16), b(20)]),
+            Value::Array(vec![b(12), b(35), b(16), b(33)]),
             // not an array
             b(12),
         ];

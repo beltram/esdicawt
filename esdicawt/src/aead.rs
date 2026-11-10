@@ -1,8 +1,8 @@
-//! Pluggable AEAD for encrypted disclosures.
+//! Encrypted disclosures with the AEAD of the [Holder](crate::Holder) and the [Verifier](crate::Verifier) from the [aead] crate.
 //!
 //! See https://ietf-wg-spice.github.io/draft-ietf-spice-sd-cwt/draft-ietf-spice-sd-cwt.html#name-encrypted-disclosures
 use crate::{
-    CborPath, SdCwtHolderError, SdCwtHolderResult, SdCwtVerifierError, Verifier,
+    CborPath, SdCwtHolderError, SdCwtHolderResult, SdCwtVerifierError,
     holder::traverse::traverse_all_cbor_paths_in_salted_array,
     spec::{
         CustomClaims,
@@ -10,39 +10,17 @@ use crate::{
         blinded_claims::SaltedArray,
         issuance::SdUnprotected,
     },
+    verifier::DecryptDisclosures,
 };
+use ::aead::{AeadInPlace, Nonce, Tag, generic_array::typenum::Unsigned as _};
 use ciborium::Value;
 use std::{borrow::Cow, rc::Rc};
 
-/// Output of an AEAD encryption
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct AeadSealed {
-    pub nonce: Vec<u8>,
-    /// The encryption algorithm's ciphertext, without the authentication tag
-    pub ciphertext: Vec<u8>,
-    /// The authentication tag
-    pub tag: Vec<u8>,
-}
-
-/// Used by a Holder to encrypt disclosures for a target Verifier
-pub trait DisclosureEncryptor {
-    /// The AEAD algorithm from the [IANA AEAD Algorithms registry](https://www.iana.org/assignments/aead-parameters/aead-parameters.xhtml)
-    fn algorithm(&self) -> AeadAlgorithm;
-
-    /// Encrypts the plaintext with [Self::algorithm].
-    ///
-    /// Implementations MUST:
-    /// * use a unique, random nonce of N_MIN octets
-    /// * use a zero-length associated data
-    fn encrypt(&self, plaintext: &[u8]) -> Result<AeadSealed, Box<dyn core::error::Error + Send + Sync>>;
-}
-
-/// Which of the presented disclosures get encrypted and how.
+/// Which of the presented disclosures get encrypted.
 /// They are then moved from `sd_claims` to `sd_aead_encrypted_claims`.
 ///
 /// See https://ietf-wg-spice.github.io/draft-ietf-spice-sd-cwt/draft-ietf-spice-sd-cwt.html#name-encrypted-disclosures
-pub struct DisclosureEncryption<'a> {
-    pub encryptor: &'a dyn DisclosureEncryptor,
+pub struct DisclosureEncryption {
     /// Optional context added to every encrypted disclosure to help the Verifier select the correct key
     pub key_context: Option<AeadKeyContext>,
     /// The presented disclosures whose path, from the root of the payload, is accepted by the function get encrypted,
@@ -51,15 +29,20 @@ pub struct DisclosureEncryption<'a> {
     pub select: Box<dyn Fn(&[CborPath]) -> bool>,
 }
 
-impl DisclosureEncryption<'_> {
-    /// Moves the selected disclosures from `sd_claims` to `sd_aead_encrypted_claims`
-    pub(crate) fn try_encrypt<Extra: CustomClaims, E: core::error::Error + Send + Sync>(
+impl DisclosureEncryption {
+    /// Moves the selected disclosures from `sd_claims` to `sd_aead_encrypted_claims`, encrypted with `key` which
+    /// implements `alg`
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) fn try_encrypt<A: AeadInPlace, Extra: CustomClaims, E: core::error::Error + Send + Sync>(
         &self,
+        alg: AeadAlgorithm,
+        key: &A,
+        csprng: &mut dyn rand_core::CryptoRngCore,
         payload: &Value,
         unprotected: &mut SdUnprotected<Extra>,
         hasher: &Rc<dyn digest::DynDigest>,
     ) -> SdCwtHolderResult<(), E> {
-        let alg = self.encryptor.algorithm();
+        alg.check_tag_len(A::TagSize::USIZE)?;
         let Some(disclosures) = unprotected.sd_claims.as_mut() else { return Ok(()) };
         let selected = {
             let hashed_disclosures = disclosures.digested_detached_hasher(hasher)?;
@@ -77,11 +60,12 @@ impl DisclosureEncryption<'_> {
         let encrypted = disclosures
             .extract_if(.., |d| d.to_value().is_ok_and(|d| selected.contains(d)))
             .map(|disclosure| {
-                let plaintext = disclosure_to_plaintext(&disclosure)?;
-                let AeadSealed { nonce, ciphertext, tag } = self.encryptor.encrypt(&plaintext).map_err(SdCwtHolderError::EncryptionError)?;
-                alg.check_tag_len(tag.len())?;
+                // a unique, random nonce of N_MIN octets
+                let mut nonce = Nonce::<A>::default();
+                csprng.fill_bytes(&mut nonce);
+                let (ciphertext, tag) = seal(key, &nonce, disclosure_to_plaintext(&disclosure)?).map_err(SdCwtHolderError::EncryptionError)?;
                 Ok(AeadEncryptedDisclosure {
-                    nonce,
+                    nonce: nonce.to_vec(),
                     ciphertext,
                     tag,
                     key_context: self.key_context.clone(),
@@ -97,35 +81,70 @@ impl DisclosureEncryption<'_> {
     }
 }
 
-impl std::fmt::Debug for DisclosureEncryption<'_> {
+impl std::fmt::Debug for DisclosureEncryption {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("DisclosureEncryption")
-            .field("algorithm", &self.encryptor.algorithm())
-            .field("key_context", &self.key_context)
-            .finish_non_exhaustive()
+        f.debug_struct("DisclosureEncryption").field("key_context", &self.key_context).finish_non_exhaustive()
     }
 }
 
-/// Appends the encrypted disclosures the Verifier has a key for to the plaintext ones, so that they are processed as if
-/// they were in `sd_claims`.
-/// See https://ietf-wg-spice.github.io/draft-ietf-spice-sd-cwt/draft-ietf-spice-sd-cwt.html#name-kbt-and-sd-cwt-verifier-val
-pub fn decrypt_disclosures<'a, Extra: CustomClaims, V: Verifier + ?Sized>(
-    verifier: &V,
-    unprotected: &SdUnprotected<Extra>,
-    disclosures: &'a SaltedArray,
-) -> Result<Cow<'a, SaltedArray>, SdCwtVerifierError<V::Error>> {
-    let Some(encrypted_disclosures) = &unprotected.sd_aead_encrypted_claims else {
-        return Ok(Cow::Borrowed(disclosures));
-    };
-    let alg = unprotected.sd_aead.unwrap_or_default();
-    let mut disclosures = disclosures.clone();
-    for encrypted in encrypted_disclosures.iter() {
-        alg.check_tag_len(encrypted.tag.len())?;
-        if let Some(plaintext) = verifier.decrypt_disclosure(alg, encrypted).map_err(SdCwtVerifierError::DecryptionError)? {
-            disclosures.push(disclosure_from_plaintext(&plaintext)?);
+/// The key a Verifier decrypts the encrypted disclosures with
+pub struct DisclosureDecryption<'a, A: AeadInPlace> {
+    /// The algorithm `key` implements
+    pub alg: AeadAlgorithm,
+    pub key: &'a A,
+    /// Only the encrypted disclosures with this key context are decrypted with `key`
+    pub key_context: Option<&'a AeadKeyContext>,
+}
+
+impl<A: AeadInPlace> DecryptDisclosures for DisclosureDecryption<'_, A> {
+    /// Appends the encrypted disclosures `key` is for to the plaintext ones, so that they are processed as if they were
+    /// in `sd_claims`.
+    /// See https://ietf-wg-spice.github.io/draft-ietf-spice-sd-cwt/draft-ietf-spice-sd-cwt.html#name-kbt-and-sd-cwt-verifier-val
+    fn decrypt<'d, Extra: CustomClaims, E: core::error::Error + Send + Sync>(
+        &self,
+        unprotected: &SdUnprotected<Extra>,
+        disclosures: &'d SaltedArray,
+    ) -> Result<Cow<'d, SaltedArray>, SdCwtVerifierError<E>> {
+        let Some(encrypted_disclosures) = &unprotected.sd_aead_encrypted_claims else {
+            return Ok(Cow::Borrowed(disclosures));
+        };
+        let alg = unprotected.sd_aead.unwrap_or_default();
+        // the encrypted disclosures with another algorithm are ignored
+        let supported = alg == self.alg;
+        let mut disclosures = disclosures.clone();
+        for encrypted in encrypted_disclosures.iter() {
+            // the encrypted disclosures for another key are ignored. Failing to decrypt the others invalidates the SD-CWT
+            if supported && encrypted.key_context.as_ref() == self.key_context {
+                let plaintext = open(self.key, encrypted).map_err(SdCwtVerifierError::DecryptionError)?;
+                disclosures.push(disclosure_from_plaintext(&plaintext)?);
+            }
         }
+        Ok(Cow::Owned(disclosures))
     }
-    Ok(Cow::Owned(disclosures))
+}
+
+/// Returns the ciphertext and the authentication tag. The associated data is zero-length
+fn seal<A: AeadInPlace>(key: &A, nonce: &Nonce<A>, mut plaintext: Vec<u8>) -> ::aead::Result<(Vec<u8>, Vec<u8>)> {
+    let tag = key.encrypt_in_place_detached(nonce, b"", &mut plaintext)?;
+    Ok((plaintext, tag.to_vec()))
+}
+
+/// Reverse of [seal]. A nonce or a tag of the wrong length is a decryption failure
+fn open<A: AeadInPlace>(key: &A, encrypted: &AeadEncryptedDisclosure) -> ::aead::Result<Vec<u8>> {
+    let nonce = exact::<Nonce<A>>(&encrypted.nonce).ok_or(::aead::Error)?;
+    let tag = exact::<Tag<A>>(&encrypted.tag).ok_or(::aead::Error)?;
+    let mut plaintext = encrypted.ciphertext.clone();
+    key.decrypt_in_place_detached(&nonce, b"", &mut plaintext, &tag)?;
+    Ok(plaintext)
+}
+
+/// [None] when of the wrong length
+fn exact<T: Default + std::ops::DerefMut<Target = [u8]>>(bytes: &[u8]) -> Option<T> {
+    let mut array = T::default();
+    (array.len() == bytes.len()).then(|| {
+        array.copy_from_slice(bytes);
+        array
+    })
 }
 
 #[cfg(test)]
@@ -135,19 +154,20 @@ mod tests {
         CborPath, DisclosureEncryption, Holder, HolderParams, Issuer, IssuerParams, KbtIatOrCti, Presentation, SdCwtHolderError, SdCwtHolderValidationError, SdCwtVerifierError,
         StatusParams, TimeArg, Verifier, VerifierParams,
         spec::{
-            COSE_HEADER_KCWT, COSE_HEADER_SD_AEAD, COSE_HEADER_SD_AEAD_ENCRYPTED_CLAIMS, CwtAny, EsdicawtSpecError, NoClaims, Salt, SdCwtClaim,
+            COSE_HEADER_KCWT, COSE_HEADER_SD_AEAD, COSE_HEADER_SD_AEAD_ENCRYPTED_CLAIMS, CwtAny, EsdicawtSpecError, NoClaims, Salt, SdCwtClaim, SdHashAlg,
             aead::{AeadEncryptedDisclosure, AeadKeyContext, disclosure_from_plaintext, disclosure_to_plaintext},
             blinded_claims::{SaltedClaim, SaltedElement, SaltedEntry},
             inlined_cbor::InlinedCbor,
+            issuance::SdCwtIssued,
             key_binding::KbtCwt,
             reexports::coset::{self, TaggedCborSerializable as _},
             sd,
         },
         test_utils::{Ed25519Holder, Ed25519Issuer},
     };
-    use aes_gcm::{
-        Aes128Gcm, Nonce, Tag,
-        aead::{AeadInPlace as _, KeyInit as _},
+    use ::aead::{
+        AeadCore, KeyInit as _,
+        consts::{U0, U12, U16},
     };
     use ciborium::{Value, cbor};
     use cose_key::keyset::CoseKeySet;
@@ -160,80 +180,23 @@ mod tests {
     const KEY: [u8; 16] = [0x11; 16];
     const OTHER_KEY: [u8; 16] = [0x22; 16];
 
-    fn seal(key: &[u8; 16], nonce: &[u8; 12], plaintext: &[u8]) -> AeadSealed {
-        let mut buffer = plaintext.to_vec();
-        let tag = Aes128Gcm::new_from_slice(key)
-            .unwrap()
-            .encrypt_in_place_detached(&Nonce::from(*nonce), b"", &mut buffer)
-            .unwrap();
-        AeadSealed {
-            nonce: nonce.to_vec(),
-            ciphertext: buffer,
-            tag: tag.to_vec(),
-        }
+    fn cipher(key: [u8; 16]) -> aes_gcm::Aes128Gcm {
+        aes_gcm::Aes128Gcm::new(&key.into())
     }
 
-    fn open(key: &[u8; 16], encrypted: &AeadEncryptedDisclosure) -> Option<Vec<u8>> {
-        let nonce = <[u8; 12]>::try_from(encrypted.nonce.as_slice()).ok()?;
-        let tag = <[u8; 16]>::try_from(encrypted.tag.as_slice()).ok()?;
-        let mut buffer = encrypted.ciphertext.clone();
-        Aes128Gcm::new_from_slice(key)
-            .unwrap()
-            .decrypt_in_place_detached(&Nonce::from(nonce), b"", &mut buffer, &Tag::from(tag))
-            .ok()?;
-        Some(buffer)
-    }
-
-    fn encrypted(key: &[u8; 16], plaintext: &[u8]) -> AeadEncryptedDisclosure {
-        let AeadSealed { nonce, ciphertext, tag } = seal(key, &[7; 12], plaintext);
+    fn encrypted(key: [u8; 16], plaintext: &[u8]) -> AeadEncryptedDisclosure {
+        let nonce = [7; 12];
+        let (ciphertext, tag) = seal(&cipher(key), &nonce.into(), plaintext.to_vec()).unwrap();
         AeadEncryptedDisclosure {
-            nonce,
+            nonce: nonce.to_vec(),
             ciphertext,
             tag,
             key_context: None,
         }
     }
 
-    struct TestEncryptor {
-        key: [u8; 16],
-        tag_len: usize,
-        fail: bool,
-    }
-
-    impl TestEncryptor {
-        fn new(key: [u8; 16]) -> Self {
-            Self { key, tag_len: 16, fail: false }
-        }
-    }
-
-    impl DisclosureEncryptor for TestEncryptor {
-        fn algorithm(&self) -> AeadAlgorithm {
-            AeadAlgorithm::AES_128_GCM
-        }
-
-        fn encrypt(&self, plaintext: &[u8]) -> Result<AeadSealed, Box<dyn core::error::Error + Send + Sync>> {
-            if self.fail {
-                return Err("encryption failure".into());
-            }
-            let mut nonce = [0u8; 12];
-            rand::RngCore::fill_bytes(&mut rand::thread_rng(), &mut nonce);
-            let mut sealed = seal(&self.key, &nonce, plaintext);
-            sealed.tag.truncate(self.tag_len);
-            Ok(sealed)
-        }
-    }
-
-    /// Only supports AEAD_AES_128_GCM. A [AeadKeyContext::Uint] designates one of its keys, otherwise all of them are tried
-    #[derive(Default)]
-    struct AeadVerifier {
-        keys: Vec<[u8; 16]>,
-    }
-
-    impl AeadVerifier {
-        fn with_key(key: [u8; 16]) -> Self {
-            Self { keys: vec![key] }
-        }
-    }
+    /// Only supports AEAD_AES_128_GCM
+    struct AeadVerifier;
 
     impl Verifier for AeadVerifier {
         type Error = Infallible;
@@ -245,19 +208,29 @@ mod tests {
         type KbtPayloadClaims = NoClaims;
         type KbtProtectedClaims = NoClaims;
         type KbtUnprotectedClaims = NoClaims;
+        type Aead = aes_gcm::Aes128Gcm;
 
-        fn decrypt_disclosure(&self, alg: AeadAlgorithm, encrypted: &AeadEncryptedDisclosure) -> Result<Option<Vec<u8>>, Box<dyn core::error::Error + Send + Sync>> {
-            if alg != AeadAlgorithm::AES_128_GCM {
-                return Ok(None);
-            }
-            match encrypted.key_context {
-                // when this Verifier has the key, failing to decrypt invalidates the SD-CWT
-                Some(AeadKeyContext::Uint(i)) => usize::try_from(i)
-                    .ok()
-                    .and_then(|i| self.keys.get(i))
-                    .map_or(Ok(None), |key| open(key, encrypted).map(Some).ok_or_else(|| "decryption failed".into())),
-                _ => Ok(self.keys.iter().find_map(|key| open(key, encrypted))),
-            }
+        fn aead_algorithm(&self) -> AeadAlgorithm {
+            AeadAlgorithm::AES_128_GCM
+        }
+    }
+
+    /// Fails to encrypt
+    struct FailingCipher;
+
+    impl AeadCore for FailingCipher {
+        type NonceSize = U12;
+        type TagSize = U16;
+        type CiphertextOverhead = U0;
+    }
+
+    impl AeadInPlace for FailingCipher {
+        fn encrypt_in_place_detached(&self, _: &Nonce<Self>, _: &[u8], _: &mut [u8]) -> ::aead::Result<Tag<Self>> {
+            Err(::aead::Error)
+        }
+
+        fn decrypt_in_place_detached(&self, _: &Nonce<Self>, _: &[u8], _: &mut [u8], _: &Tag<Self>) -> ::aead::Result<()> {
+            Err(::aead::Error)
         }
     }
 
@@ -289,16 +262,15 @@ mod tests {
         p.iter().map(|s| CborPath::Str(s.to_string())).collect()
     }
 
-    fn encrypt_if<'a>(encryptor: &'a dyn DisclosureEncryptor, select: impl Fn(&[CborPath]) -> bool + 'static) -> DisclosureEncryption<'a> {
+    fn encrypt_if(select: impl Fn(&[CborPath]) -> bool + 'static) -> DisclosureEncryption {
         DisclosureEncryption {
-            encryptor,
             key_context: None,
             select: Box::new(select),
         }
     }
 
-    fn encrypt_paths<'a>(encryptor: &'a dyn DisclosureEncryptor, paths: Vec<Vec<CborPath>>) -> DisclosureEncryption<'a> {
-        encrypt_if(encryptor, move |p| paths.iter().any(|expected| expected == p))
+    fn encrypt_paths(paths: Vec<Vec<CborPath>>) -> DisclosureEncryption {
+        encrypt_if(move |p| paths.iter().any(|expected| expected == p))
     }
 
     struct Context {
@@ -365,31 +337,53 @@ mod tests {
 
     type TestKbt = KbtCwt<Value, sha2::Sha256>;
 
+    fn verifier_params() -> VerifierParams<'static> {
+        VerifierParams {
+            expected_subject: SUBJECT,
+            ..Default::default()
+        }
+    }
+
     impl Context {
+        /// Encrypts with [KEY]
         fn try_present(&self, presentation: Presentation, encryption: Option<DisclosureEncryption>) -> Result<Vec<u8>, SdCwtHolderError<Infallible>> {
             let sd_cwt = self.holder.verify_sd_cwt(&self.sd_cwt, Default::default(), &self.cks).unwrap();
             match encryption {
-                Some(encryption) => self.holder.new_encrypted_presentation_raw(sd_cwt, holder_params(presentation), &encryption),
+                Some(encryption) => self
+                    .holder
+                    .new_encrypted_presentation_raw(&mut rand::thread_rng(), sd_cwt, holder_params(presentation), &encryption, &cipher(KEY)),
                 None => self.holder.new_presentation_raw(sd_cwt, holder_params(presentation)),
             }
+        }
+
+        /// Encrypts the disclosures of the issued SD-CWT with an arbitrary AEAD_AES_128_GCM implementation
+        fn try_encrypt(&self, encryption: &DisclosureEncryption, key: &impl AeadInPlace) -> SdCwtHolderResult<(), Infallible> {
+            let mut sd_cwt = SdCwtIssued::<Value, sha2::Sha256>::from_cbor_bytes(&self.sd_cwt).unwrap();
+            let payload = sd_cwt.payload.upcast_value().unwrap();
+            let hasher = crate::default_digest(SdHashAlg::Sha256).unwrap();
+            encryption.try_encrypt(AeadAlgorithm::AES_128_GCM, key, &mut rand::thread_rng(), &payload, &mut sd_cwt.sd_unprotected, &hasher)
         }
 
         fn present(&self, encryption: Option<DisclosureEncryption>) -> Vec<u8> {
             self.try_present(Presentation::Full, encryption).unwrap()
         }
 
-        fn verify(&self, verifier: &AeadVerifier, sd_kbt: &[u8]) -> Result<Value, SdCwtVerifierError<Infallible>> {
-            let params = VerifierParams {
-                expected_subject: SUBJECT,
-                ..Default::default()
-            };
-            let verified = verifier.verify_sd_kbt(sd_kbt, &params, Some(&self.holder_signing_key.verifying_key()), &self.cks)?;
+        /// Without a key
+        fn verify(&self, sd_kbt: &[u8]) -> Result<Value, SdCwtVerifierError<Infallible>> {
+            let verified = AeadVerifier.verify_sd_kbt(sd_kbt, &verifier_params(), Some(&self.holder_signing_key.verifying_key()), &self.cks)?;
+            Ok(sorted(verified.claimset.unwrap()))
+        }
+
+        /// With a key for the encrypted disclosures with `key_context`
+        fn decrypt(&self, sd_kbt: &[u8], key: [u8; 16], key_context: Option<&AeadKeyContext>) -> Result<Value, SdCwtVerifierError<Infallible>> {
+            let holder_verifier = self.holder_signing_key.verifying_key();
+            let verified = AeadVerifier.verify_encrypted_sd_kbt(sd_kbt, &verifier_params(), Some(&holder_verifier), &self.cks, &cipher(key), key_context)?;
             Ok(sorted(verified.claimset.unwrap()))
         }
 
         /// Adds a disclosure encrypted with [KEY] to the SD-KBT
         fn with_encrypted(&self, sd_kbt: &[u8], plaintext: &[u8]) -> Vec<u8> {
-            let encrypted = Value::serialized(&vec![encrypted(&KEY, plaintext)]).unwrap();
+            let encrypted = Value::serialized(&vec![encrypted(KEY, plaintext)]).unwrap();
             self.tamper(sd_kbt, |unprotected| unprotected.push((Value::from(COSE_HEADER_SD_AEAD_ENCRYPTED_CLAIMS), encrypted)))
         }
 
@@ -473,9 +467,9 @@ mod tests {
         let plaintext = disclosure_to_plaintext(&disclosure).unwrap();
 
         // encryption
-        let sealed = seal(&key, &nonce, &plaintext);
-        assert_eq!(sealed.ciphertext, ciphertext);
-        assert_eq!(sealed.tag, tag);
+        let (sealed, sealed_tag) = seal(&cipher(key), &nonce.into(), plaintext.clone()).unwrap();
+        assert_eq!(sealed, ciphertext);
+        assert_eq!(sealed_tag, tag);
 
         // decryption
         let encrypted = AeadEncryptedDisclosure {
@@ -484,7 +478,7 @@ mod tests {
             tag,
             key_context: None,
         };
-        let decrypted = open(&key, &encrypted).unwrap();
+        let decrypted = open(&cipher(key), &encrypted).unwrap();
         assert_eq!(decrypted, plaintext);
         assert_eq!(disclosure_from_plaintext(&decrypted).unwrap(), disclosure);
     }
@@ -493,8 +487,7 @@ mod tests {
     #[wasm_bindgen_test::wasm_bindgen_test]
     fn should_reveal_encrypted_disclosures_with_key() {
         let ctx = issue();
-        let encryptor = TestEncryptor::new(KEY);
-        let encryption = encrypt_if(&encryptor, |p| p == path(&["name"]).as_slice() || p == [CborPath::Str("array".into()), CborPath::Index(1)]);
+        let encryption = encrypt_if(|p| p == path(&["name"]).as_slice() || p == [CborPath::Str("array".into()), CborPath::Index(1)]);
         let sd_kbt = ctx.present(Some(encryption));
 
         let kbt = decode(&sd_kbt);
@@ -503,15 +496,11 @@ mod tests {
         assert_eq!(sd_cwt.disclosures().unwrap().len(), NB_DISCLOSURES - 2);
         assert_eq!(sd_cwt.sd_unprotected.sd_aead, Some(AeadAlgorithm::AES_128_GCM));
 
-        let claimset = ctx.verify(&AeadVerifier::with_key(KEY), &sd_kbt).unwrap();
+        let claimset = ctx.decrypt(&sd_kbt, KEY, None).unwrap();
         assert_eq!(claimset, sorted(fully_disclosed()));
 
-        // also when the Verifier has many keys
-        let verifier = AeadVerifier { keys: vec![OTHER_KEY, KEY] };
-        assert_eq!(ctx.verify(&verifier, &sd_kbt).unwrap(), sorted(fully_disclosed()));
-
         // same as a plaintext presentation
-        let plaintext_claimset = ctx.verify(&AeadVerifier::default(), &ctx.present(None)).unwrap();
+        let plaintext_claimset = ctx.verify(&ctx.present(None)).unwrap();
         assert_eq!(claimset, plaintext_claimset);
     }
 
@@ -519,8 +508,7 @@ mod tests {
     #[wasm_bindgen_test::wasm_bindgen_test]
     fn should_keep_encrypted_disclosures_redacted_without_key() {
         let ctx = issue();
-        let encryptor = TestEncryptor::new(KEY);
-        let encryption = encrypt_if(&encryptor, |p| p == path(&["name"]).as_slice() || p == [CborPath::Str("array".into()), CborPath::Index(1)]);
+        let encryption = encrypt_if(|p| p == path(&["name"]).as_slice() || p == [CborPath::Str("array".into()), CborPath::Index(1)]);
         let sd_kbt = ctx.present(Some(encryption));
 
         let expected = sorted(
@@ -533,17 +521,16 @@ mod tests {
             .unwrap(),
         );
         // no key
-        assert_eq!(ctx.verify(&AeadVerifier::default(), &sd_kbt).unwrap(), expected);
-        // wrong key
-        assert_eq!(ctx.verify(&AeadVerifier::with_key(OTHER_KEY), &sd_kbt).unwrap(), expected);
+        assert_eq!(ctx.verify(&sd_kbt).unwrap(), expected);
+        // only a key for another key context
+        assert_eq!(ctx.decrypt(&sd_kbt, KEY, Some(&AeadKeyContext::Uint(1))).unwrap(), expected);
     }
 
     #[test]
     #[wasm_bindgen_test::wasm_bindgen_test]
     fn should_encrypt_all_disclosures() {
         let ctx = issue();
-        let encryptor = TestEncryptor::new(KEY);
-        let encryption = encrypt_if(&encryptor, |_| true);
+        let encryption = encrypt_if(|_| true);
         let sd_kbt = ctx.present(Some(encryption));
 
         let kbt = decode(&sd_kbt);
@@ -552,23 +539,22 @@ mod tests {
         assert!(sd_cwt.disclosures().is_none());
         assert_eq!(sd_cwt.encrypted_disclosures().unwrap().len(), NB_DISCLOSURES);
 
-        assert_eq!(ctx.verify(&AeadVerifier::with_key(KEY), &sd_kbt).unwrap(), sorted(fully_disclosed()));
+        assert_eq!(ctx.decrypt(&sd_kbt, KEY, None).unwrap(), sorted(fully_disclosed()));
 
         let expected = sorted(cbor!({ "address" => { "country" => "FR" }, "array" => ["a"] }).unwrap());
-        assert_eq!(ctx.verify(&AeadVerifier::default(), &sd_kbt).unwrap(), expected);
+        assert_eq!(ctx.verify(&sd_kbt).unwrap(), expected);
     }
 
     #[test]
     #[wasm_bindgen_test::wasm_bindgen_test]
     fn should_also_encrypt_disclosures_nested_in_encrypted_ones() {
         let ctx = issue();
-        let encryptor = TestEncryptor::new(KEY);
-        let sd_kbt = ctx.present(Some(encrypt_paths(&encryptor, vec![path(&["nested"])])));
+        let sd_kbt = ctx.present(Some(encrypt_paths(vec![path(&["nested"])])));
 
         // 'nested' and 'inner'
         assert_eq!(encrypted_disclosures(&sd_kbt).len(), 2);
 
-        assert_eq!(ctx.verify(&AeadVerifier::with_key(KEY), &sd_kbt).unwrap(), sorted(fully_disclosed()));
+        assert_eq!(ctx.decrypt(&sd_kbt, KEY, None).unwrap(), sorted(fully_disclosed()));
 
         // 'inner' is not an orphan disclosure for a Verifier not able to decrypt 'nested'
         let expected = sorted(
@@ -580,18 +566,17 @@ mod tests {
             })
             .unwrap(),
         );
-        assert_eq!(ctx.verify(&AeadVerifier::default(), &sd_kbt).unwrap(), expected);
+        assert_eq!(ctx.verify(&sd_kbt).unwrap(), expected);
     }
 
     #[test]
     #[wasm_bindgen_test::wasm_bindgen_test]
     fn should_encrypt_disclosure_nested_in_plaintext_one() {
         let ctx = issue();
-        let encryptor = TestEncryptor::new(KEY);
-        let sd_kbt = ctx.present(Some(encrypt_paths(&encryptor, vec![path(&["nested", "inner"]), path(&["address", "city"])])));
+        let sd_kbt = ctx.present(Some(encrypt_paths(vec![path(&["nested", "inner"]), path(&["address", "city"])])));
 
         assert_eq!(encrypted_disclosures(&sd_kbt).len(), 2);
-        assert_eq!(ctx.verify(&AeadVerifier::with_key(KEY), &sd_kbt).unwrap(), sorted(fully_disclosed()));
+        assert_eq!(ctx.decrypt(&sd_kbt, KEY, None).unwrap(), sorted(fully_disclosed()));
 
         let expected = sorted(
             cbor!({
@@ -603,15 +588,14 @@ mod tests {
             })
             .unwrap(),
         );
-        assert_eq!(ctx.verify(&AeadVerifier::default(), &sd_kbt).unwrap(), expected);
+        assert_eq!(ctx.verify(&sd_kbt).unwrap(), expected);
     }
 
     #[test]
     #[wasm_bindgen_test::wasm_bindgen_test]
     fn should_only_encrypt_presented_disclosures() {
         let ctx = issue();
-        let encryptor = TestEncryptor::new(KEY);
-        let encryption = encrypt_if(&encryptor, |_| true);
+        let encryption = encrypt_if(|_| true);
         let sd_kbt = ctx
             .try_present(Presentation::Path(Box::new(|p| p == path(&["name"]).as_slice())), Some(encryption))
             .unwrap();
@@ -627,29 +611,33 @@ mod tests {
             })
             .unwrap(),
         );
-        assert_eq!(ctx.verify(&AeadVerifier::with_key(KEY), &sd_kbt).unwrap(), expected);
+        assert_eq!(ctx.decrypt(&sd_kbt, KEY, None).unwrap(), expected);
     }
 
     #[test]
     #[wasm_bindgen_test::wasm_bindgen_test]
     fn should_carry_key_context() {
         let ctx = issue();
-        let encryptor = TestEncryptor::new(KEY);
         let key_contexts = [
             AeadKeyContext::Uint(0),
             AeadKeyContext::Text("verifier-key".into()),
-            AeadKeyContext::Thumbprint(vec![0xab; 32].into()),
+            AeadKeyContext::Thumbprint([0xab; 32].into()),
         ];
         for key_context in key_contexts {
             let encryption = DisclosureEncryption {
                 key_context: Some(key_context.clone()),
-                ..encrypt_if(&encryptor, |_| true)
+                ..encrypt_if(|_| true)
             };
             let sd_kbt = ctx.present(Some(encryption));
             let encrypted = encrypted_disclosures(&sd_kbt);
             assert_eq!(encrypted.len(), NB_DISCLOSURES);
             assert!(encrypted.iter().all(|e| e.key_context.as_ref() == Some(&key_context)));
-            assert_eq!(ctx.verify(&AeadVerifier::with_key(KEY), &sd_kbt).unwrap(), sorted(fully_disclosed()));
+            assert_eq!(ctx.decrypt(&sd_kbt, KEY, Some(&key_context)).unwrap(), sorted(fully_disclosed()));
+            // no key for that key context
+            assert_eq!(
+                ctx.decrypt(&sd_kbt, KEY, None).unwrap(),
+                sorted(cbor!({ "address" => { "country" => "FR" }, "array" => ["a"] }).unwrap())
+            );
         }
     }
 
@@ -657,8 +645,7 @@ mod tests {
     #[wasm_bindgen_test::wasm_bindgen_test]
     fn should_not_add_aead_headers_when_nothing_encrypted() {
         let ctx = issue();
-        let encryptor = TestEncryptor::new(KEY);
-        let encryption = encrypt_if(&encryptor, |_| false);
+        let encryption = encrypt_if(|_| false);
         let sd_kbt = ctx.present(Some(encryption));
         let kbt = decode(&sd_kbt);
         let sd_cwt = kbt.sd_cwt().unwrap();
@@ -670,22 +657,16 @@ mod tests {
     #[test]
     #[wasm_bindgen_test::wasm_bindgen_test]
     fn holder_should_reject_short_tag() {
-        let ctx = issue();
-        let mut encryptor = TestEncryptor::new(KEY);
-        encryptor.tag_len = 12;
-        let encryption = encrypt_paths(&encryptor, vec![path(&["name"])]);
-        let err = ctx.try_present(Presentation::Full, Some(encryption)).unwrap_err();
+        // AEAD_AES_128_GCM with a 12 octets tag
+        let key = aes_gcm::AesGcm::<aes_gcm::aes::Aes128, U12, U12>::new(&KEY.into());
+        let err = issue().try_encrypt(&encrypt_paths(vec![path(&["name"])]), &key).unwrap_err();
         std::assert_matches!(err, SdCwtHolderError::SpecError(EsdicawtSpecError::InvalidAeadTagLength { alg: 1, len: 12 }));
     }
 
     #[test]
     #[wasm_bindgen_test::wasm_bindgen_test]
     fn holder_should_propagate_encryption_error() {
-        let ctx = issue();
-        let mut encryptor = TestEncryptor::new(KEY);
-        encryptor.fail = true;
-        let encryption = encrypt_paths(&encryptor, vec![path(&["name"])]);
-        let err = ctx.try_present(Presentation::Full, Some(encryption)).unwrap_err();
+        let err = issue().try_encrypt(&encrypt_paths(vec![path(&["name"])]), &FailingCipher).unwrap_err();
         std::assert_matches!(err, SdCwtHolderError::EncryptionError(_));
     }
 
@@ -693,7 +674,7 @@ mod tests {
     #[wasm_bindgen_test::wasm_bindgen_test]
     fn holder_should_reject_issued_sd_cwt_with_aead_headers() {
         let ctx = issue();
-        let encrypted = Value::serialized(&vec![encrypted(&KEY, &[0x41, 0x00])]).unwrap();
+        let encrypted = Value::serialized(&vec![encrypted(KEY, &[0x41, 0x00])]).unwrap();
         for (label, value) in [(COSE_HEADER_SD_AEAD_ENCRYPTED_CLAIMS, encrypted), (COSE_HEADER_SD_AEAD, Value::from(1))] {
             // the unprotected header is not signed by the Issuer
             let mut sign1 = coset::CoseSign1::from_tagged_slice(&ctx.sd_cwt).unwrap();
@@ -709,24 +690,22 @@ mod tests {
     #[wasm_bindgen_test::wasm_bindgen_test]
     fn verifier_should_default_to_aes_128_gcm() {
         let ctx = issue();
-        let encryptor = TestEncryptor::new(KEY);
-        let sd_kbt = ctx.present(Some(encrypt_paths(&encryptor, vec![path(&["name"])])));
+        let sd_kbt = ctx.present(Some(encrypt_paths(vec![path(&["name"])])));
         let sd_kbt = ctx.tamper(&sd_kbt, |unprotected| unprotected.retain(|(k, _)| *k != Value::from(COSE_HEADER_SD_AEAD)));
         assert!(decode(&sd_kbt).sd_cwt().unwrap().sd_unprotected.sd_aead.is_none());
 
-        assert_eq!(ctx.verify(&AeadVerifier::with_key(KEY), &sd_kbt).unwrap(), sorted(fully_disclosed()));
+        assert_eq!(ctx.decrypt(&sd_kbt, KEY, None).unwrap(), sorted(fully_disclosed()));
     }
 
     #[test]
     #[wasm_bindgen_test::wasm_bindgen_test]
     fn verifier_should_skip_unsupported_algorithm() {
         let ctx = issue();
-        let encryptor = TestEncryptor::new(KEY);
-        let sd_kbt = ctx.present(Some(encrypt_paths(&encryptor, vec![path(&["name"])])));
+        let sd_kbt = ctx.present(Some(encrypt_paths(vec![path(&["name"])])));
         // AEAD_AES_256_GCM, not supported by the test Verifier
         let sd_kbt = ctx.tamper(&sd_kbt, |unprotected| *label(unprotected, COSE_HEADER_SD_AEAD).unwrap() = Value::from(2));
 
-        let claimset = ctx.verify(&AeadVerifier::with_key(KEY), &sd_kbt).unwrap();
+        let claimset = ctx.decrypt(&sd_kbt, KEY, None).unwrap();
         assert!(!claimset.as_map().unwrap().iter().any(|(k, _)| *k == Value::from("name")));
     }
 
@@ -734,13 +713,12 @@ mod tests {
     #[wasm_bindgen_test::wasm_bindgen_test]
     fn verifier_should_reject_forbidden_algorithm() {
         let ctx = issue();
-        let encryptor = TestEncryptor::new(KEY);
-        let sd_kbt = ctx.present(Some(encrypt_paths(&encryptor, vec![path(&["name"])])));
+        let sd_kbt = ctx.present(Some(encrypt_paths(vec![path(&["name"])])));
         // AEAD_AES_128_GCM_8
         let sd_kbt = ctx.tamper(&sd_kbt, |unprotected| *label(unprotected, COSE_HEADER_SD_AEAD).unwrap() = Value::from(5));
 
         // even when unable to decrypt
-        let err = ctx.verify(&AeadVerifier::default(), &sd_kbt).unwrap_err();
+        let err = ctx.verify(&sd_kbt).unwrap_err();
         // it cannot even be decoded
         std::assert_matches!(err, SdCwtVerifierError::SpecError(EsdicawtSpecError::CborDeserializationError(_)));
         assert!(format!("{err:?}").contains("The AEAD algorithm 5 MUST NOT be used"));
@@ -750,19 +728,30 @@ mod tests {
     #[wasm_bindgen_test::wasm_bindgen_test]
     fn verifier_should_reject_undecryptable_disclosure_with_known_key() {
         let ctx = issue();
-        let encryptor = TestEncryptor::new(KEY);
-        // designates the first key of the Verifier
-        let encryption = DisclosureEncryption {
-            key_context: Some(AeadKeyContext::Uint(0)),
-            ..encrypt_paths(&encryptor, vec![path(&["name"])])
-        };
-        let sd_kbt = ctx.present(Some(encryption));
+        let sd_kbt = ctx.present(Some(encrypt_paths(vec![path(&["name"])])));
 
-        let err = ctx.verify(&AeadVerifier::with_key(OTHER_KEY), &sd_kbt).unwrap_err();
+        let err = ctx.decrypt(&sd_kbt, OTHER_KEY, None).unwrap_err();
         std::assert_matches!(err, SdCwtVerifierError::DecryptionError(_));
 
-        // ignored by a Verifier without that key
-        let claimset = ctx.verify(&AeadVerifier::default(), &sd_kbt).unwrap();
+        // also with a nonce of the wrong length
+        let sd_kbt = ctx.tamper(&sd_kbt, |unprotected| {
+            let encrypted = label(unprotected, COSE_HEADER_SD_AEAD_ENCRYPTED_CLAIMS).unwrap().as_array_mut().unwrap();
+            encrypted
+                .first_mut()
+                .unwrap()
+                .as_array_mut()
+                .unwrap()
+                .first_mut()
+                .unwrap()
+                .as_bytes_mut()
+                .unwrap()
+                .truncate(8);
+        });
+        let err = ctx.decrypt(&sd_kbt, KEY, None).unwrap_err();
+        std::assert_matches!(err, SdCwtVerifierError::DecryptionError(_));
+
+        // ignored without that key
+        let claimset = ctx.verify(&sd_kbt).unwrap();
         assert!(!claimset.as_map().unwrap().iter().any(|(k, _)| *k == Value::from("name")));
     }
 
@@ -770,16 +759,17 @@ mod tests {
     #[wasm_bindgen_test::wasm_bindgen_test]
     fn verifier_should_reject_short_tag() {
         let ctx = issue();
-        let encryptor = TestEncryptor::new(KEY);
-        let sd_kbt = ctx.present(Some(encrypt_paths(&encryptor, vec![path(&["name"])])));
+        let sd_kbt = ctx.present(Some(encrypt_paths(vec![path(&["name"])])));
         let sd_kbt = ctx.tamper(&sd_kbt, |unprotected| {
             let encrypted = label(unprotected, COSE_HEADER_SD_AEAD_ENCRYPTED_CLAIMS).unwrap().as_array_mut().unwrap();
             let tag = encrypted.first_mut().unwrap().as_array_mut().unwrap().get_mut(2).unwrap().as_bytes_mut().unwrap();
             tag.truncate(12);
         });
 
-        let err = ctx.verify(&AeadVerifier::default(), &sd_kbt).unwrap_err();
-        std::assert_matches!(err, SdCwtVerifierError::SpecError(EsdicawtSpecError::InvalidAeadTagLength { alg: 1, len: 12 }));
+        // even when unable to decrypt, it cannot even be decoded
+        let err = ctx.verify(&sd_kbt).unwrap_err();
+        std::assert_matches!(err, SdCwtVerifierError::SpecError(EsdicawtSpecError::CborDeserializationError(_)));
+        assert!(format!("{err:?}").contains("An authentication tag of 12 octets is not allowed for the AEAD algorithm 1"));
     }
 
     #[test]
@@ -791,11 +781,11 @@ mod tests {
         let plaintext = disclosure_to_plaintext(&disclosure).unwrap();
         let sd_kbt = ctx.with_encrypted(&sd_kbt, &plaintext);
 
-        let err = ctx.verify(&AeadVerifier::with_key(KEY), &sd_kbt).unwrap_err();
+        let err = ctx.decrypt(&sd_kbt, KEY, None).unwrap_err();
         std::assert_matches!(err, SdCwtVerifierError::SpecError(EsdicawtSpecError::DuplicateDisclosure));
 
         // not detectable when unable to decrypt
-        ctx.verify(&AeadVerifier::default(), &sd_kbt).unwrap();
+        ctx.verify(&sd_kbt).unwrap();
     }
 
     #[test]
@@ -810,7 +800,7 @@ mod tests {
         let plaintext = disclosure_to_plaintext(&InlinedCbor::from_bytes(orphan.to_cbor_bytes().unwrap())).unwrap();
         let sd_kbt = ctx.with_encrypted(&sd_kbt, &plaintext);
 
-        let err = ctx.verify(&AeadVerifier::with_key(KEY), &sd_kbt).unwrap_err();
+        let err = ctx.decrypt(&sd_kbt, KEY, None).unwrap_err();
         std::assert_matches!(err, SdCwtVerifierError::OrphanDisclosure);
     }
 
@@ -824,7 +814,7 @@ mod tests {
         let plaintext = disclosure.to_bytes().unwrap().to_vec();
         let sd_kbt = ctx.with_encrypted(&sd_kbt, &plaintext);
 
-        let err = ctx.verify(&AeadVerifier::with_key(KEY), &sd_kbt).unwrap_err();
+        let err = ctx.decrypt(&sd_kbt, KEY, None).unwrap_err();
         std::assert_matches!(err, SdCwtVerifierError::SpecError(EsdicawtSpecError::InvalidDecryptedDisclosure));
     }
 
@@ -836,7 +826,7 @@ mod tests {
         let empty_encrypted = ctx.tamper(&sd_kbt, |unprotected| {
             unprotected.push((Value::from(COSE_HEADER_SD_AEAD_ENCRYPTED_CLAIMS), Value::Array(vec![])))
         });
-        assert!(ctx.verify(&AeadVerifier::with_key(KEY), &empty_encrypted).is_err());
+        assert!(ctx.decrypt(&empty_encrypted, KEY, None).is_err());
     }
 
     #[test]
@@ -846,6 +836,6 @@ mod tests {
         let ctx = issue();
         let sd_kbt = ctx.present(None);
         let sd_kbt = ctx.tamper(&sd_kbt, |_| {});
-        assert_eq!(ctx.verify(&AeadVerifier::default(), &sd_kbt).unwrap(), sorted(fully_disclosed()));
+        assert_eq!(ctx.verify(&sd_kbt).unwrap(), sorted(fully_disclosed()));
     }
 }

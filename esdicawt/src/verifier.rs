@@ -8,7 +8,11 @@ use crate::{
     elapsed_since_epoch,
     signature_verifier::cose_sign1_tbs,
     spec::{
-        CWT_CLAIM_KEY_CONFIRMATION, CustomClaims, CwtAny, SdHashAlg, Select, blinded_claims::SaltedArray, issuance::SdInnerPayload, key_binding::KbtCwt, reexports::coset,
+        CWT_CLAIM_KEY_CONFIRMATION, CustomClaims, CwtAny, SdHashAlg, Select,
+        blinded_claims::SaltedArray,
+        issuance::{SdInnerPayload, SdUnprotected},
+        key_binding::KbtCwt,
+        reexports::coset,
         verified::KbtCwtVerified,
     },
     time::{TimeClaims, verify_time_claims, verify_time_consistency},
@@ -16,7 +20,7 @@ use crate::{
 };
 use ciborium::{Value, value::Integer};
 use cose_key::confirmation::{CoseKeyConfirmationError, KeyConfirmation};
-use std::rc::Rc;
+use std::{borrow::Cow, rc::Rc};
 
 pub trait Verifier {
     type Error: core::error::Error + Send + Sync;
@@ -40,26 +44,14 @@ pub trait Verifier {
     #[cfg(not(any(feature = "ed25519", feature = "p256", feature = "p384")))]
     fn digest(&self, sd_hash_alg: SdHashAlg) -> Result<Rc<dyn digest::DynDigest>, SdCwtVerifierError<Self::Error>>;
 
-    /// Decrypts an AEAD encrypted disclosure, see https://ietf-wg-spice.github.io/draft-ietf-spice-sd-cwt/draft-ietf-spice-sd-cwt.html#name-encrypted-disclosures
-    ///
-    /// The decryption key is determined by local configuration, using the [crate::spec::aead::AeadEncryptedDisclosure::key_context]
-    /// if present, or by looking up the nonce or the authentication tag. The associated data MUST be zero-length.
-    ///
-    /// Returns:
-    /// * `Ok(None)` when this Verifier has no suitable key for it or does not support `alg`. The encrypted disclosure is
-    ///   then ignored and the claim it discloses stays redacted, for example for an inner Verifier to decrypt it. This is
-    ///   the default
-    /// * an error when this Verifier has a key for it but the decryption fails, which invalidates the whole SD-CWT
+    /// Decrypts the encrypted disclosures, see https://ietf-wg-spice.github.io/draft-ietf-spice-sd-cwt/draft-ietf-spice-sd-cwt.html#name-encrypted-disclosures
     #[cfg(feature = "aead")]
-    #[allow(clippy::type_complexity)]
-    fn decrypt_disclosure(
-        &self,
-        alg: crate::spec::aead::AeadAlgorithm,
-        encrypted: &crate::spec::aead::AeadEncryptedDisclosure,
-    ) -> Result<Option<Vec<u8>>, Box<dyn core::error::Error + Send + Sync>> {
-        let _ = (alg, encrypted);
-        Ok(None)
-    }
+    type Aead: ::aead::AeadInPlace;
+
+    /// The algorithm [Self::Aead] implements. The encrypted disclosures with another one are ignored and the claims they
+    /// disclose stay redacted
+    #[cfg(feature = "aead")]
+    fn aead_algorithm(&self) -> crate::spec::aead::AeadAlgorithm;
 
     /// Only verify the signatures and the time claims without trying to rebuild the whole ClaimSet which
     /// is expensive by requiring a lot of hashes
@@ -110,7 +102,7 @@ pub trait Verifier {
         >,
         SdCwtVerifierError<Self::Error>,
     > {
-        __verify_sd_kbt_batch(&[(raw_sd_kbt, params, holder_verifier)], cks, self)
+        __verify_sd_kbt_batch(&[(raw_sd_kbt, params, holder_verifier)], cks, self, &())
             .pop()
             .unwrap_or(Err(SdCwtVerifierError::ImplementationError(
                 "'__verify_sd_kbt_batch' should always return as much elements as given",
@@ -136,7 +128,69 @@ pub trait Verifier {
             SdCwtVerifierError<Self::Error>,
         >,
     > {
-        __verify_sd_kbt_batch(raw_sd_kbts, cks, self)
+        __verify_sd_kbt_batch(raw_sd_kbts, cks, self, &())
+    }
+
+    /// Like [Self::verify_sd_kbt] but also decrypts the encrypted disclosures with `key`, see
+    /// https://ietf-wg-spice.github.io/draft-ietf-spice-sd-cwt/draft-ietf-spice-sd-cwt.html#name-kbt-and-sd-cwt-verifier-val
+    ///
+    /// `key` is only used for the encrypted disclosures with the [Self::aead_algorithm] and the given `key_context`,
+    /// failing to decrypt one of them invalidates the whole SD-CWT. The others are ignored and the claims they disclose
+    /// stay redacted, for example for an inner Verifier to decrypt them. The decrypted ones are processed as if they were
+    /// in `sd_claims`.
+    #[cfg(feature = "aead")]
+    #[allow(clippy::type_complexity)]
+    fn verify_encrypted_sd_kbt(
+        &self,
+        raw_sd_kbt: &[u8],
+        params: &VerifierParams,
+        // not mandatory in case the verifier does not have access to it
+        holder_verifier: Option<&Self::HolderVerifier>,
+        cks: &cose_key::keyset::CoseKeySet,
+        key: &Self::Aead,
+        key_context: Option<&crate::spec::aead::AeadKeyContext>,
+    ) -> Result<
+        KbtCwtVerified<
+            Self::IssuerPayloadClaims,
+            Self::KbtPayloadClaims,
+            Self::IssuerProtectedClaims,
+            Self::IssuerUnprotectedClaims,
+            Self::KbtProtectedClaims,
+            Self::KbtUnprotectedClaims,
+        >,
+        SdCwtVerifierError<Self::Error>,
+    > {
+        let decryption = crate::aead::DisclosureDecryption {
+            alg: self.aead_algorithm(),
+            key,
+            key_context,
+        };
+        __verify_sd_kbt_batch(&[(raw_sd_kbt, params, holder_verifier)], cks, self, &decryption)
+            .pop()
+            .unwrap_or(Err(SdCwtVerifierError::ImplementationError(
+                "'__verify_sd_kbt_batch' should always return as much elements as given",
+            )))
+    }
+}
+
+/// Decrypts the encrypted disclosures of an SD-CWT
+pub trait DecryptDisclosures {
+    /// Appends the decrypted disclosures to the plaintext ones
+    fn decrypt<'d, Extra: CustomClaims, E: core::error::Error + Send + Sync>(
+        &self,
+        unprotected: &SdUnprotected<Extra>,
+        disclosures: &'d SaltedArray,
+    ) -> Result<Cow<'d, SaltedArray>, SdCwtVerifierError<E>>;
+}
+
+/// Without a key, the encrypted disclosures are ignored
+impl DecryptDisclosures for () {
+    fn decrypt<'d, Extra: CustomClaims, E: core::error::Error + Send + Sync>(
+        &self,
+        _: &SdUnprotected<Extra>,
+        disclosures: &'d SaltedArray,
+    ) -> Result<Cow<'d, SaltedArray>, SdCwtVerifierError<E>> {
+        Ok(Cow::Borrowed(disclosures))
     }
 }
 
@@ -156,6 +210,7 @@ fn __verify_sd_kbt_batch<
     raw_sd_kbts: &[(&[u8], &VerifierParams, Option<&HolderVerifier>)],
     cks: &cose_key::keyset::CoseKeySet,
     verifier: &(impl Verifier<Error = Error> + ?Sized),
+    decryption: &impl DecryptDisclosures,
 ) -> Vec<
     Result<
         KbtCwtVerified<IssuerPayloadClaims, KbtPayloadClaims, IssuerProtectedClaims, IssuerUnprotectedClaims, KbtProtectedClaims, KbtUnprotectedClaims>,
@@ -174,7 +229,7 @@ fn __verify_sd_kbt_batch<
         .zip(raw_sd_kbts)
         .map(|(shallow, (_, params, _))| {
             let (kbt, generic_sd_cwt_payload) = shallow?;
-            __verify_sd_kbt_claims(kbt, generic_sd_cwt_payload, params, verifier)
+            __verify_sd_kbt_claims(kbt, generic_sd_cwt_payload, params, verifier, decryption)
         })
         .collect()
 }
@@ -193,6 +248,7 @@ fn __verify_sd_kbt_claims<
     mut generic_sd_cwt_payload: Value,
     params: &VerifierParams,
     verifier: &(impl Verifier<Error = Error> + ?Sized),
+    decryption: &impl DecryptDisclosures,
 ) -> Result<
     KbtCwtVerified<IssuerPayloadClaims, KbtPayloadClaims, IssuerProtectedClaims, IssuerUnprotectedClaims, KbtProtectedClaims, KbtUnprotectedClaims>,
     SdCwtVerifierError<Error>,
@@ -274,8 +330,7 @@ fn __verify_sd_kbt_claims<
     let no_disclosures = SaltedArray::default();
     let disclosures = kbt_protected.kcwt.disclosures().unwrap_or(&no_disclosures);
     // decrypted disclosures are processed as if they were in 'sd_claims'
-    #[cfg(feature = "aead")]
-    let disclosures = &crate::aead::decrypt_disclosures(verifier, &kbt_protected.kcwt.sd_unprotected, disclosures)?;
+    let disclosures = &decryption.decrypt(&kbt_protected.kcwt.sd_unprotected, disclosures)?;
 
     // now verifying the disclosures
     {
@@ -1736,6 +1791,7 @@ mod tests {
         }
     }
 
+    #[cfg(not(feature = "aead"))]
     #[allow(dead_code, unused_variables, clippy::type_complexity)]
     fn should_be_object_safe(
         verifier: Box<
@@ -1749,6 +1805,26 @@ mod tests {
                     Error = std::convert::Infallible,
                     HolderSignature = ed25519_dalek::Signature,
                     HolderVerifier = ed25519_dalek::VerifyingKey,
+                >,
+        >,
+    ) {
+    }
+
+    #[cfg(feature = "aead")]
+    #[allow(dead_code, unused_variables, clippy::type_complexity)]
+    fn should_be_object_safe(
+        verifier: Box<
+            dyn Verifier<
+                    IssuerProtectedClaims = NoClaims,
+                    IssuerUnprotectedClaims = NoClaims,
+                    IssuerPayloadClaims = NoClaims,
+                    KbtProtectedClaims = NoClaims,
+                    KbtUnprotectedClaims = NoClaims,
+                    KbtPayloadClaims = NoClaims,
+                    Error = std::convert::Infallible,
+                    HolderSignature = ed25519_dalek::Signature,
+                    HolderVerifier = ed25519_dalek::VerifyingKey,
+                    Aead = aes_gcm::Aes128Gcm,
                 >,
         >,
     ) {
@@ -1856,6 +1932,13 @@ pub mod test_utils {
         type KbtPayloadClaims = U;
         type KbtProtectedClaims = NoClaims;
         type KbtUnprotectedClaims = NoClaims;
+        #[cfg(feature = "aead")]
+        type Aead = aes_gcm::Aes128Gcm;
+
+        #[cfg(feature = "aead")]
+        fn aead_algorithm(&self) -> crate::spec::aead::AeadAlgorithm {
+            crate::spec::aead::AeadAlgorithm::AES_128_GCM
+        }
     }
 
     impl<T: Select, U: CustomClaims> VerifierWithStatus for HybridVerifier<T, U> {

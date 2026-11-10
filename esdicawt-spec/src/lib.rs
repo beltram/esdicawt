@@ -117,6 +117,9 @@ pub enum EsdicawtSpecError {
     #[error("An authentication tag of {len} octets is not allowed for the AEAD algorithm {alg}")]
     InvalidAeadTagLength { alg: u16, len: usize },
     #[cfg(feature = "aead")]
+    #[error("A COSE Key Thumbprint of {0} octets is not supported, only 32, 48 or 64")]
+    InvalidAeadKeyThumbprintLength(usize),
+    #[cfg(feature = "aead")]
     #[error("A decrypted disclosure is not a valid bstr encoded disclosure")]
     InvalidDecryptedDisclosure,
     #[cfg(feature = "aead")]

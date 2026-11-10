@@ -6,9 +6,9 @@ pub use {
     verifier::{VerifiedStatusListToken, VerifierWithStatus, error::SdCwtStatusVerifierError, params::StatusListVerifierParams},
 };
 
-pub use crate::spec::reexports::coset;
 #[cfg(feature = "aead")]
-pub use aead::{AeadSealed, DisclosureEncryption, DisclosureEncryptor};
+pub use crate::aead::DisclosureEncryption;
+pub use crate::spec::reexports::coset;
 pub use cose_key;
 pub use esdicawt_spec as spec;
 pub use holder::{

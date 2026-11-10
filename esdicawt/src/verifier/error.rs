@@ -61,7 +61,7 @@ pub enum SdCwtVerifierError<CustomError: Send + Sync> {
     HasherNotFound(SdHashAlg),
     #[cfg(feature = "aead")]
     #[error("Failed decrypting a disclosure: {0}")]
-    DecryptionError(Box<dyn core::error::Error + Send + Sync>),
+    DecryptionError(::aead::Error),
     #[error(transparent)]
     CustomError(CustomError),
     #[error("{0}")]

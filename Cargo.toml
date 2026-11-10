@@ -31,6 +31,8 @@ pkcs8 = "0.10"
 rand = "0.8"
 rand_core = "0.6"
 getrandom = "0.2"
+aead = { version = "0.5", default-features = false, features = ["std"] }
+aes-gcm = "0.10"
 
 # codec
 serde = "1.0"

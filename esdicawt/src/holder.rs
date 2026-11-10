@@ -43,7 +43,15 @@ pub trait Holder {
     type KbtUnprotectedClaims: CustomClaims;
     type KbtPayloadClaims: CustomClaims;
 
+    /// Encrypts the disclosures selected in [Self::new_encrypted_presentation_raw]
+    #[cfg(feature = "aead")]
+    type Aead: ::aead::AeadInPlace;
+
     fn cwt_algorithm(&self) -> coset::iana::Algorithm;
+
+    /// The algorithm [Self::Aead] implements, carried by the `sd_aead` header parameter
+    #[cfg(feature = "aead")]
+    fn aead_algorithm(&self) -> crate::spec::aead::AeadAlgorithm;
 
     #[cfg(any(feature = "ed25519", feature = "p256", feature = "p384"))]
     fn digest(&self, sd_hash_alg: SdHashAlg) -> Result<Rc<dyn digest::DynDigest>, SdCwtHolderError<Self::Error>> {
@@ -304,22 +312,25 @@ pub trait Holder {
         Ok(KbtCwt::from_cbor_bytes(&sign1)?)
     }
 
-    /// Like [Self::new_presentation_raw] but the presented disclosures selected by `encryption` are AEAD encrypted.
+    /// Like [Self::new_presentation_raw] but the presented disclosures selected by `encryption` are encrypted with `key`,
+    /// shared with the target Verifier. `csprng` generates the nonces.
     /// See https://ietf-wg-spice.github.io/draft-ietf-spice-sd-cwt/draft-ietf-spice-sd-cwt.html#name-encrypted-disclosures
     #[cfg(feature = "aead")]
     #[allow(clippy::type_complexity)]
     fn new_encrypted_presentation_raw(
         &self,
+        csprng: &mut dyn rand_core::CryptoRngCore,
         mut sd_cwt: SdCwtVerified<Self::IssuerPayloadClaims, Self::Hasher, Self::IssuerProtectedClaims, Self::IssuerUnprotectedClaims>,
         params: HolderParams<Self::KbtPayloadClaims, Self::KbtProtectedClaims, Self::KbtUnprotectedClaims>,
         encryption: &crate::DisclosureEncryption,
+        key: &Self::Aead,
     ) -> Result<Vec<u8>, SdCwtHolderError<Self::Error>> {
         let unprotected = &mut sd_cwt.0.sd_unprotected;
         if let Some(sd_claims) = unprotected.sd_claims.take() {
             let hasher = self.digest(sd_cwt.0.protected.to_value()?.sd_alg())?;
             let payload = sd_cwt.0.payload.upcast_value()?;
             unprotected.sd_claims = Some(params.presentation.try_select_disclosures::<Self::Error>(&payload, sd_claims, &hasher)?);
-            encryption.try_encrypt::<_, Self::Error>(&payload, unprotected, &hasher)?;
+            encryption.try_encrypt::<_, _, Self::Error>(self.aead_algorithm(), key, csprng, &payload, unprotected, &hasher)?;
         }
         // the remaining plaintext disclosures are already selected
         let params = HolderParams {
@@ -329,14 +340,17 @@ pub trait Holder {
         self.new_presentation_raw(sd_cwt, params)
     }
 
-    /// Like [Self::new_presentation] but the presented disclosures selected by `encryption` are AEAD encrypted.
+    /// Like [Self::new_presentation] but the presented disclosures selected by `encryption` are encrypted with `key`,
+    /// see [Self::new_encrypted_presentation_raw]
     #[cfg(feature = "aead")]
     #[allow(clippy::type_complexity)]
     fn new_encrypted_presentation(
         &self,
+        csprng: &mut dyn rand_core::CryptoRngCore,
         sd_cwt: SdCwtVerified<Self::IssuerPayloadClaims, Self::Hasher, Self::IssuerProtectedClaims, Self::IssuerUnprotectedClaims>,
         params: HolderParams<Self::KbtPayloadClaims, Self::KbtProtectedClaims, Self::KbtUnprotectedClaims>,
         encryption: &crate::DisclosureEncryption,
+        key: &Self::Aead,
     ) -> Result<
         KbtCwt<
             Self::IssuerPayloadClaims,
@@ -349,7 +363,7 @@ pub trait Holder {
         >,
         SdCwtHolderError<Self::Error>,
     > {
-        let sign1 = self.new_encrypted_presentation_raw(sd_cwt, params, encryption)?;
+        let sign1 = self.new_encrypted_presentation_raw(csprng, sd_cwt, params, encryption, key)?;
         Ok(KbtCwt::from_cbor_bytes(&sign1)?)
     }
 }
@@ -618,6 +632,7 @@ mod tests {
         }
     }
 
+    #[cfg(not(feature = "aead"))]
     #[allow(dead_code, unused_variables, clippy::type_complexity)]
     fn should_be_object_safe(
         holder: Box<
@@ -633,6 +648,28 @@ mod tests {
                     Signature = ed25519_dalek::Signature,
                     Verifier = ed25519_dalek::VerifyingKey,
                     Hasher = sha2::Sha256,
+                >,
+        >,
+    ) {
+    }
+
+    #[cfg(feature = "aead")]
+    #[allow(dead_code, unused_variables, clippy::type_complexity)]
+    fn should_be_object_safe(
+        holder: Box<
+            dyn Holder<
+                    IssuerProtectedClaims = NoClaims,
+                    IssuerUnprotectedClaims = NoClaims,
+                    IssuerPayloadClaims = NoClaims,
+                    KbtProtectedClaims = NoClaims,
+                    KbtUnprotectedClaims = NoClaims,
+                    KbtPayloadClaims = NoClaims,
+                    Error = std::convert::Infallible,
+                    Signer = ed25519_dalek::SigningKey,
+                    Signature = ed25519_dalek::Signature,
+                    Verifier = ed25519_dalek::VerifyingKey,
+                    Hasher = sha2::Sha256,
+                    Aead = aes_gcm::Aes128Gcm,
                 >,
         >,
     ) {
@@ -744,6 +781,8 @@ pub mod test_utils {
         type KbtPayloadClaims = U;
         type KbtProtectedClaims = NoClaims;
         type KbtUnprotectedClaims = NoClaims;
+        #[cfg(feature = "aead")]
+        type Aead = aes_gcm::Aes128Gcm;
 
         fn new(signing_key: Self::Signer) -> Self {
             Self {
@@ -759,6 +798,11 @@ pub mod test_utils {
 
         fn cwt_algorithm(&self) -> coset::iana::Algorithm {
             coset::iana::Algorithm::EdDSA
+        }
+
+        #[cfg(feature = "aead")]
+        fn aead_algorithm(&self) -> crate::spec::aead::AeadAlgorithm {
+            crate::spec::aead::AeadAlgorithm::AES_128_GCM
         }
 
         fn verifier(&self) -> &Self::Verifier {

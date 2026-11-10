@@ -12,12 +12,12 @@ pem = ["dep:pkcs8", "pkcs8?/pem", "cose-key/pem"]
 ed25519 = ["dep:ed25519-dalek", "cose-key/ed25519", "dep:sha2"]
 p256 = ["dep:p256", "cose-key/p256", "dep:sha2"]
 p384 = ["dep:p384", "cose-key/p384", "dep:sha2"]
-test-utils = ["esdicawt-spec/test-utils", "ed25519", "p256", "p384", "dep:sha2", "cose-key/ed25519", "cose-key/p256", "cose-key/p384", "status"]
+test-utils = ["esdicawt-spec/test-utils", "ed25519", "p256", "p384", "dep:sha2", "cose-key/ed25519", "cose-key/p256", "cose-key/p384", "status", "dep:aes-gcm"]
 status = ["dep:status-list", "esdicawt-spec/status"]
 backward = ["esdicawt-spec/backward"]
 test-vectors = []
 # encrypted disclosures, see https://ietf-wg-spice.github.io/draft-ietf-spice-sd-cwt/draft-ietf-spice-sd-cwt.html#name-encrypted-disclosures
-aead = ["esdicawt-spec/aead"]
+aead = ["esdicawt-spec/aead", "dep:aead"]
 
 [dependencies]
 esdicawt-spec.workspace = true
@@ -36,6 +36,9 @@ status-list = { workspace = true, optional = true }
 url.workspace = true
 seabored.workspace = true
 serde_bytes.workspace = true
+aead = { workspace = true, optional = true }
+# AEAD_AES_128_GCM for the test utils
+aes-gcm = { workspace = true, optional = true }
 
 sha2 = { optional = true, workspace = true }
 ed25519-dalek = { optional = true, workspace = true, features = ["rand_core", "pem", "serde", "batch"] }
@@ -65,7 +68,7 @@ strum.workspace = true
 strum_macros.workspace = true
 anyhow.workspace = true
 itertools = "0.15"
-aes-gcm = "0.10"
+aes-gcm.workspace = true
 
 [target.'cfg(not(target_arch = "wasm32"))'.dev-dependencies]
 criterion = "0.6"

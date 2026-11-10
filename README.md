@@ -370,12 +370,24 @@ for example, so that only an inner Verifier holding the right AEAD key can read 
 / sd_aead / 172 : 1, / AEAD_AES_128_GCM /
 ```
 
-The AEAD is pluggable:
-* the Holder calls `Holder::new_encrypted_presentation` with a `DisclosureEncryption`: a `DisclosureEncryptor` and a
-  predicate selecting the presented disclosures to encrypt. The disclosures nested in an encrypted one are encrypted too.
-* the Verifier implements `Verifier::decrypt_disclosure`. Encrypted disclosures it has no key for are ignored and their
-  claims stay redacted, but failing to decrypt one it has a key for invalidates the whole SD-CWT. The decrypted ones are
-  then processed as if they were in `sd_claims`.
+The AEAD comes from the [`aead`](https://docs.rs/aead) crate, as the `Aead` associated type of the `Holder` and the
+`Verifier`, along with `aead_algorithm`, the IANA AEAD algorithm it implements:
+
+```rust,ignore
+type Aead = aes_gcm::Aes128Gcm;
+
+fn aead_algorithm(&self) -> AeadAlgorithm {
+    AeadAlgorithm::AES_128_GCM
+}
+```
+
+* the Holder calls `Holder::new_encrypted_presentation` with a random number generator for the nonces, a
+  `DisclosureEncryption` (an optional key context and a predicate selecting the presented disclosures to encrypt) and a
+  reference to the key shared with the Verifier. The disclosures nested in an encrypted one are encrypted too.
+* the Verifier calls `Verifier::verify_encrypted_sd_kbt` with a reference to that key and its optional key context. It
+  only applies to the encrypted disclosures with this key context and the Verifier's algorithm: failing to decrypt one
+  of them invalidates the whole SD-CWT. The others are ignored and their claims stay redacted, as with
+  `Verifier::verify_sd_kbt`. The decrypted ones are then processed as if they were in `sd_claims`.
 
 #### Verifier
 
@@ -446,7 +458,7 @@ impl<T: Select, U: CustomClaims> Verifier for Ed25519Verifier<T, U> {
 }
 ```
 
-That is the whole impl — `digest` is defaulted when a cipher-suite feature is on. `Issuer` also needs `new`, `signer`, `cwt_algorithm`, `hash_algorithm`; `Holder` needs `new`, `signer`, `verifier`, `cwt_algorithm`. Ed25519 and P-256 impls are behind `feature = "test-utils"` and in `esdicawt/tests/crypto.rs`, the best thing to copy. Keys for the Holder and Verifier go in a COSE key set: `CoseKeySet::builder().with(&issuer_verifying_key)?.build()`.
+That is the whole impl — `digest` is defaulted when a cipher-suite feature is on. `Issuer` also needs `new`, `signer`, `cwt_algorithm`, `hash_algorithm`; `Holder` needs `new`, `signer`, `verifier`, `cwt_algorithm`. With the `aead` feature, the `Holder` and the `Verifier` also need `Aead` and `aead_algorithm` (see [Encrypted disclosures](#encrypted-disclosures)). Ed25519 and P-256 impls are behind `feature = "test-utils"` and in `esdicawt/tests/crypto.rs`, the best thing to copy. Keys for the Holder and Verifier go in a COSE key set: `CoseKeySet::builder().with(&issuer_verifying_key)?.build()`.
 
 ## Draft conformance
 

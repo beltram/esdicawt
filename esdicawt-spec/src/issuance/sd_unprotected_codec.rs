@@ -67,7 +67,7 @@ impl<'de, Extra: CustomClaims> serde::Deserialize<'de> for SdUnprotected<Extra> 
                 let mut extra = vec![];
                 let mut sd_claims = None;
                 #[cfg(feature = "aead")]
-                let (mut sd_aead_encrypted_claims, mut sd_aead) = (None, None);
+                let (mut sd_aead_encrypted_claims, mut sd_aead): (Option<crate::aead::AeadEncryptedArray>, Option<crate::aead::AeadAlgorithm>) = (None, None);
                 while let Some((k, v)) = map.next_entry::<Value, Value>()? {
                     if matches!(k, Value::Integer(label) if label == COSE_HEADER_SD_CLAIMS.into()) {
                         let salted_array = v
@@ -93,6 +93,13 @@ impl<'de, Extra: CustomClaims> serde::Deserialize<'de> for SdUnprotected<Extra> 
                         }
                         extra.push((k, v));
                     }
+                }
+
+                // the tag length depends on the algorithm
+                #[cfg(feature = "aead")]
+                if let Some(encrypted) = &sd_aead_encrypted_claims {
+                    let alg = sd_aead.unwrap_or_default();
+                    encrypted.iter().try_for_each(|e| alg.check_tag_len(e.tag.len())).map_err(A::Error::custom)?;
                 }
 
                 let extra = if extra.is_empty() {
@@ -240,6 +247,29 @@ mod tests {
                 let bytes = duplicate.to_cbor_bytes().unwrap();
                 assert!(SdUnprotected::<NoClaims>::from_cbor_bytes(&bytes).is_err());
             }
+        }
+
+        #[test]
+        fn should_reject_short_tag() {
+            let short = |tag_len| {
+                AeadEncryptedArray::new(vec![AeadEncryptedDisclosure {
+                    tag: vec![3; tag_len],
+                    ..encrypted().first().unwrap().clone()
+                }])
+            };
+            // AEAD_AES_128_GCM by default
+            let bytes = aead_unprotected(None, short(12), None).to_cbor_bytes().unwrap();
+            let err = SdUnprotected::<NoClaims>::from_cbor_bytes(&bytes).unwrap_err();
+            assert!(
+                err.to_string().contains("An authentication tag of 12 octets is not allowed for the AEAD algorithm 1"),
+                "{err}"
+            );
+            // AEAD_AEGIS128X2 requires a 32 octets tag
+            let aegis128x2 = AeadAlgorithm::try_from(34).ok();
+            let bytes = aead_unprotected(None, short(16), aegis128x2).to_cbor_bytes().unwrap();
+            assert!(SdUnprotected::<NoClaims>::from_cbor_bytes(&bytes).is_err());
+            let bytes = aead_unprotected(None, short(32), aegis128x2).to_cbor_bytes().unwrap();
+            assert!(SdUnprotected::<NoClaims>::from_cbor_bytes(&bytes).is_ok());
         }
 
         #[test]
