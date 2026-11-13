@@ -211,7 +211,7 @@ mod tests {
         type Aead = aes_gcm::Aes128Gcm;
 
         fn aead_algorithm(&self) -> AeadAlgorithm {
-            AeadAlgorithm::AES_128_GCM
+            AeadAlgorithm::Aes128Gcm
         }
     }
 
@@ -361,7 +361,7 @@ mod tests {
             let mut sd_cwt = SdCwtIssued::<Value, sha2::Sha256>::from_cbor_bytes(&self.sd_cwt).unwrap();
             let payload = sd_cwt.payload.upcast_value().unwrap();
             let hasher = crate::default_digest(SdHashAlg::Sha256).unwrap();
-            encryption.try_encrypt(AeadAlgorithm::AES_128_GCM, key, &mut rand::thread_rng(), &payload, &mut sd_cwt.sd_unprotected, &hasher)
+            encryption.try_encrypt(AeadAlgorithm::Aes128Gcm, key, &mut rand::thread_rng(), &payload, &mut sd_cwt.sd_unprotected, &hasher)
         }
 
         fn present(&self, encryption: Option<DisclosureEncryption>) -> Vec<u8> {
@@ -494,7 +494,7 @@ mod tests {
         let sd_cwt = kbt.sd_cwt().unwrap();
         assert_eq!(sd_cwt.encrypted_disclosures().unwrap().len(), 2);
         assert_eq!(sd_cwt.disclosures().unwrap().len(), NB_DISCLOSURES - 2);
-        assert_eq!(sd_cwt.sd_unprotected.sd_aead, Some(AeadAlgorithm::AES_128_GCM));
+        assert_eq!(sd_cwt.sd_unprotected.sd_aead, Some(AeadAlgorithm::Aes128Gcm));
 
         let claimset = ctx.decrypt(&sd_kbt, KEY, None).unwrap();
         assert_eq!(claimset, sorted(fully_disclosed()));

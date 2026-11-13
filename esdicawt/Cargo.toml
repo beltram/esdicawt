@@ -16,7 +16,7 @@ test-utils = ["esdicawt-spec/test-utils", "ed25519", "p256", "p384", "dep:sha2",
 status = ["dep:status-list", "esdicawt-spec/status"]
 backward = ["esdicawt-spec/backward"]
 test-vectors = []
-# encrypted disclosures, see https://ietf-wg-spice.github.io/draft-ietf-spice-sd-cwt/draft-ietf-spice-sd-cwt.html#name-encrypted-disclosures
+# encrypted disclosures
 aead = ["esdicawt-spec/aead", "dep:aead"]
 
 [dependencies]
@@ -37,7 +37,6 @@ url.workspace = true
 seabored.workspace = true
 serde_bytes.workspace = true
 aead = { workspace = true, optional = true }
-# AEAD_AES_128_GCM for the test utils
 aes-gcm = { workspace = true, optional = true }
 
 sha2 = { optional = true, workspace = true }

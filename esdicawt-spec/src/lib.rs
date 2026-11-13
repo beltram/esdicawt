@@ -114,6 +114,9 @@ pub enum EsdicawtSpecError {
     #[error("The AEAD algorithm {0} MUST NOT be used for encrypted disclosures")]
     ForbiddenAeadAlgorithm(u16),
     #[cfg(feature = "aead")]
+    #[error("The AEAD algorithm {0} is not registered in the IANA AEAD Algorithms registry")]
+    UnknownAeadAlgorithm(u16),
+    #[cfg(feature = "aead")]
     #[error("An authentication tag of {len} octets is not allowed for the AEAD algorithm {alg}")]
     InvalidAeadTagLength { alg: u16, len: usize },
     #[cfg(feature = "aead")]

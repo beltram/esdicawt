@@ -209,8 +209,8 @@ mod tests {
         #[test]
         fn should_roundtrip() {
             let cases = [
-                aead_unprotected(None, Some(encrypted()), Some(AeadAlgorithm::AES_256_GCM)),
-                aead_unprotected(Some(salted_array()), Some(encrypted()), Some(AeadAlgorithm::AES_128_GCM)),
+                aead_unprotected(None, Some(encrypted()), Some(AeadAlgorithm::Aes256Gcm)),
+                aead_unprotected(Some(salted_array()), Some(encrypted()), Some(AeadAlgorithm::Aes128Gcm)),
                 aead_unprotected(Some(salted_array()), Some(encrypted()), None),
             ];
             for case in cases {
@@ -221,7 +221,7 @@ mod tests {
 
         #[test]
         fn should_use_registered_labels() {
-            let bytes = aead_unprotected(Some(salted_array()), Some(encrypted()), Some(AeadAlgorithm::CHACHA20_POLY1305))
+            let bytes = aead_unprotected(Some(salted_array()), Some(encrypted()), Some(AeadAlgorithm::ChaCha20Poly1305))
                 .to_cbor_bytes()
                 .unwrap();
             let map = Value::from_cbor_bytes(&bytes).unwrap().into_map().unwrap();
@@ -265,7 +265,7 @@ mod tests {
                 "{err}"
             );
             // AEAD_AEGIS128X2 requires a 32 octets tag
-            let aegis128x2 = AeadAlgorithm::try_from(34).ok();
+            let aegis128x2 = Some(AeadAlgorithm::Aegis128X2);
             let bytes = aead_unprotected(None, short(16), aegis128x2).to_cbor_bytes().unwrap();
             assert!(SdUnprotected::<NoClaims>::from_cbor_bytes(&bytes).is_err());
             let bytes = aead_unprotected(None, short(32), aegis128x2).to_cbor_bytes().unwrap();
@@ -274,7 +274,7 @@ mod tests {
 
         #[test]
         fn should_reject_invalid_sd_aead() {
-            for invalid in [Value::from(-1), Value::from(65536), Value::from("A128GCM")] {
+            for invalid in [Value::from(-1), Value::from(65536), Value::from("A128GCM"), Value::from(3), Value::from(40)] {
                 let bytes = Value::Map(vec![(Value::from(172), invalid)]).to_cbor_bytes().unwrap();
                 assert!(SdUnprotected::<NoClaims>::from_cbor_bytes(&bytes).is_err());
             }

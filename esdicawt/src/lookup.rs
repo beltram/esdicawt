@@ -287,7 +287,7 @@ mod tests {
 
             #[cfg(feature = "aead")]
             fn aead_algorithm(&self) -> crate::spec::aead::AeadAlgorithm {
-                crate::spec::aead::AeadAlgorithm::AES_128_GCM
+                crate::spec::aead::AeadAlgorithm::Aes128Gcm
             }
         }
         let verifier = Ed25519Verifier::new();

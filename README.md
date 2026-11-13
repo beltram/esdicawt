@@ -377,7 +377,7 @@ The AEAD comes from the [`aead`](https://docs.rs/aead) crate, as the `Aead` asso
 type Aead = aes_gcm::Aes128Gcm;
 
 fn aead_algorithm(&self) -> AeadAlgorithm {
-    AeadAlgorithm::AES_128_GCM
+    AeadAlgorithm::Aes128Gcm
 }
 ```
 

@@ -6,20 +6,80 @@ use ciborium::Value;
 use cose_key::thumbprint::CoseKeyThumbprint;
 use serde::ser::SerializeSeq;
 
-/// An AEAD algorithm from the [IANA AEAD Algorithms registry](https://www.iana.org/assignments/aead-parameters/aead-parameters.xhtml),
-/// carried by the `sd_aead` header parameter.
-///
-/// The algorithms which MUST NOT be used cannot be represented.
-/// See https://ietf-wg-spice.github.io/draft-ietf-spice-sd-cwt/draft-ietf-spice-sd-cwt.html#name-choice-of-aead-algorithms
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
-#[serde(try_from = "u16", into = "u16")]
-pub struct AeadAlgorithm(u16);
+macro_rules! aead_algorithms {
+    ($($(#[$doc:meta])* $variant:ident = $id:literal),+ $(,)?) => {
+        /// An AEAD algorithm from the [IANA AEAD Algorithms registry](https://www.iana.org/assignments/aead-parameters/aead-parameters.xhtml),
+        /// carried by the `sd_aead` header parameter.
+        ///
+        /// Only the registered algorithms which are not excluded can be represented: "implementations
+        /// MUST NOT use algorithms 3 through 14, 18, 19, 21, 22, 24, 25, 27, or 28".
+        /// See https://ietf-wg-spice.github.io/draft-ietf-spice-sd-cwt/draft-ietf-spice-sd-cwt.html#name-choice-of-aead-algorithms
+        #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
+        #[serde(try_from = "u16", into = "u16")]
+        #[repr(u16)]
+        pub enum AeadAlgorithm {
+            $($(#[$doc])* $variant = $id,)+
+        }
+
+        impl TryFrom<u16> for AeadAlgorithm {
+            type Error = EsdicawtSpecError;
+
+            fn try_from(id: u16) -> Result<Self, Self::Error> {
+                match id {
+                    $($id => Ok(Self::$variant),)+
+                    3..=14 | 18 | 19 | 21 | 22 | 24 | 25 | 27 | 28 => Err(EsdicawtSpecError::ForbiddenAeadAlgorithm(id)),
+                    _ => Err(EsdicawtSpecError::UnknownAeadAlgorithm(id)),
+                }
+            }
+        }
+    };
+}
+
+aead_algorithms! {
+    /// AEAD_AES_128_GCM, see <https://www.rfc-editor.org/rfc/rfc5116.html>
+    ///
+    /// "If present, the algorithm of the `sd_aead` [...] header field is used, or AEAD_AES_128_GCM if no algorithm was specified."
+    #[default]
+    Aes128Gcm = 1,
+    /// AEAD_AES_256_GCM, see <https://www.rfc-editor.org/rfc/rfc5116.html>
+    Aes256Gcm = 2,
+    /// AEAD_AES_SIV_CMAC_256, see <https://www.rfc-editor.org/rfc/rfc5297.html>
+    AesSivCmac256 = 15,
+    /// AEAD_AES_SIV_CMAC_384, see <https://www.rfc-editor.org/rfc/rfc5297.html>
+    AesSivCmac384 = 16,
+    /// AEAD_AES_SIV_CMAC_512, see <https://www.rfc-editor.org/rfc/rfc5297.html>
+    AesSivCmac512 = 17,
+    /// AEAD_AES_128_OCB_TAGLEN128, see <https://www.rfc-editor.org/rfc/rfc7253.html>
+    Aes128OcbTaglen128 = 20,
+    /// AEAD_AES_192_OCB_TAGLEN128, see <https://www.rfc-editor.org/rfc/rfc7253.html>
+    Aes192OcbTaglen128 = 23,
+    /// AEAD_AES_256_OCB_TAGLEN128, see <https://www.rfc-editor.org/rfc/rfc7253.html>
+    Aes256OcbTaglen128 = 26,
+    /// AEAD_CHACHA20_POLY1305, see <https://www.rfc-editor.org/rfc/rfc8439.html>
+    ChaCha20Poly1305 = 29,
+    /// AEAD_AES_128_GCM_SIV, see <https://www.rfc-editor.org/rfc/rfc8452.html>
+    Aes128GcmSiv = 30,
+    /// AEAD_AES_256_GCM_SIV, see <https://www.rfc-editor.org/rfc/rfc8452.html>
+    Aes256GcmSiv = 31,
+    /// AEAD_AEGIS128L, see <https://www.rfc-editor.org/rfc/rfc10032.html>
+    Aegis128L = 32,
+    /// AEAD_AEGIS256, see <https://www.rfc-editor.org/rfc/rfc10032.html>
+    Aegis256 = 33,
+    /// AEAD_AEGIS128X2, see <https://www.rfc-editor.org/rfc/rfc10032.html>
+    Aegis128X2 = 34,
+    /// AEAD_AEGIS128X4, see <https://www.rfc-editor.org/rfc/rfc10032.html>
+    Aegis128X4 = 35,
+    /// AEAD_AEGIS256X2, see <https://www.rfc-editor.org/rfc/rfc10032.html>
+    Aegis256X2 = 36,
+    /// AEAD_AEGIS256X4, see <https://www.rfc-editor.org/rfc/rfc10032.html>
+    Aegis256X4 = 37,
+    /// AEAD_XCHACHA20_POLY1305, see <https://datatracker.ietf.org/doc/html/draft-irtf-cfrg-xchacha-03>
+    XChaCha20Poly1305 = 38,
+    /// AEAD_XAES_256_GCM, see <https://c2sp.org/XAES-256-GCM@v1.0.1>
+    XAes256Gcm = 39,
+}
 
 impl AeadAlgorithm {
-    pub const AES_128_GCM: Self = Self(1);
-    pub const AES_256_GCM: Self = Self(2);
-    pub const CHACHA20_POLY1305: Self = Self(29);
-
     /// Minimum length of an authentication tag
     pub const MIN_TAG_LEN: usize = 16;
 
@@ -28,44 +88,24 @@ impl AeadAlgorithm {
 
     /// The IANA AEAD Algorithm number
     pub const fn id(self) -> u16 {
-        self.0
+        self as u16
     }
 
     /// "implementations MUST NOT use any AEAD algorithm with a tag length less than 16 octets" and
     /// "Implementations using the AEGIS algorithms containing an X MUST only use the 256-bit tag variant"
     pub fn check_tag_len(self, len: usize) -> EsdicawtSpecResult<()> {
-        // AEAD_AEGIS128X2, AEAD_AEGIS128X4, AEAD_AEGIS256X2, AEAD_AEGIS256X4
-        let is_aegis_x = matches!(self.0, 34..=37);
+        let is_aegis_x = matches!(self, Self::Aegis128X2 | Self::Aegis128X4 | Self::Aegis256X2 | Self::Aegis256X4);
         let valid = if is_aegis_x { len == Self::AEGIS_X_TAG_LEN } else { len >= Self::MIN_TAG_LEN };
         if !valid {
-            return Err(EsdicawtSpecError::InvalidAeadTagLength { alg: self.0, len });
+            return Err(EsdicawtSpecError::InvalidAeadTagLength { alg: self.id(), len });
         }
         Ok(())
     }
 }
 
-impl Default for AeadAlgorithm {
-    /// "If present, the algorithm of the `sd_aead` [...] header field is used, or AEAD_AES_128_GCM if no algorithm was specified."
-    fn default() -> Self {
-        Self::AES_128_GCM
-    }
-}
-
-impl TryFrom<u16> for AeadAlgorithm {
-    type Error = EsdicawtSpecError;
-
-    /// "implementations MUST NOT use algorithms 3 through 14, 18, 19, 21, 22, 24, 25, 27, or 28"
-    fn try_from(id: u16) -> Result<Self, Self::Error> {
-        if matches!(id, 3..=14 | 18 | 19 | 21 | 22 | 24 | 25 | 27 | 28) {
-            return Err(EsdicawtSpecError::ForbiddenAeadAlgorithm(id));
-        }
-        Ok(Self(id))
-    }
-}
-
 impl From<AeadAlgorithm> for u16 {
     fn from(alg: AeadAlgorithm) -> Self {
-        alg.0
+        alg.id()
     }
 }
 
@@ -325,38 +365,47 @@ mod tests {
             // nor decoded
             assert!(AeadAlgorithm::from_cbor_bytes(&alg.to_cbor_bytes().unwrap()).is_err());
         }
+        // all the others registered in IANA
         for alg in [1, 2, 15, 16, 17, 20, 23, 26, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39] {
-            assert_eq!(AeadAlgorithm::try_from(alg).unwrap().id(), alg);
+            let algorithm = AeadAlgorithm::try_from(alg).unwrap();
+            assert_eq!(algorithm.id(), alg);
+            assert_eq!(AeadAlgorithm::from_cbor_bytes(&alg.to_cbor_bytes().unwrap()).unwrap(), algorithm);
+        }
+        // unassigned and private use
+        for alg in [0, 40, 32767, 32768, u16::MAX] {
+            assert!(matches!(AeadAlgorithm::try_from(alg), Err(EsdicawtSpecError::UnknownAeadAlgorithm(a)) if a == alg));
+            assert!(AeadAlgorithm::from_cbor_bytes(&alg.to_cbor_bytes().unwrap()).is_err());
         }
     }
 
     #[test]
     fn should_check_tag_length() {
-        assert!(AeadAlgorithm::AES_128_GCM.check_tag_len(16).is_ok());
-        assert!(AeadAlgorithm::AES_128_GCM.check_tag_len(32).is_ok());
+        assert!(AeadAlgorithm::Aes128Gcm.check_tag_len(16).is_ok());
+        assert!(AeadAlgorithm::Aes128Gcm.check_tag_len(32).is_ok());
         assert!(matches!(
-            AeadAlgorithm::AES_128_GCM.check_tag_len(12),
+            AeadAlgorithm::Aes128Gcm.check_tag_len(12),
             Err(EsdicawtSpecError::InvalidAeadTagLength { alg: 1, len: 12 })
         ));
-        for aegis_x in 34..=37 {
-            assert!(AeadAlgorithm(aegis_x).check_tag_len(32).is_ok());
-            assert!(AeadAlgorithm(aegis_x).check_tag_len(16).is_err());
+        use AeadAlgorithm::*;
+        for aegis_x in [Aegis128X2, Aegis128X4, Aegis256X2, Aegis256X4] {
+            assert!(aegis_x.check_tag_len(32).is_ok());
+            assert!(aegis_x.check_tag_len(16).is_err());
         }
         // non 'X' AEGIS
-        assert!(AeadAlgorithm(32).check_tag_len(16).is_ok());
-        assert!(AeadAlgorithm(33).check_tag_len(16).is_ok());
+        assert!(Aegis128L.check_tag_len(16).is_ok());
+        assert!(Aegis256.check_tag_len(16).is_ok());
     }
 
     #[test]
     fn default_algorithm_should_be_aes_128_gcm() {
-        assert_eq!(AeadAlgorithm::default(), AeadAlgorithm(1));
+        assert_eq!(AeadAlgorithm::default(), AeadAlgorithm::Aes128Gcm);
+        assert_eq!(AeadAlgorithm::default().id(), 1);
     }
 
     #[test]
-    fn algorithm_should_be_uint_of_size_2() {
-        assert_eq!(AeadAlgorithm(29).to_cbor_bytes().unwrap(), vec![0x18, 29]);
-        assert_eq!(AeadAlgorithm::from_cbor_bytes(&[0x18, 29]).unwrap(), AeadAlgorithm(29));
-        assert_eq!(AeadAlgorithm::from_cbor_bytes(&[0x19, 0xff, 0xff]).unwrap(), AeadAlgorithm(u16::MAX));
+    fn algorithm_should_be_a_uint() {
+        assert_eq!(AeadAlgorithm::ChaCha20Poly1305.to_cbor_bytes().unwrap(), vec![0x18, 29]);
+        assert_eq!(AeadAlgorithm::from_cbor_bytes(&[0x18, 29]).unwrap(), AeadAlgorithm::ChaCha20Poly1305);
         // 65536
         assert!(AeadAlgorithm::from_cbor_bytes(&[0x1a, 0x00, 0x01, 0x00, 0x00]).is_err());
         // -1

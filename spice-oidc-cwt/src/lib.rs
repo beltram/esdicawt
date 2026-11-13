@@ -914,7 +914,7 @@ mod ed25519 {
 
         #[cfg(feature = "aead")]
         fn aead_algorithm(&self) -> esdicawt::spec::aead::AeadAlgorithm {
-            esdicawt::spec::aead::AeadAlgorithm::AES_128_GCM
+            esdicawt::spec::aead::AeadAlgorithm::Aes128Gcm
         }
         type KbtProtectedClaims = NoClaims;
 

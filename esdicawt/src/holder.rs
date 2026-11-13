@@ -802,7 +802,7 @@ pub mod test_utils {
 
         #[cfg(feature = "aead")]
         fn aead_algorithm(&self) -> crate::spec::aead::AeadAlgorithm {
-            crate::spec::aead::AeadAlgorithm::AES_128_GCM
+            crate::spec::aead::AeadAlgorithm::Aes128Gcm
         }
 
         fn verifier(&self) -> &Self::Verifier {
