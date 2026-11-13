@@ -205,8 +205,8 @@ mod tests {
     }
 
     fn new_sd_cwt<T: Select>(payload: T) -> (SdCwtIssued<T, sha2::Sha256>, ed25519_dalek::SigningKey, ed25519_dalek::VerifyingKey) {
-        let issuer_signing_key = ed25519_dalek::SigningKey::generate(&mut rand::thread_rng());
-        let holder_signing_key = ed25519_dalek::SigningKey::generate(&mut rand::thread_rng());
+        let issuer_signing_key = ed25519_dalek::SigningKey::generate(&mut rand::rng());
+        let holder_signing_key = ed25519_dalek::SigningKey::generate(&mut rand::rng());
 
         let issuer = Ed25519Issuer::new(issuer_signing_key.clone());
 
@@ -231,7 +231,7 @@ mod tests {
                 uri: "https://example.com/statuslists/1".parse().unwrap(),
             },
         };
-        let sd_cwt = issuer.issue_cwt(&mut rand::thread_rng(), issue_params).unwrap();
+        let sd_cwt = issuer.issue_cwt(&mut rand::rng(), issue_params).unwrap();
         (sd_cwt, holder_signing_key, *issuer_signing_key.as_ref())
     }
 

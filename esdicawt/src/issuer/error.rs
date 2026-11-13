@@ -17,8 +17,6 @@ pub enum SdCwtIssuerError<CustomError: Send + Sync> {
     CborDeserializationError(#[from] ciborium::de::Error<std::io::Error>),
     #[error(transparent)]
     CborValueError(#[from] ciborium::value::Error),
-    #[error(transparent)]
-    RngError(#[from] rand_core::Error),
     #[error("{0}")]
     CwtError(&'static str),
     #[error("Should have been a mapping")]

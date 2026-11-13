@@ -69,7 +69,7 @@ pub trait Issuer {
     #[allow(clippy::type_complexity)]
     fn issue_raw_cwt(
         &self,
-        csprng: &mut dyn rand_core::CryptoRngCore,
+        csprng: &mut dyn rand_core::CryptoRng,
         params: IssuerParams<'_, Self::PayloadClaims, Self::ProtectedClaims, Self::UnprotectedClaims>,
     ) -> Result<Vec<u8>, SdCwtIssuerError<<Self as Issuer>::Error>> {
         let alg = Issuer::cwt_algorithm(self);
@@ -196,7 +196,7 @@ pub trait Issuer {
     #[allow(clippy::type_complexity)]
     fn issue_cwt(
         &self,
-        csprng: &mut dyn rand_core::CryptoRngCore,
+        csprng: &mut dyn rand_core::CryptoRng,
         params: IssuerParams<'_, Self::PayloadClaims, Self::ProtectedClaims, Self::UnprotectedClaims>,
     ) -> Result<SdCwtIssued<Self::PayloadClaims, <Self as Issuer>::Hasher, Self::ProtectedClaims, Self::UnprotectedClaims>, SdCwtIssuerError<<Self as Issuer>::Error>> {
         let sign1 = self.issue_raw_cwt(csprng, params)?;
@@ -228,11 +228,11 @@ mod tests {
     #[test]
     #[wasm_bindgen_test::wasm_bindgen_test]
     fn should_redact_subject() {
-        let holder_signing_key = ed25519_dalek::SigningKey::generate(&mut rand::thread_rng());
-        let issuer = Ed25519Issuer::<Value>::new(ed25519_dalek::SigningKey::generate(&mut rand::thread_rng()));
+        let holder_signing_key = ed25519_dalek::SigningKey::generate(&mut rand::rng());
+        let issuer = Ed25519Issuer::<Value>::new(ed25519_dalek::SigningKey::generate(&mut rand::rng()));
         let mut params = crate::issuer::snapshot::issuer_params(None, &(&holder_signing_key.verifying_key()).try_into().unwrap());
         params.subject = crate::Subject::Redacted("https://example.com/alice.smith");
-        let sd_cwt = issuer.issue_cwt(&mut rand::thread_rng(), params).unwrap();
+        let sd_cwt = issuer.issue_cwt(&mut rand::rng(), params).unwrap();
 
         // not in clear in the payload
         assert_eq!(sd_cwt.payload.to_value().unwrap().inner.subject, None);
@@ -283,8 +283,8 @@ mod tests {
     #[test]
     #[wasm_bindgen_test::wasm_bindgen_test]
     fn should_generate_valid_sd_cwt() {
-        let holder_signing_key = ed25519_dalek::SigningKey::generate(&mut rand::thread_rng());
-        let issuer_signing_key = ed25519_dalek::SigningKey::generate(&mut rand::thread_rng());
+        let holder_signing_key = ed25519_dalek::SigningKey::generate(&mut rand::rng());
+        let issuer_signing_key = ed25519_dalek::SigningKey::generate(&mut rand::rng());
         let issuer = Ed25519Issuer::new(issuer_signing_key);
 
         let exp = core::time::Duration::from_secs(90);
@@ -310,7 +310,7 @@ mod tests {
             },
         };
 
-        let sd_cwt_bytes = issuer.issue_cwt(&mut rand::thread_rng(), params).unwrap().to_cbor_bytes().unwrap();
+        let sd_cwt_bytes = issuer.issue_cwt(&mut rand::rng(), params).unwrap().to_cbor_bytes().unwrap();
         let raw_sd_cwt = CoseSign1::from_tagged_slice(&sd_cwt_bytes).unwrap();
         let payload = Value::from_cbor_bytes(&raw_sd_cwt.payload.unwrap()).unwrap().into_map().unwrap();
 
@@ -473,13 +473,13 @@ mod tests {
     }
 
     fn issue<T: Select>(payload: Option<T>) -> (SdCwtIssued<T, sha2::Sha256>, ed25519_dalek::SigningKey) {
-        let holder_signing_key = ed25519_dalek::SigningKey::generate(&mut rand::thread_rng());
-        let issuer_signing_key = ed25519_dalek::SigningKey::generate(&mut rand::thread_rng());
+        let holder_signing_key = ed25519_dalek::SigningKey::generate(&mut rand::rng());
+        let issuer_signing_key = ed25519_dalek::SigningKey::generate(&mut rand::rng());
         let issuer = Ed25519Issuer::new(issuer_signing_key);
 
         let sd_cwt = issuer
             .issue_cwt(
-                &mut rand::thread_rng(),
+                &mut rand::rng(),
                 IssuerParams {
                     protected_claims: None,
                     unprotected_claims: None,

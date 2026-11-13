@@ -7,13 +7,11 @@ authors.workspace = true
 
 [dependencies]
 esdicawt.workspace = true
-esdicawt-spec.workspace = true
 serde = { workspace = true, features = ["derive"] }
 serde_repr.workspace = true
 enum-variants-strings.workspace = true
 url = { workspace = true, features = ["serde"] }
 digest.workspace = true
-ciborium.workspace = true
 
 [dev-dependencies]
 esdicawt = { workspace = true, features = ["test-utils", "test-vectors", "ed25519", "p256", "p384", "status"] }
@@ -21,6 +19,10 @@ rand.workspace = true
 ed25519-dalek = { workspace = true, features = ["rand_core"] }
 sha2.workspace = true
 wasm-bindgen-test.workspace = true
+
+# "rand::rng()" in the wasm tests requires the JS backend of getrandom
+[target.'cfg(all(target_arch = "wasm32", target_os = "unknown"))'.dev-dependencies]
+getrandom = { workspace = true, features = ["wasm_js"] }
 
 [lints]
 workspace = true
