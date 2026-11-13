@@ -674,7 +674,7 @@ mod tests {
             name: Some("Alice Smith".into()),
             stuffs: vec![Stuff { foo: "bar".into() }],
         };
-        let holder_signing_key = ed25519_dalek::SigningKey::generate(&mut rand::thread_rng());
+        let holder_signing_key = ed25519_dalek::SigningKey::generate(&mut rand::rng());
         let issuer_params = default_issuer_params(Some(payload), &holder_signing_key);
         let verified = verify(issuer_params, default_holder_params::<NoClaims>(), &holder_signing_key).unwrap();
 
@@ -691,20 +691,20 @@ mod tests {
     #[test]
     #[wasm_bindgen_test::wasm_bindgen_test]
     fn should_verify_signature() {
-        let holder_signing_key = ed25519_dalek::SigningKey::generate(&mut rand::thread_rng());
+        let holder_signing_key = ed25519_dalek::SigningKey::generate(&mut rand::rng());
         let issuer_params = default_issuer_params(None::<Value>, &holder_signing_key);
         let (cks, sd_kbt, ..) = generate_sd_kbt(issuer_params.clone(), default_holder_params::<NoClaims>(), &holder_signing_key);
         let verifier = HybridVerifier::<Value, NoClaims>::default();
 
         // verifying Holder signature
-        let holder_verifying_key_bis = ed25519_dalek::SigningKey::generate(&mut rand::thread_rng()).verifying_key();
+        let holder_verifying_key_bis = ed25519_dalek::SigningKey::generate(&mut rand::rng()).verifying_key();
         std::assert_matches!(
             verifier.verify_sd_kbt(&sd_kbt, &verifier_params(), Some(&holder_verifying_key_bis), &cks),
             Err(SdCwtVerifierError::UnexpectedKeyConfirmation)
         );
 
         // verifying Issuer signature
-        let issuer_verifying_key_bis = ed25519_dalek::SigningKey::generate(&mut rand::thread_rng()).verifying_key();
+        let issuer_verifying_key_bis = ed25519_dalek::SigningKey::generate(&mut rand::rng()).verifying_key();
         std::assert_matches!(
             verifier.verify_sd_kbt(
                 &sd_kbt,
@@ -719,7 +719,7 @@ mod tests {
     #[test]
     #[wasm_bindgen_test::wasm_bindgen_test]
     fn should_verify_batch() {
-        let holder_signing_key = ed25519_dalek::SigningKey::generate(&mut rand::thread_rng());
+        let holder_signing_key = ed25519_dalek::SigningKey::generate(&mut rand::rng());
         let holder_verifying_key = holder_signing_key.verifying_key();
         let issuer_params = default_issuer_params(None::<Value>, &holder_signing_key);
         let (cks, sd_kbt, ..) = generate_sd_kbt(issuer_params.clone(), default_holder_params::<NoClaims>(), &holder_signing_key);
@@ -736,7 +736,7 @@ mod tests {
         std::assert_matches!(results.as_slice(), [Ok(_), Err(SdCwtVerifierError::SignatureError(_)), Ok(_)]);
 
         // a SD-KBT failing before signature verification does not taint the others
-        let holder_verifying_key_bis = ed25519_dalek::SigningKey::generate(&mut rand::thread_rng()).verifying_key();
+        let holder_verifying_key_bis = ed25519_dalek::SigningKey::generate(&mut rand::rng()).verifying_key();
         let results = verifier.verify_sd_kbt_batch(&[(&sd_kbt, &params, Some(&holder_verifying_key_bis)), (&sd_kbt, &params, None)], &cks);
         std::assert_matches!(results.as_slice(), [Err(SdCwtVerifierError::UnexpectedKeyConfirmation), Ok(_)]);
 
@@ -748,12 +748,12 @@ mod tests {
     fn should_fail_without_issuer_key() {
         use crate::signature_verifier::SignatureVerifierError;
 
-        let holder_signing_key = ed25519_dalek::SigningKey::generate(&mut rand::thread_rng());
+        let holder_signing_key = ed25519_dalek::SigningKey::generate(&mut rand::rng());
         let issuer_params = default_issuer_params(None::<Value>, &holder_signing_key);
         let (_, sd_kbt, ..) = generate_sd_kbt(issuer_params, default_holder_params::<NoClaims>(), &holder_signing_key);
         let verifier = HybridVerifier::<Value, NoClaims>::default();
 
-        let issuer_signing_key = p256::ecdsa::SigningKey::random(&mut rand::thread_rng());
+        let issuer_signing_key = <p256::ecdsa::SigningKey as p256::elliptic_curve::Generate>::generate_from_rng(&mut rand::rng());
         let cks = CoseKeySet::builder().with_signing_key(&issuer_signing_key).unwrap().build();
         std::assert_matches!(
             verifier.verify_sd_kbt(&sd_kbt, &verifier_params(), None, &cks),
@@ -768,7 +768,7 @@ mod tests {
     #[test]
     #[wasm_bindgen_test::wasm_bindgen_test]
     fn should_verify_std_claims() {
-        let holder_signing_key = ed25519_dalek::SigningKey::generate(&mut rand::thread_rng());
+        let holder_signing_key = ed25519_dalek::SigningKey::generate(&mut rand::rng());
         let holder_verifying_key = holder_signing_key.verifying_key();
 
         let mut issuer_params = default_issuer_params(None::<Value>, &holder_signing_key);
@@ -899,7 +899,7 @@ mod tests {
         let verifying = |value: Result<Value, ciborium::value::Error>| {
             let value = value.unwrap();
             let payload = cbor!({ "___claim" => value }).unwrap();
-            let holder_signing_key = ed25519_dalek::SigningKey::generate(&mut rand::thread_rng());
+            let holder_signing_key = ed25519_dalek::SigningKey::generate(&mut rand::rng());
             let issuer_params = default_issuer_params(Some(payload), &holder_signing_key);
             let holder_params = default_holder_params::<NoClaims>();
             let verified = verify(issuer_params, holder_params, &holder_signing_key).unwrap();
@@ -938,7 +938,7 @@ mod tests {
             "map" => { "e" => "f", decoy!(3) => null, decoy!(4) => null },
         })
         .unwrap();
-        let holder_signing_key = ed25519_dalek::SigningKey::generate(&mut rand::thread_rng());
+        let holder_signing_key = ed25519_dalek::SigningKey::generate(&mut rand::rng());
         let issuer_params = default_issuer_params(Some(payload), &holder_signing_key);
         let verified = verify(issuer_params, default_holder_params::<NoClaims>(), &holder_signing_key).unwrap();
 
@@ -951,7 +951,7 @@ mod tests {
     #[wasm_bindgen_test::wasm_bindgen_test]
     fn should_remove_undisclosed_elements() {
         let payload = cbor!({ "array" => ["a", sd!("b")] }).unwrap();
-        let holder_signing_key = ed25519_dalek::SigningKey::generate(&mut rand::thread_rng());
+        let holder_signing_key = ed25519_dalek::SigningKey::generate(&mut rand::rng());
         let issuer_params = default_issuer_params(Some(payload), &holder_signing_key);
         let mut holder_params = default_holder_params::<NoClaims>();
         holder_params.presentation = Presentation::None;
@@ -966,14 +966,14 @@ mod tests {
     fn should_reject_never_redacted_claims() {
         use crate::spec::CWT_CLAIM_EXPIRES_AT;
 
-        let holder_signing_key = ed25519_dalek::SigningKey::generate(&mut rand::thread_rng());
-        let issuer_signing_key = ed25519_dalek::SigningKey::generate(&mut rand::thread_rng());
+        let holder_signing_key = ed25519_dalek::SigningKey::generate(&mut rand::rng());
+        let issuer_signing_key = ed25519_dalek::SigningKey::generate(&mut rand::rng());
         let cks = CoseKeySet::builder().with_signing_key(&issuer_signing_key).unwrap().build();
         let verifier = HybridVerifier::<Value, NoClaims>::default();
 
         let present = |payload: Value| {
             let issuer_params = default_issuer_params(Some(payload), &holder_signing_key);
-            let sd_cwt = Ed25519Issuer::new(issuer_signing_key.clone()).issue_cwt(&mut rand::thread_rng(), issuer_params).unwrap();
+            let sd_cwt = Ed25519Issuer::new(issuer_signing_key.clone()).issue_cwt(&mut rand::rng(), issuer_params).unwrap();
             // a Holder would refuse it, so its validation is skipped
             let holder = Ed25519Holder::<Value, NoClaims>::new(holder_signing_key.clone());
             holder.new_presentation(sd_cwt.into(), default_holder_params()).unwrap().to_cbor_bytes().unwrap()
@@ -1005,7 +1005,7 @@ mod tests {
             "elements" => [sd!(tag(cbor!({ sd!("f") => 4 }).unwrap()))],
         })
         .unwrap();
-        let holder_signing_key = ed25519_dalek::SigningKey::generate(&mut rand::thread_rng());
+        let holder_signing_key = ed25519_dalek::SigningKey::generate(&mut rand::rng());
         let issuer_params = default_issuer_params(Some(payload), &holder_signing_key);
 
         let present = |presentation| {
@@ -1059,7 +1059,7 @@ mod tests {
         use crate::spec::key_binding::KbtCwt;
 
         let payload = cbor!({ sd!("a") => "b", "array" => ["c", sd!("d")] }).unwrap();
-        let holder_signing_key = ed25519_dalek::SigningKey::generate(&mut rand::thread_rng());
+        let holder_signing_key = ed25519_dalek::SigningKey::generate(&mut rand::rng());
         let issuer_params = default_issuer_params(Some(payload), &holder_signing_key);
         let mut holder_params = default_holder_params::<NoClaims>();
         holder_params.presentation = Presentation::None;
@@ -1103,7 +1103,7 @@ mod tests {
             name: Some("Alice Smith".into()),
             stuffs: Default::default(),
         };
-        let holder_signing_key = ed25519_dalek::SigningKey::generate(&mut rand::thread_rng());
+        let holder_signing_key = ed25519_dalek::SigningKey::generate(&mut rand::rng());
         let issuer_params = default_issuer_params(Some(payload), &holder_signing_key);
 
         let mut holder_params = default_holder_params::<ExtraKbtClaims>();
@@ -1119,7 +1119,7 @@ mod tests {
     async fn should_verify_status() {
         use status_list::issuer::StatusListIssuer;
 
-        let holder_signing_key = ed25519_dalek::SigningKey::generate(&mut rand::thread_rng());
+        let holder_signing_key = ed25519_dalek::SigningKey::generate(&mut rand::rng());
         let mut issuer_params = default_issuer_params(None::<Value>, &holder_signing_key);
 
         let status_uri = "https://example.com/statuslists/1".parse::<url::Url>().unwrap();
@@ -1211,7 +1211,7 @@ mod tests {
             .unwrap();
 
         // 6. should fail if status_token not signed by expected issuer
-        let fake_status_token_signer = ed25519_dalek::SigningKey::generate(&mut rand::thread_rng());
+        let fake_status_token_signer = ed25519_dalek::SigningKey::generate(&mut rand::rng());
         let fake_status_list_cks = CoseKeySet::builder().with(&fake_status_token_signer.verifying_key()).unwrap().build();
         let err = verifier.verify_status_token(&status_token.to_cbor_bytes().unwrap(), &fake_status_list_cks).unwrap_err();
         std::assert_matches!(err, SdCwtVerifierError::StatusError(SdCwtStatusVerifierError::InvalidStatusTokenSignature(_)));
@@ -1229,12 +1229,12 @@ mod tests {
             name: Some("Alice Smith".into()),
             stuffs: vec![Stuff { foo: "bar".into() }],
         };
-        let holder_signing_key = ed25519_dalek::SigningKey::generate(&mut rand::thread_rng());
-        let issuer_signing_key = ed25519_dalek::SigningKey::generate(&mut rand::thread_rng());
+        let holder_signing_key = ed25519_dalek::SigningKey::generate(&mut rand::rng());
+        let issuer_signing_key = ed25519_dalek::SigningKey::generate(&mut rand::rng());
         let issuer = Ed25519Issuer::new(issuer_signing_key.clone());
         let issuer_params = default_issuer_params(Some(payload), &holder_signing_key);
 
-        let sd_cwt = issuer.issue_cwt(&mut rand::thread_rng(), issuer_params.clone()).unwrap().to_cbor_bytes().unwrap();
+        let sd_cwt = issuer.issue_cwt(&mut rand::rng(), issuer_params.clone()).unwrap().to_cbor_bytes().unwrap();
         let holder = Ed25519Holder::<Value, NoClaims>::new(holder_signing_key.clone());
         let cks = CoseKeySet::builder().with_signing_key(&issuer_signing_key).unwrap().build();
         let mut sd_cwt = holder.verify_sd_cwt(&sd_cwt, Default::default(), &cks).unwrap();
@@ -1260,7 +1260,7 @@ mod tests {
     fn should_reject_duplicate_claim_name() {
         let payload = cbor!({sd!("dup") => "a", sd!("dup") => "b"}).unwrap();
 
-        let holder_signing_key = ed25519_dalek::SigningKey::generate(&mut rand::thread_rng());
+        let holder_signing_key = ed25519_dalek::SigningKey::generate(&mut rand::rng());
         let issuer_params = default_issuer_params(Some(payload), &holder_signing_key);
         let err = verify(issuer_params, default_holder_params::<NoClaims>(), &holder_signing_key).unwrap_err();
         std::assert_matches!(err, SdCwtVerifierError::DuplicateMapKeys);
@@ -1278,7 +1278,7 @@ mod tests {
         #[test]
         #[wasm_bindgen_test::wasm_bindgen_test]
         fn kbt_cnonce() {
-            let holder_signing_key = ed25519_dalek::SigningKey::generate(&mut rand::thread_rng());
+            let holder_signing_key = ed25519_dalek::SigningKey::generate(&mut rand::rng());
             let issuer_params = default_issuer_params(None::<Value>, &holder_signing_key);
 
             // Holder builds a presentation without a cnonce
@@ -1299,7 +1299,7 @@ mod tests {
         #[test]
         #[wasm_bindgen_test::wasm_bindgen_test]
         fn missing_kbt_cnonce() {
-            let holder_signing_key = ed25519_dalek::SigningKey::generate(&mut rand::thread_rng());
+            let holder_signing_key = ed25519_dalek::SigningKey::generate(&mut rand::rng());
             let issuer_params = default_issuer_params(None::<Value>, &holder_signing_key);
 
             // Holder builds a presentation without a cnonce
@@ -1320,7 +1320,7 @@ mod tests {
         #[test]
         #[wasm_bindgen_test::wasm_bindgen_test]
         fn redacted_sub() {
-            let holder_signing_key = ed25519_dalek::SigningKey::generate(&mut rand::thread_rng());
+            let holder_signing_key = ed25519_dalek::SigningKey::generate(&mut rand::rng());
             let mut issuer_params = default_issuer_params(None::<Value>, &holder_signing_key);
             issuer_params.subject = crate::Subject::Redacted(SUBJECT);
             let verifier = HybridVerifier::<Value, NoClaims>::default();
@@ -1350,7 +1350,7 @@ mod tests {
         #[test]
         #[wasm_bindgen_test::wasm_bindgen_test]
         fn sub() {
-            let holder_signing_key = ed25519_dalek::SigningKey::generate(&mut rand::thread_rng());
+            let holder_signing_key = ed25519_dalek::SigningKey::generate(&mut rand::rng());
             let mut issuer_params = default_issuer_params(None::<Value>, &holder_signing_key);
             issuer_params.subject = "aaa".into();
 
@@ -1368,7 +1368,7 @@ mod tests {
         #[test]
         #[wasm_bindgen_test::wasm_bindgen_test]
         fn audience() {
-            let holder_signing_key = ed25519_dalek::SigningKey::generate(&mut rand::thread_rng());
+            let holder_signing_key = ed25519_dalek::SigningKey::generate(&mut rand::rng());
             let mut issuer_params = default_issuer_params(None::<Value>, &holder_signing_key);
             issuer_params.audience = Some("aaa");
 
@@ -1386,7 +1386,7 @@ mod tests {
         #[test]
         #[wasm_bindgen_test::wasm_bindgen_test]
         fn missing_aud() {
-            let holder_signing_key = ed25519_dalek::SigningKey::generate(&mut rand::thread_rng());
+            let holder_signing_key = ed25519_dalek::SigningKey::generate(&mut rand::rng());
             let mut issuer_params = default_issuer_params(None::<Value>, &holder_signing_key);
             issuer_params.audience = None;
 
@@ -1404,7 +1404,7 @@ mod tests {
         #[test]
         #[wasm_bindgen_test::wasm_bindgen_test]
         fn kbt_audience() {
-            let holder_signing_key = ed25519_dalek::SigningKey::generate(&mut rand::thread_rng());
+            let holder_signing_key = ed25519_dalek::SigningKey::generate(&mut rand::rng());
             let issuer_params = default_issuer_params(None::<Value>, &holder_signing_key);
 
             let mut holder_params = default_holder_params::<NoClaims>();
@@ -1424,7 +1424,7 @@ mod tests {
         #[test]
         #[wasm_bindgen_test::wasm_bindgen_test]
         fn issuer() {
-            let holder_signing_key = ed25519_dalek::SigningKey::generate(&mut rand::thread_rng());
+            let holder_signing_key = ed25519_dalek::SigningKey::generate(&mut rand::rng());
             let mut issuer_params = default_issuer_params(None::<Value>, &holder_signing_key);
             issuer_params.issuer = "aaa";
 
@@ -1446,7 +1446,7 @@ mod tests {
         #[test]
         #[wasm_bindgen_test::wasm_bindgen_test]
         fn verify_sd_cwt_expiry() {
-            let holder_signing_key = ed25519_dalek::SigningKey::generate(&mut rand::thread_rng());
+            let holder_signing_key = ed25519_dalek::SigningKey::generate(&mut rand::rng());
 
             // Issuer issues an SD-CWT valid for only 5 seconds
             let mut issuer_params = default_issuer_params(None::<Value>, &holder_signing_key);
@@ -1466,7 +1466,7 @@ mod tests {
         #[test]
         #[wasm_bindgen_test::wasm_bindgen_test]
         fn verify_sd_cwt_iat() {
-            let holder_signing_key = ed25519_dalek::SigningKey::generate(&mut rand::thread_rng());
+            let holder_signing_key = ed25519_dalek::SigningKey::generate(&mut rand::rng());
             let mut issuer_params = default_issuer_params(None::<Value>, &holder_signing_key);
             issuer_params.with_issued_at = true;
             issuer_params.with_not_before = false;
@@ -1485,7 +1485,7 @@ mod tests {
         #[test]
         #[wasm_bindgen_test::wasm_bindgen_test]
         fn verify_sd_cwt_nbf() {
-            let holder_signing_key = ed25519_dalek::SigningKey::generate(&mut rand::thread_rng());
+            let holder_signing_key = ed25519_dalek::SigningKey::generate(&mut rand::rng());
             let mut issuer_params = default_issuer_params(None::<Value>, &holder_signing_key);
             issuer_params.with_not_before = true;
             issuer_params.with_issued_at = false;
@@ -1504,7 +1504,7 @@ mod tests {
         #[test]
         #[wasm_bindgen_test::wasm_bindgen_test]
         fn verify_sd_kbt_expiry() {
-            let holder_signing_key = ed25519_dalek::SigningKey::generate(&mut rand::thread_rng());
+            let holder_signing_key = ed25519_dalek::SigningKey::generate(&mut rand::rng());
 
             let issuer_params = default_issuer_params(None::<Value>, &holder_signing_key);
 
@@ -1529,7 +1529,7 @@ mod tests {
         #[test]
         #[wasm_bindgen_test::wasm_bindgen_test]
         fn verify_sd_kbt_does_not_outlive_sd_cwt() {
-            let holder_signing_key = ed25519_dalek::SigningKey::generate(&mut rand::thread_rng());
+            let holder_signing_key = ed25519_dalek::SigningKey::generate(&mut rand::rng());
             let mut issuer_params = default_issuer_params(None::<Value>, &holder_signing_key);
             issuer_params.expiry = Some(TimeArg::Relative(core::time::Duration::from_secs(60)));
 
@@ -1552,8 +1552,8 @@ mod tests {
         #[test]
         #[wasm_bindgen_test::wasm_bindgen_test]
         fn holder_should_not_present_expired_sd_cwt() {
-            let holder_signing_key = ed25519_dalek::SigningKey::generate(&mut rand::thread_rng());
-            let issuer_signing_key = ed25519_dalek::SigningKey::generate(&mut rand::thread_rng());
+            let holder_signing_key = ed25519_dalek::SigningKey::generate(&mut rand::rng());
+            let issuer_signing_key = ed25519_dalek::SigningKey::generate(&mut rand::rng());
             let cks = CoseKeySet::builder().with_signing_key(&issuer_signing_key).unwrap().build();
 
             // SD-CWT expired 2s ago, which the Holder tolerates with its leeway
@@ -1561,7 +1561,7 @@ mod tests {
             issuer_params.expiry = Some(TimeArg::Absolute(elapsed_since_epoch() - core::time::Duration::from_secs(2)));
             issuer_params.with_issued_at = false;
             issuer_params.with_not_before = false;
-            let sd_cwt = Ed25519Issuer::new(issuer_signing_key).issue_cwt(&mut rand::thread_rng(), issuer_params).unwrap();
+            let sd_cwt = Ed25519Issuer::new(issuer_signing_key).issue_cwt(&mut rand::rng(), issuer_params).unwrap();
 
             let holder = Ed25519Holder::<Value, NoClaims>::new(holder_signing_key);
             let leeway = core::time::Duration::from_secs(10);
@@ -1581,7 +1581,7 @@ mod tests {
         fn verify_sd_kbt_iat_or_cti() {
             use crate::{KbtIatOrCti, spec::key_binding::IatOrCti};
 
-            let holder_signing_key = ed25519_dalek::SigningKey::generate(&mut rand::thread_rng());
+            let holder_signing_key = ed25519_dalek::SigningKey::generate(&mut rand::rng());
             let verifier = HybridVerifier::<Value, NoClaims>::default();
             let present = |iat_or_cti| {
                 let mut params = default_holder_params::<NoClaims>();
@@ -1608,7 +1608,7 @@ mod tests {
         #[test]
         #[wasm_bindgen_test::wasm_bindgen_test]
         fn verify_sd_kbt_nbf() {
-            let holder_signing_key = ed25519_dalek::SigningKey::generate(&mut rand::thread_rng());
+            let holder_signing_key = ed25519_dalek::SigningKey::generate(&mut rand::rng());
             let mut issuer_params = default_issuer_params(None::<Value>, &holder_signing_key);
             issuer_params.expiry = None;
             issuer_params.with_issued_at = false;
@@ -1648,11 +1648,11 @@ mod tests {
         holder_params: HolderParams<'_, U>,
         holder_signing_key: &ed25519_dalek::SigningKey,
     ) -> (CoseKeySet, Vec<u8>, ed25519_dalek::SigningKey) {
-        let issuer_signing_key = ed25519_dalek::SigningKey::generate(&mut rand::thread_rng());
+        let issuer_signing_key = ed25519_dalek::SigningKey::generate(&mut rand::rng());
 
         let issuer = Ed25519Issuer::new(issuer_signing_key.clone());
 
-        let sd_cwt = issuer.issue_cwt(&mut rand::thread_rng(), issuer_params).unwrap().to_cbor_bytes().unwrap();
+        let sd_cwt = issuer.issue_cwt(&mut rand::rng(), issuer_params).unwrap().to_cbor_bytes().unwrap();
         let holder = Ed25519Holder::<Value, U>::new(holder_signing_key.clone());
         let cks = CoseKeySet::builder().with_signing_key(&issuer_signing_key).unwrap().build();
         let sd_cwt = holder.verify_sd_cwt(&sd_cwt, Default::default(), &cks).unwrap();

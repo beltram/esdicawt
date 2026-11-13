@@ -360,9 +360,9 @@ mod tests {
     #[test]
     #[wasm_bindgen_test::wasm_bindgen_test]
     fn should_succeed() {
-        let holder_signing_key = ed25519_dalek::SigningKey::generate(&mut rand::thread_rng());
+        let holder_signing_key = ed25519_dalek::SigningKey::generate(&mut rand::rng());
         let holder_verifying_key = holder_signing_key.verifying_key();
-        let issuer_signing_key = ed25519_dalek::SigningKey::generate(&mut rand::thread_rng());
+        let issuer_signing_key = ed25519_dalek::SigningKey::generate(&mut rand::rng());
         let issuer = Ed25519Issuer::<CustomTokenClaims>::new(issuer_signing_key.clone());
 
         let payload = CustomTokenClaims {
@@ -392,7 +392,7 @@ mod tests {
                 uri: "https://example.com/statuslists/1".parse().unwrap(),
             },
         };
-        let sd_cwt = issuer.issue_cwt(&mut rand::thread_rng(), issue_params).unwrap();
+        let sd_cwt = issuer.issue_cwt(&mut rand::rng(), issue_params).unwrap();
 
         assert_eq!(sd_cwt.query(vec!["name".into()].into()).unwrap().unwrap(), cbor!("Alice Smith").unwrap());
         assert_eq!(sd_cwt.query(vec!["age".into()].into()).unwrap().unwrap(), cbor!(42).unwrap());
@@ -460,9 +460,9 @@ mod tests {
     #[test]
     #[wasm_bindgen_test::wasm_bindgen_test]
     fn should_generate_valid_sd_kbt() {
-        let holder_signing_key = ed25519_dalek::SigningKey::generate(&mut rand::thread_rng());
+        let holder_signing_key = ed25519_dalek::SigningKey::generate(&mut rand::rng());
         let holder_verifying_key = holder_signing_key.verifying_key();
-        let issuer_signing_key = ed25519_dalek::SigningKey::generate(&mut rand::thread_rng());
+        let issuer_signing_key = ed25519_dalek::SigningKey::generate(&mut rand::rng());
         let issuer = Ed25519Issuer::<CustomTokenClaims>::new(issuer_signing_key.clone());
 
         let issue_params = IssuerParams {
@@ -486,7 +486,7 @@ mod tests {
                 uri: "https://example.com/statuslists/1".parse().unwrap(),
             },
         };
-        let sd_cwt = issuer.issue_cwt(&mut rand::thread_rng(), issue_params).unwrap().to_cbor_bytes().unwrap();
+        let sd_cwt = issuer.issue_cwt(&mut rand::rng(), issue_params).unwrap().to_cbor_bytes().unwrap();
 
         let holder = Ed25519Holder::<CustomTokenClaims, NoClaims>::new(holder_signing_key);
         let presentation_params = HolderParams {
@@ -529,15 +529,15 @@ mod tests {
     fn should_not_present_decoys() {
         use crate::spec::{decoy, sd};
 
-        let holder_signing_key = ed25519_dalek::SigningKey::generate(&mut rand::thread_rng());
-        let issuer_signing_key = ed25519_dalek::SigningKey::generate(&mut rand::thread_rng());
+        let holder_signing_key = ed25519_dalek::SigningKey::generate(&mut rand::rng());
+        let issuer_signing_key = ed25519_dalek::SigningKey::generate(&mut rand::rng());
         let cks = CoseKeySet::builder().with_signing_key(&issuer_signing_key).unwrap().build();
         let issuer = Ed25519Issuer::<Value>::new(issuer_signing_key);
 
         let payload = cbor!({ "a" => ["b", decoy!(1)], sd!("c") => "d", decoy!(2) => null }).unwrap();
         let holder_confirmation_key = (&holder_signing_key.verifying_key()).try_into().unwrap();
         let issuer_params = crate::issuer::snapshot::issuer_params(Some(payload), &holder_confirmation_key);
-        let sd_cwt = issuer.issue_cwt(&mut rand::thread_rng(), issuer_params).unwrap().to_cbor_bytes().unwrap();
+        let sd_cwt = issuer.issue_cwt(&mut rand::rng(), issuer_params).unwrap().to_cbor_bytes().unwrap();
 
         let holder = Ed25519Holder::<Value, NoClaims>::new(holder_signing_key);
         let sd_cwt = holder.verify_sd_cwt(&sd_cwt, Default::default(), &cks).unwrap();

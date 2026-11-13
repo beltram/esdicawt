@@ -132,13 +132,13 @@ fn bench_shallow_verifier<H: digest::Digest + Clone>(group: &mut BenchmarkGroup<
 fn issuer<H: digest::Digest + Clone>(
     nb_claims: &usize,
 ) -> (
-    rand::rngs::OsRng,
+    rand::rngs::ThreadRng,
     Ed25519Issuer<VarSizePayload, H>,
     IssuerParams<'_, VarSizePayload>,
     CoseKeySet,
     Ed25519Holder<VarSizePayload, H>,
 ) {
-    let mut rng = rand::rngs::OsRng::default();
+    let mut rng = rand::rng();
     let issuer = Ed25519Issuer::<VarSizePayload, H>::new(ed25519_dalek::SigningKey::generate(&mut rng));
     let cks = CoseKeySet::builder().with_signing_key(issuer.signer()).unwrap().build();
     let holder = Ed25519Holder::<VarSizePayload, H>::new(ed25519_dalek::SigningKey::generate(&mut rng));
@@ -279,12 +279,8 @@ impl Select for VarSizePayload {
 }
 
 fn rand_str(size: usize) -> String {
-    use rand::Rng as _;
-    rand::thread_rng()
-        .sample_iter(&rand::distributions::Alphanumeric)
-        .take(size)
-        .map(char::from)
-        .collect::<String>()
+    use rand::RngExt as _;
+    rand::rng().sample_iter(&rand::distr::Alphanumeric).take(size).map(char::from).collect::<String>()
 }
 
 criterion_group!(benches, issue_bench, holder_bench, verifier_bench, verifier_batch_bench /*, shallow_verifier_bench*/);

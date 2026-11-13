@@ -318,35 +318,37 @@ impl ScriptedRng {
         Self {
             overrides,
             drawn: vec![],
-            rng: rand::thread_rng(),
+            rng: rand::rng(),
         }
     }
 }
 
-impl rand_core::RngCore for ScriptedRng {
-    fn next_u32(&mut self) -> u32 {
-        rand_core::impls::next_u32_via_fill(self)
+impl rand_core::TryRng for ScriptedRng {
+    type Error = core::convert::Infallible;
+
+    fn try_next_u32(&mut self) -> Result<u32, Self::Error> {
+        let mut buf = [0u8; 4];
+        self.try_fill_bytes(&mut buf)?;
+        Ok(u32::from_le_bytes(buf))
     }
 
-    fn next_u64(&mut self) -> u64 {
-        rand_core::impls::next_u64_via_fill(self)
+    fn try_next_u64(&mut self) -> Result<u64, Self::Error> {
+        let mut buf = [0u8; 8];
+        self.try_fill_bytes(&mut buf)?;
+        Ok(u64::from_le_bytes(buf))
     }
 
-    fn fill_bytes(&mut self, dest: &mut [u8]) {
+    fn try_fill_bytes(&mut self, dest: &mut [u8]) -> Result<(), Self::Error> {
         match self.overrides.get(&self.drawn.len()) {
             Some(salt) if salt.len() == dest.len() => dest.copy_from_slice(salt),
-            _ => self.rng.fill_bytes(dest),
+            _ => rand_core::Rng::fill_bytes(&mut self.rng, dest),
         }
         self.drawn.push(dest.to_vec());
-    }
-
-    fn try_fill_bytes(&mut self, dest: &mut [u8]) -> Result<(), rand_core::Error> {
-        self.fill_bytes(dest);
         Ok(())
     }
 }
 
-impl rand_core::CryptoRng for ScriptedRng {}
+impl rand_core::TryCryptoRng for ScriptedRng {}
 
 pub struct CliIssuer {
     signing_key: AnySigningKey,
@@ -471,7 +473,7 @@ mod tests {
             (2.into(), "sub".into()),
             (
                 8.into(),
-                ciborium::Value::serialized(&KeyConfirmation::try_from(p256::ecdsa::SigningKey::random(&mut rand::thread_rng()).verifying_key()).unwrap()).unwrap(),
+                ciborium::Value::serialized(&KeyConfirmation::try_from(<p256::ecdsa::SigningKey as p256::elliptic_curve::Generate>::generate_from_rng(&mut rand::rng()).verifying_key()).unwrap()).unwrap(),
             ),
             (sd!(501), "ABCD-123456".into()),
             (decoy!(7), Value::Null),

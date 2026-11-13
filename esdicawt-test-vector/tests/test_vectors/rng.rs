@@ -1,4 +1,5 @@
-use rand_core::{CryptoRng, Error, RngCore};
+use core::convert::Infallible;
+use rand_core::{TryCryptoRng, TryRng};
 use std::io::Write;
 
 /// Salts used by the spec to generate the test vectors. Each row is `sha256(cbor([key, value])),salt`
@@ -120,22 +121,20 @@ impl TestVectorRng {
     }
 }
 
-impl CryptoRng for TestVectorRng {}
+impl TryCryptoRng for TestVectorRng {}
 
-impl RngCore for TestVectorRng {
-    fn next_u32(&mut self) -> u32 {
+impl TryRng for TestVectorRng {
+    type Error = Infallible;
+
+    fn try_next_u32(&mut self) -> Result<u32, Infallible> {
         unimplemented!()
     }
 
-    fn next_u64(&mut self) -> u64 {
+    fn try_next_u64(&mut self) -> Result<u64, Infallible> {
         unimplemented!()
     }
 
-    fn fill_bytes(&mut self, _: &mut [u8]) {
-        unimplemented!()
-    }
-
-    fn try_fill_bytes(&mut self, mut dest: &mut [u8]) -> Result<(), Error> {
+    fn try_fill_bytes(&mut self, mut dest: &mut [u8]) -> Result<(), Infallible> {
         let salt = self.next_salt();
         assert_eq!(salt.len(), dest.len(), "salt length mismatch");
         let _ = dest.write(salt).unwrap();
