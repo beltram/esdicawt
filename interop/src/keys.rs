@@ -102,7 +102,7 @@ impl From<ed25519_dalek::VerifyingKey> for AnyVerifyingKey {
 impl From<p256::ecdsa::VerifyingKey> for AnyVerifyingKey {
     fn from(k: p256::ecdsa::VerifyingKey) -> Self {
         Self {
-            bytes: k.to_encoded_point(false).as_bytes().to_vec(),
+            bytes: k.to_sec1_point(false).as_bytes().to_vec(),
             key: VerifyingKeyKind::P256(k),
         }
     }
@@ -111,7 +111,7 @@ impl From<p256::ecdsa::VerifyingKey> for AnyVerifyingKey {
 impl From<p384::ecdsa::VerifyingKey> for AnyVerifyingKey {
     fn from(k: p384::ecdsa::VerifyingKey) -> Self {
         Self {
-            bytes: k.to_encoded_point(false).as_bytes().to_vec(),
+            bytes: k.to_sec1_point(false).as_bytes().to_vec(),
             key: VerifyingKeyKind::P384(k),
         }
     }

@@ -13,16 +13,16 @@ ed25519 = ["dep:ed25519-dalek", "cose-key/ed25519", "dep:sha2"]
 p256 = ["dep:p256", "cose-key/p256", "dep:sha2"]
 p384 = ["dep:p384", "cose-key/p384", "dep:sha2"]
 test-utils = ["esdicawt-spec/test-utils", "ed25519", "p256", "p384", "dep:sha2", "cose-key/ed25519", "cose-key/p256", "cose-key/p384", "status"]
-status = ["dep:status-list", "esdicawt-spec/status"]
+status = ["dep:status-list", "dep:url", "esdicawt-spec/status"]
 backward = ["esdicawt-spec/backward"]
 test-vectors = []
 
 [dependencies]
 esdicawt-spec.workspace = true
 cose-key = { workspace = true, features = ["keyset"] }
-signature = { workspace = true, features = ["std", "digest"] }
+signature = { workspace = true, features = ["alloc", "digest"] }
 digest.workspace = true
-rand_core = { workspace = true, features = ["std"] }
+rand_core = { workspace = true }
 ciborium.workspace = true
 thiserror.workspace = true
 serde.workspace = true
@@ -31,9 +31,9 @@ tailcall.workspace = true
 serde_repr.workspace = true
 enum-variants-strings.workspace = true
 status-list = { workspace = true, optional = true }
-url.workspace = true
 seabored.workspace = true
 serde_bytes.workspace = true
+url = { workspace = true, optional = true }
 
 sha2 = { optional = true, workspace = true }
 ed25519-dalek = { optional = true, workspace = true, features = ["rand_core", "pem", "serde", "batch"] }
@@ -42,7 +42,6 @@ p384 = { optional = true, workspace = true }
 
 [target.'cfg(all(target_arch = "wasm32", target_os = "unknown"))'.dependencies]
 js-sys = "0.3"
-getrandom = { workspace = true, features = ["js"] }
 
 [dev-dependencies]
 esdicawt = { workspace = true, features = ["pem", "test-utils", "test-vectors", "ed25519", "p256", "p384", "status"] }
@@ -52,10 +51,8 @@ sha2.workspace = true
 thiserror.workspace = true
 wasm-bindgen-test.workspace = true
 hex.workspace = true
-spice-oidc-cwt = { workspace = true }
 derive_builder.workspace = true
 serde_repr.workspace = true
-blake3 = { version = "1.8", features = ["traits-preview"] }
 tokio = { workspace = true, features = ["macros", "rt"] }
 dernged.workspace = true
 insta.workspace = true
@@ -65,7 +62,11 @@ anyhow.workspace = true
 itertools = "0.15"
 
 [target.'cfg(not(target_arch = "wasm32"))'.dev-dependencies]
-criterion = "0.6"
+criterion = "0.8"
+
+# "rand::rng()" in the wasm tests requires the JS backend of getrandom
+[target.'cfg(all(target_arch = "wasm32", target_os = "unknown"))'.dev-dependencies]
+getrandom = { workspace = true, features = ["wasm_js"] }
 
 [lints]
 workspace = true

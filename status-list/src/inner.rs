@@ -95,8 +95,8 @@ pub fn byte_capacity<S: Status>(nb_statuses: usize) -> usize {
 
 /// Finds an empty entry in the StatusList
 #[cfg(feature = "rand")]
-pub fn next_vacant_bit_index<S: Status>(bytes: &[u8], rng: &mut dyn rand_core::CryptoRngCore) -> Option<BitIndex> {
-    use rand::Rng as _;
+pub fn next_vacant_bit_index<S: Status>(bytes: &[u8], rng: &mut dyn rand_core::CryptoRng) -> Option<BitIndex> {
+    use rand::RngExt as _;
     let max = max_index::<S>(bytes);
 
     let mut i = 0;
@@ -106,7 +106,7 @@ pub fn next_vacant_bit_index<S: Status>(bytes: &[u8], rng: &mut dyn rand_core::C
         if i > TRIES {
             return None;
         }
-        let proposed_index = rng.gen_range(0..=max);
+        let proposed_index = rng.random_range(0..=max);
         match get::<S>(bytes, proposed_index) {
             Some(s) if s.is_undefined() => return Some(proposed_index),
             _ => i += 1,

@@ -113,7 +113,7 @@ impl<S: Status> Lst<S> {
 impl<S: Status> Lst<S> {
     /// Finds an empty entry in the StatusList
     #[cfg(feature = "rand")]
-    pub fn next_vacant_bit_index(&self, rng: &mut dyn rand_core::CryptoRngCore) -> Option<BitIndex> {
+    pub fn next_vacant_bit_index(&self, rng: &mut dyn rand_core::CryptoRng) -> Option<BitIndex> {
         crate::inner::next_vacant_bit_index::<S>(self.status_list(), rng)
     }
 }
@@ -306,7 +306,7 @@ mod tests {
         }
 
         let mut lst = LstMut::<Status>::from_vec(vec![0xff; 1_000_000]);
-        let mut rng = rand::thread_rng();
+        let mut rng = rand::rng();
 
         // there's 0.1% chance this fails, fine :D
         for _ in 0..1000 {

@@ -78,15 +78,15 @@ pub(crate) fn elapsed_since_epoch() -> core::time::Duration {
 #[macro_export]
 macro_rules! cwt_label {
     ($label:ty) => {
-        impl PartialEq<ciborium::value::Integer> for $label {
-            fn eq(&self, other: &ciborium::value::Integer) -> bool {
-                ciborium::value::Integer::from(*self as i64).eq(other)
+        impl PartialEq<$crate::spec::reexports::ciborium::value::Integer> for $label {
+            fn eq(&self, other: &$crate::spec::reexports::ciborium::value::Integer) -> bool {
+                $crate::spec::reexports::ciborium::value::Integer::from(*self as i64).eq(other)
             }
         }
 
-        impl PartialEq<$label> for ciborium::value::Integer {
+        impl PartialEq<$label> for $crate::spec::reexports::ciborium::value::Integer {
             fn eq(&self, other: &$label) -> bool {
-                ciborium::value::Integer::from(*other as i64).eq(self)
+                $crate::spec::reexports::ciborium::value::Integer::from(*other as i64).eq(self)
             }
         }
 
@@ -102,27 +102,25 @@ macro_rules! cwt_label {
             }
         }
 
-        impl From<$label> for esdicawt::spec::SdCwtClaim {
+        impl From<$label> for $crate::spec::SdCwtClaim {
             fn from(label: $label) -> Self {
                 (label as i64).into()
             }
         }
 
-        impl From<$label> for esdicawt::QueryElement {
+        impl From<$label> for $crate::QueryElement {
             fn from(label: $label) -> Self {
                 (label as i64).into()
             }
         }
 
-        impl From<$label> for ciborium::Value {
+        impl From<$label> for $crate::spec::reexports::ciborium::Value {
             fn from(label: $label) -> Self {
                 (label as i64).into()
             }
         }
     };
 }
-
-use crate as esdicawt;
 
 #[derive(Debug, Copy, Clone, serde_repr::Serialize_repr, serde_repr::Deserialize_repr, enum_variants_strings::EnumVariantsStrings)]
 #[enum_variants_strings_transform(transform = "snake_case")]

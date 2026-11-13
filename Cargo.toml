@@ -12,25 +12,27 @@ authors = []
 [workspace.lints.rust]
 unsafe_code = "forbid"
 
+[workspace.lints.cargo]
+# "cargo hack --no-dev-deps" strips dev-dependencies, making workspace dependencies only used as such look unused
+unused_workspace_dependencies = "allow"
+
 [workspace.dependencies]
 # own crates
 esdicawt = { path = "esdicawt" }
 esdicawt-spec = { path = "esdicawt-spec" }
-spice-oidc-cwt = { path = "spice-oidc-cwt" }
 status-list = { path = "status-list" }
 
 # crypto
-signature = "2.2"
-ed25519-dalek = "2.1"
-p256 = "0.13"
-p384 = "0.13"
-subtle = "2.6"
-digest = { version = "0.10", features = ["alloc"] }
-sha2 = "0.10"
-pkcs8 = "0.10"
-rand = "0.8"
-rand_core = "0.6"
-getrandom = "0.2"
+signature = "3.0"
+ed25519-dalek = "3.0"
+p256 = "0.14"
+p384 = "0.14"
+digest = { version = "0.11", features = ["alloc"] }
+sha2 = "0.11"
+pkcs8 = "0.11"
+rand = "0.10"
+rand_core = "0.10"
+getrandom = "0.4"
 
 # codec
 serde = "1.0"
@@ -38,7 +40,6 @@ serde_tuple = "1.1"
 serde_bytes = "0.11"
 thiserror = "2.0"
 hex = { version = "0.4", default-features = false, features = ["alloc"] }
-serde_json = "1.0"
 serde_repr = "0.1"
 seabored = { version = "0.1", features = ["serde"] }
 
@@ -48,11 +49,10 @@ tailcall = "1.0"
 derive_builder = "0.20"
 wasm-bindgen-test = "0.3"
 enum-variants-strings = "0.3"
-indexmap = "2.12"
 bytes = "1.10"
 flate2 = { version = "1.1", default-features = false }
 tokio = { version = "1.48", default-features = true }
-dernged = "0.1"
+dernged = "0.2"
 insta = "1"
 strum = "0.28"
 strum_macros = "0.28"
@@ -64,7 +64,7 @@ branch = "cose-key"
 
 [workspace.dependencies.cose-key]
 git = "https://github.com/beltram/cose-key.git"
-branch = "main"
+tag = "v0.4.0"
 #path = "../cose-key"
 
 [workspace.dependencies.ciborium]
@@ -114,3 +114,7 @@ mut_mut = "warn"
 option_option = "warn"
 ref_option_ref = "warn"
 explicit_iter_loop = "warn"
+
+# make criterion (dev-dependency) use the same ciborium fork as the rest of the workspace
+[patch.crates-io]
+ciborium = { git = "https://github.com/beltram/ciborium", branch = "simple-value+cde" }
