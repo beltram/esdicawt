@@ -97,7 +97,7 @@ impl RedactedClaimKeys {
         #[cfg(feature = "backward")]
         let digest = salted_claim.old_to_redacted::<H>()?;
 
-        self.0.push(digest.as_ref().into());
+        self.0.push(digest.as_slice().into());
         Ok(())
     }
 
@@ -158,7 +158,7 @@ impl RedactedClaimElement {
         #[cfg(feature = "backward")]
         let digest = salted_entry.old_to_redacted::<H>()?;
 
-        Ok(digest.as_ref().into())
+        Ok(digest.as_slice().into())
     }
 }
 

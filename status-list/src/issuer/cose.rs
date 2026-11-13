@@ -85,7 +85,6 @@ pub mod tests {
     use crate::{Lst, RawStatus, issuer::params::TimeArg};
     use core::time::Duration;
     use coset::AsCborValue;
-    use p256::elliptic_curve::JwkEcKey;
 
     wasm_bindgen_test::wasm_bindgen_test_configure!(run_in_browser);
 
@@ -125,17 +124,20 @@ pub mod tests {
         // assert_eq!(&status_list_token_cbor, expected);
     }
 
+    /// The P-256 key from the draft-ietf-oauth-status-list examples (JWK `d`, `x`, `y` hex-decoded).
     pub fn rfc_signer() -> p256::ecdsa::SigningKey {
-        let jwk = serde_json::json!({
-            "kty": "EC",
-            "d": "xzUEdsyLosZF0acZGRAjTKImb0lQvAvssDK5XIZELd0",
-            "crv": "P-256",
-            "x": "I3HWm_0Ds1dPMI-IWmf4mBmH-YaeAVbPVu7vB27CxXo",
-            "y": "6N_d5Elj9bs1htgV3okJKIdbHEpkgTmAluYKJemzn1M",
-        });
-        let jwk = serde_json::from_value::<JwkEcKey>(jwk).unwrap();
-        let sk: p256::SecretKey = jwk.to_secret_key::<p256::NistP256>().unwrap();
-        p256::ecdsa::SigningKey::from(sk)
+        let d = hex::decode("c7350476cc8ba2c645d1a7191910234ca2266f4950bc0becb032b95c86442ddd").unwrap();
+        let sk = p256::ecdsa::SigningKey::from_slice(&d).unwrap();
+        let point = sk.verifying_key().to_sec1_point(false);
+        assert_eq!(
+            point.x().unwrap().as_slice(),
+            hex::decode("2371d69bfd03b3574f308f885a67f8981987f9869e0156cf56eeef076ec2c57a").unwrap()
+        );
+        assert_eq!(
+            point.y().unwrap().as_slice(),
+            hex::decode("e8dfdde44963f5bb3586d815de890928875b1c4a6481398096e60a25e9b39f53").unwrap()
+        );
+        sk
     }
 
     struct P256StatusListIssuer {

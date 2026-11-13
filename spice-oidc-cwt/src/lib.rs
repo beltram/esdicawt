@@ -667,14 +667,14 @@ mod tests {
     #[wasm_bindgen_test::wasm_bindgen_test]
     #[allow(clippy::cognitive_complexity)]
     fn can_issue_and_present_oidc_claim_token() {
-        let issuer_signing_key = ed25519_dalek::SigningKey::generate(&mut rand::thread_rng());
+        let issuer_signing_key = ed25519_dalek::SigningKey::generate(&mut rand::rng());
         let issuer = Ed25519Issuer::new(issuer_signing_key.clone());
         let cks = CoseKeySet::builder().with_signing_key(&issuer_signing_key).unwrap().build();
 
-        let holder_signing_key = ed25519_dalek::SigningKey::generate(&mut rand::thread_rng());
+        let holder_signing_key = ed25519_dalek::SigningKey::generate(&mut rand::rng());
         let alice_holder = Ed25519Holder::new(holder_signing_key);
 
-        let _bob_holder = Ed25519Holder::new(ed25519_dalek::SigningKey::generate(&mut rand::thread_rng()));
+        let _bob_holder = Ed25519Holder::new(ed25519_dalek::SigningKey::generate(&mut rand::rng()));
 
         let alice = alice();
         let alice_subject = alice.preferred_username.clone().unwrap();
@@ -793,7 +793,7 @@ mod tests {
     fn issue_oidc_claim(issuer: &Ed25519Issuer, claims: SpiceOidcClaims, holder_pk: &ed25519_dalek::VerifyingKey, subject: &str) -> SdCwtIssued<SpiceOidcClaims, sha2::Sha256> {
         issuer
             .issue_cwt(
-                &mut rand::thread_rng(),
+                &mut rand::rng(),
                 esdicawt::IssuerParams {
                     protected_claims: None,
                     unprotected_claims: None,

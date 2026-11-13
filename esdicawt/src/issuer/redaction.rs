@@ -11,7 +11,7 @@ use ciborium::Value;
 use std::{collections::HashSet, ops::DerefMut};
 
 /// Redacts the claims in this Value by recursively traversing, depth-first the ClaimSet
-pub fn redact<E, Hasher>(csprng: &mut dyn rand_core::CryptoRngCore, payload: &mut Value) -> Result<SaltedArray, SdCwtIssuerError<E>>
+pub fn redact<E, Hasher>(csprng: &mut dyn rand_core::CryptoRng, payload: &mut Value) -> Result<SaltedArray, SdCwtIssuerError<E>>
 where
     E: core::error::Error + Send + Sync,
     Hasher: digest::Digest,
@@ -25,7 +25,7 @@ where
 // wrapping "_redact" is required for fallible recursion
 fn redact_value<E, Hasher>(
     value: &mut Value,
-    csprng: &mut dyn rand_core::CryptoRngCore,
+    csprng: &mut dyn rand_core::CryptoRng,
     sd_claims: &mut SaltedArray,
     decoys: &mut HashSet<u64>,
     parent_ctx: Option<(&SdCwtClaim, &mut RedactedClaimKeys)>,
@@ -40,7 +40,7 @@ where
 #[tailcall::tailcall]
 fn _redact<E, H>(
     mut value: &mut Value,
-    csprng: &mut dyn rand_core::CryptoRngCore,
+    csprng: &mut dyn rand_core::CryptoRng,
     sd_claims: &mut SaltedArray,
     decoys: &mut HashSet<u64>,
     parent_ctx: Option<(&SdCwtClaim, &mut RedactedClaimKeys)>,
@@ -158,7 +158,7 @@ where
 
 /// When in a mapping under a To Be Redacted label, discloses `value` and adds its digest to the mapping's 'redacted_claim_keys'
 fn redact_claim<E, H>(
-    csprng: &mut dyn rand_core::CryptoRngCore,
+    csprng: &mut dyn rand_core::CryptoRng,
     sd_claims: &mut SaltedArray,
     parent_ctx: Option<(&SdCwtClaim, &mut RedactedClaimKeys)>,
     value: &Value,
@@ -183,7 +183,7 @@ where
 
 /// Creates a decoy for the To Be Decoy tag containing `decoy_index`, which must be an unsigned integer unique in the CWT
 /// see https://datatracker.ietf.org/doc/html/draft-ietf-spice-sd-cwt#name-to-be-decoy
-fn new_decoy<E>(csprng: &mut dyn rand_core::CryptoRngCore, decoy_index: &Value, decoys: &mut HashSet<u64>) -> Result<Decoy, SdCwtIssuerError<E>>
+fn new_decoy<E>(csprng: &mut dyn rand_core::CryptoRng, decoy_index: &Value, decoys: &mut HashSet<u64>) -> Result<Decoy, SdCwtIssuerError<E>>
 where
     E: core::error::Error + Send + Sync,
 {
@@ -197,12 +197,12 @@ where
     Ok(Decoy { salt: new_salt(csprng)? })
 }
 
-fn new_salt<E>(csprng: &mut dyn rand_core::CryptoRngCore) -> Result<Salt, SdCwtIssuerError<E>>
+fn new_salt<E>(csprng: &mut dyn rand_core::CryptoRng) -> Result<Salt, SdCwtIssuerError<E>>
 where
     E: core::error::Error + Send + Sync,
 {
     let mut salt = Salt::empty();
-    csprng.try_fill_bytes(&mut *salt)?;
+    csprng.fill_bytes(&mut *salt);
     Ok(salt)
 }
 
@@ -482,12 +482,12 @@ mod tests {
     }
 
     fn try_redact(mut payload: Value) -> Result<SaltedArray, SdCwtIssuerError<Error>> {
-        redact::<Error, sha2::Sha256>(&mut rand::thread_rng(), &mut payload)
+        redact::<Error, sha2::Sha256>(&mut rand::rng(), &mut payload)
     }
 
     // TODO: if got time change return to '(Value, [Salted<Value>; N])'
     fn _redact<const N: usize>(mut payload: Value) -> (Value, [Value; N]) {
-        let sd_claims = redact::<Error, sha2::Sha256>(&mut rand::thread_rng(), &mut payload).unwrap();
+        let sd_claims = redact::<Error, sha2::Sha256>(&mut rand::rng(), &mut payload).unwrap();
 
         for d in sd_claims.iter() {
             let d = d.unwrap();

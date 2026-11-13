@@ -7,16 +7,16 @@ authors.workspace = true
 
 [features]
 default = ["issuer"] # for convenience
-issuer = []
+issuer = ["dep:derive_builder", "dep:digest"]
 rand = ["dep:rand_core", "dep:rand"]
 
 [dependencies]
 serde.workspace = true
 thiserror.workspace = true
 
-signature = { workspace = true, features = ["std"] }
-digest.workspace = true
-derive_builder.workspace = true
+signature = { workspace = true, features = ["alloc"] }
+digest = { workspace = true, optional = true }
+derive_builder = { workspace = true, optional = true }
 hex = { workspace = true, default-features = false }
 
 flate2 = { workspace = true, features = ["zlib"] }
@@ -28,19 +28,21 @@ serde_bytes.workspace = true
 coset.workspace = true
 ciborium.workspace = true
 rand_core = { workspace = true, optional = true }
-rand = { workspace = true, optional = true }
+rand = { workspace = true, optional = true, default-features = false }
 
 [target.'cfg(all(target_arch = "wasm32", target_os = "unknown"))'.dependencies]
 js-sys = "0.3"
-getrandom = { workspace = true, features = ["js"] }
+
+# "rand::rng()" in the wasm tests requires the JS backend of getrandom
+[target.'cfg(all(target_arch = "wasm32", target_os = "unknown"))'.dev-dependencies]
+getrandom = { workspace = true, features = ["wasm_js"] }
 
 [dev-dependencies]
 wasm-bindgen-test.workspace = true
 status-list = { path = "./", features = ["rand", "issuer"] }
-p256 = { workspace = true, features = ["jwk"] }
+p256 = { workspace = true }
 sha2.workspace = true
 rand.workspace = true
-serde_json = "1.0"
 hex = { workspace = true, features = ["alloc"] }
 
 [lints]

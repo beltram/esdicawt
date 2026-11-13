@@ -161,15 +161,15 @@ mod tests {
     fn should_reject_never_redacted_claims() {
         use crate::spec::{CWT_CLAIM_AUDIENCE, CWT_CLAIM_CNONCE, CWT_CLAIM_CTI, CWT_CLAIM_EXPIRES_AT, CWT_CLAIM_ISSUED_AT, CWT_CLAIM_NOT_BEFORE, sd};
 
-        let issuer_signing_key = ed25519_dalek::SigningKey::generate(&mut rand::thread_rng());
+        let issuer_signing_key = ed25519_dalek::SigningKey::generate(&mut rand::rng());
         let issuer_verifying_key = CoseKeySet::builder().with(&issuer_signing_key.verifying_key()).unwrap().build();
         let issuer = Ed25519Issuer::<Value>::new(issuer_signing_key);
-        let holder_signing_key = ed25519_dalek::SigningKey::generate(&mut rand::thread_rng());
+        let holder_signing_key = ed25519_dalek::SigningKey::generate(&mut rand::rng());
         let holder = Ed25519Holder::<Value, NoClaims>::new(holder_signing_key.clone());
 
         let verify = |payload: Value| {
             let issuer_params = default_issuer_params(&holder_signing_key, Some(payload));
-            let sd_cwt = issuer.issue_cwt(&mut rand::thread_rng(), issuer_params).unwrap().to_cbor_bytes().unwrap();
+            let sd_cwt = issuer.issue_cwt(&mut rand::rng(), issuer_params).unwrap().to_cbor_bytes().unwrap();
             holder.verify_sd_cwt(&sd_cwt, Default::default(), &issuer_verifying_key)
         };
 
@@ -192,18 +192,18 @@ mod tests {
 
     #[test]
     fn should_verify_redacted_subject() {
-        let issuer_signing_key = ed25519_dalek::SigningKey::generate(&mut rand::thread_rng());
+        let issuer_signing_key = ed25519_dalek::SigningKey::generate(&mut rand::rng());
         let issuer_verifying_key = CoseKeySet::builder().with(&issuer_signing_key.verifying_key()).unwrap().build();
         let issuer = Ed25519Issuer::<Value>::new(issuer_signing_key);
 
-        let holder_signing_key = ed25519_dalek::SigningKey::generate(&mut rand::thread_rng());
+        let holder_signing_key = ed25519_dalek::SigningKey::generate(&mut rand::rng());
         let holder = Ed25519Holder::<Value, NoClaims>::new(holder_signing_key.clone());
 
         // a redacted 'sub' in a nested mapping is not the subject
         let payload = cbor!({ "nested" => { crate::spec::sd!(crate::spec::CWT_CLAIM_SUBJECT) => "sub-x" } }).unwrap();
         let mut issuer_params = default_issuer_params(&holder_signing_key, Some(payload));
         issuer_params.subject = crate::Subject::Redacted("sub-a");
-        let sd_cwt = issuer.issue_cwt(&mut rand::thread_rng(), issuer_params).unwrap().to_cbor_bytes().unwrap();
+        let sd_cwt = issuer.issue_cwt(&mut rand::rng(), issuer_params).unwrap().to_cbor_bytes().unwrap();
 
         let validation_params = |expected_subject| HolderValidationParams {
             expected_subject,
@@ -219,11 +219,11 @@ mod tests {
 
     #[test]
     fn should_fail_when_std_claims_mismatch() {
-        let issuer_signing_key = ed25519_dalek::SigningKey::generate(&mut rand::thread_rng());
+        let issuer_signing_key = ed25519_dalek::SigningKey::generate(&mut rand::rng());
         let issuer_verifying_key = CoseKeySet::builder().with(&issuer_signing_key.verifying_key()).unwrap().build();
         let issuer = Ed25519Issuer::<Value>::new(issuer_signing_key);
 
-        let holder_signing_key = ed25519_dalek::SigningKey::generate(&mut rand::thread_rng());
+        let holder_signing_key = ed25519_dalek::SigningKey::generate(&mut rand::rng());
         let holder = Ed25519Holder::<Value, NoClaims>::new(holder_signing_key.clone());
 
         let mut issuer_params = default_issuer_params(&holder_signing_key, None);
@@ -232,7 +232,7 @@ mod tests {
         issuer_params.audience = Some("aud-a");
         issuer_params.cnonce = Some(b"cnonce-a");
 
-        let sd_cwt = issuer.issue_cwt(&mut rand::thread_rng(), issuer_params.clone()).unwrap().to_cbor_bytes().unwrap();
+        let sd_cwt = issuer.issue_cwt(&mut rand::rng(), issuer_params.clone()).unwrap().to_cbor_bytes().unwrap();
 
         let mut validation_params = HolderValidationParams {
             expected_subject: Some("sub-a"),
@@ -288,7 +288,7 @@ mod tests {
         holder.verify_sd_cwt(&sd_cwt, validation_params.clone(), &issuer_verifying_key).unwrap();
 
         // === verifying key mismatch
-        let holder_bis = Ed25519Holder::<Value, NoClaims>::new(ed25519_dalek::SigningKey::generate(&mut rand::thread_rng()));
+        let holder_bis = Ed25519Holder::<Value, NoClaims>::new(ed25519_dalek::SigningKey::generate(&mut rand::rng()));
         std::assert_matches!(
             holder_bis.verify_sd_cwt(&sd_cwt, validation_params.clone(), &issuer_verifying_key),
             Err(SdCwtHolderError::ValidationError(SdCwtHolderValidationError::VerifyingKeyMismatch))
@@ -297,11 +297,11 @@ mod tests {
 
     #[test]
     fn should_fail_when_disclosures_invalid() {
-        let issuer_signing_key = ed25519_dalek::SigningKey::generate(&mut rand::thread_rng());
+        let issuer_signing_key = ed25519_dalek::SigningKey::generate(&mut rand::rng());
         let issuer_verifying_key = CoseKeySet::builder().with_signing_key(&issuer_signing_key).unwrap().build();
         let issuer = Ed25519Issuer::<Value>::new(issuer_signing_key);
 
-        let holder_signing_key = ed25519_dalek::SigningKey::generate(&mut rand::thread_rng());
+        let holder_signing_key = ed25519_dalek::SigningKey::generate(&mut rand::rng());
         let holder = Ed25519Holder::<Value, NoClaims>::new(holder_signing_key.clone());
 
         let payload = cbor!({
@@ -313,7 +313,7 @@ mod tests {
         .unwrap();
 
         let issuer_params = default_issuer_params(&holder_signing_key, Some(payload));
-        let sd_cwt = issuer.issue_cwt(&mut rand::thread_rng(), issuer_params.clone()).unwrap().to_cbor_bytes().unwrap();
+        let sd_cwt = issuer.issue_cwt(&mut rand::rng(), issuer_params.clone()).unwrap().to_cbor_bytes().unwrap();
 
         let sd_cwt_tagged = SdCwtIssued::<Value, sha2::Sha256>::from_cbor_bytes(&sd_cwt).unwrap();
 
@@ -418,16 +418,16 @@ mod tests {
 
     #[test]
     fn should_fail_when_decoy_disclosure_missing() {
-        let issuer_signing_key = ed25519_dalek::SigningKey::generate(&mut rand::thread_rng());
+        let issuer_signing_key = ed25519_dalek::SigningKey::generate(&mut rand::rng());
         let issuer_verifying_key = CoseKeySet::builder().with_signing_key(&issuer_signing_key).unwrap().build();
         let issuer = Ed25519Issuer::<Value>::new(issuer_signing_key);
 
-        let holder_signing_key = ed25519_dalek::SigningKey::generate(&mut rand::thread_rng());
+        let holder_signing_key = ed25519_dalek::SigningKey::generate(&mut rand::rng());
         let holder = Ed25519Holder::<Value, NoClaims>::new(holder_signing_key.clone());
 
         let payload = cbor!({ sd!(42) => "a", 43 => [decoy!(1)], decoy!(2) => null }).unwrap();
         let issuer_params = default_issuer_params(&holder_signing_key, Some(payload));
-        let sd_cwt = issuer.issue_cwt(&mut rand::thread_rng(), issuer_params).unwrap().to_cbor_bytes().unwrap();
+        let sd_cwt = issuer.issue_cwt(&mut rand::rng(), issuer_params).unwrap().to_cbor_bytes().unwrap();
         holder.verify_sd_cwt(&sd_cwt, Default::default(), &issuer_verifying_key).unwrap();
 
         let sd_cwt_tagged = SdCwtIssued::<Value, sha2::Sha256>::from_cbor_bytes(&sd_cwt).unwrap();
@@ -453,17 +453,17 @@ mod tests {
 
     #[test]
     fn duplicate_disclosure() {
-        let issuer_signing_key = ed25519_dalek::SigningKey::generate(&mut rand::thread_rng());
+        let issuer_signing_key = ed25519_dalek::SigningKey::generate(&mut rand::rng());
         let issuer_verifying_key = CoseKeySet::builder().with_signing_key(&issuer_signing_key).unwrap().build();
         let issuer = Ed25519Issuer::<Value>::new(issuer_signing_key);
 
-        let holder_signing_key = ed25519_dalek::SigningKey::generate(&mut rand::thread_rng());
+        let holder_signing_key = ed25519_dalek::SigningKey::generate(&mut rand::rng());
         let holder = Ed25519Holder::<Value, NoClaims>::new(holder_signing_key.clone());
 
         let payload = cbor!({sd!(42) => "a"}).unwrap();
 
         let issuer_params = default_issuer_params(&holder_signing_key, Some(payload));
-        let sd_cwt = issuer.issue_cwt(&mut rand::thread_rng(), issuer_params).unwrap().to_cbor_bytes().unwrap();
+        let sd_cwt = issuer.issue_cwt(&mut rand::rng(), issuer_params).unwrap().to_cbor_bytes().unwrap();
 
         let mut sd_cwt_tagged = SdCwtIssued::<Value, sha2::Sha256>::from_cbor_bytes(&sd_cwt).unwrap();
 
@@ -481,16 +481,16 @@ mod tests {
 
     #[test]
     fn should_fail_when_invalid_signature() {
-        let issuer_signing_key = ed25519_dalek::SigningKey::generate(&mut rand::thread_rng());
+        let issuer_signing_key = ed25519_dalek::SigningKey::generate(&mut rand::rng());
         let issuer = Ed25519Issuer::<Value>::new(issuer_signing_key);
 
-        let holder_signing_key = ed25519_dalek::SigningKey::generate(&mut rand::thread_rng());
+        let holder_signing_key = ed25519_dalek::SigningKey::generate(&mut rand::rng());
         let holder = Ed25519Holder::<Value, NoClaims>::new(holder_signing_key.clone());
 
         let issuer_params = default_issuer_params(&holder_signing_key, None);
-        let sd_cwt = issuer.issue_cwt(&mut rand::thread_rng(), issuer_params.clone()).unwrap().to_cbor_bytes().unwrap();
+        let sd_cwt = issuer.issue_cwt(&mut rand::rng(), issuer_params.clone()).unwrap().to_cbor_bytes().unwrap();
 
-        let issuer_signing_key_bis = ed25519_dalek::SigningKey::generate(&mut rand::thread_rng());
+        let issuer_signing_key_bis = ed25519_dalek::SigningKey::generate(&mut rand::rng());
 
         std::assert_matches!(
             holder.verify_sd_cwt(
