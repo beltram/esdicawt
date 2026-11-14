@@ -5,6 +5,9 @@ version.workspace = true
 description = "OIDC standard claims for CWTs"
 authors.workspace = true
 
+[features]
+aead = ["esdicawt/aead"]
+
 [dependencies]
 esdicawt.workspace = true
 esdicawt-spec.workspace = true
@@ -20,6 +23,7 @@ esdicawt = { workspace = true, features = ["test-utils", "test-vectors", "ed2551
 rand.workspace = true
 ed25519-dalek = { workspace = true, features = ["rand_core"] }
 sha2.workspace = true
+aes-gcm.workspace = true
 wasm-bindgen-test.workspace = true
 
 [lints]

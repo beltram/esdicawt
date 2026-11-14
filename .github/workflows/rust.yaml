@@ -57,6 +57,8 @@ jobs:
             run: cargo clippy --tests -- -D warnings
           - name: clippy-backward
             run: cargo clippy --tests --features backward -- -D warnings
+          - name: clippy-aead
+            run: cargo clippy --tests --features aead -- -D warnings
           - name: clippy-test-vectors
             run: cargo clippy -p esdicawt-test-vector --tests -- -D warnings
     steps:
@@ -80,6 +82,10 @@ jobs:
             args: ""
           - name: backward # remove at some point when all consumers migrated
             args: --features backward
+          - name: aead
+            args: --features aead
+          - name: aead-backward
+            args: --features aead,backward
           - name: test-vectors
             args: -p esdicawt-test-vector
           - name: doc
