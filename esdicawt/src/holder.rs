@@ -211,13 +211,7 @@ pub trait Holder {
             let sd_claims = params.presentation.try_select_disclosures::<Self::Error>(&payload, sd_claims, &hasher)?;
 
             // then replace them in the issued sd-cwt. An empty 'sd_claims' is invalid
-            #[cfg(not(feature = "backward"))]
-            let sd_claims = (!sd_claims.is_empty()).then_some(sd_claims);
-            // but previous versions' Verifiers only remove the undisclosed claims when 'sd_claims' is present, hence keep an empty one for them
-            #[cfg(feature = "backward")]
-            let sd_claims = Some(sd_claims);
-
-            sd_cwt.0.sd_unprotected.sd_claims = sd_claims;
+            sd_cwt.0.sd_unprotected.sd_claims = (!sd_claims.is_empty()).then_some(sd_claims);
         }
 
         // --- protected ---
@@ -719,7 +713,6 @@ mod snapshot {
         Issuer, Presentation, TimeVerification,
         holder::claims::{CustomTokenClaims, CustomTokenClaimsAllRedacted},
         issuer::snapshot::issuer_params,
-        snapshots::SNAPSHOT_SUFFIX,
         test_utils::{Ed25519Holder, Ed25519Issuer},
         time::TimeArg,
     };
@@ -750,11 +743,11 @@ mod snapshot {
         let sd_cwt_verified = holder.verify_sd_cwt(&sd_cwt, Default::default(), &cks).unwrap();
         let params = holder_params(Presentation::Full);
         let sd_kbt = holder.new_presentation_raw(sd_cwt_verified.clone(), params).unwrap();
-        assert_snapshot!(format!("sd-kbt-full-ed25519{SNAPSHOT_SUFFIX}.txt"), hex::encode(&sd_kbt));
+        assert_snapshot!("sd-kbt-full-ed25519.txt", hex::encode(&sd_kbt));
 
         let params = holder_params(Presentation::None);
         let sd_kbt = holder.new_presentation_raw(sd_cwt_verified, params).unwrap();
-        assert_snapshot!(format!("sd-kbt-none-ed25519{SNAPSHOT_SUFFIX}.txt"), hex::encode(&sd_kbt));
+        assert_snapshot!("sd-kbt-none-ed25519.txt", hex::encode(&sd_kbt));
     }
 
     pub(super) fn holder_params(presentation: Presentation) -> HolderParams<'static> {

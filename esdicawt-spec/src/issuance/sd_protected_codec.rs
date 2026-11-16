@@ -20,9 +20,6 @@ impl<Extra: CustomClaims> serde::Serialize for SdProtected<Extra> {
             .map_err(|e| S::Error::custom(format!("{e:?} should have been a mapping")))?
             .unwrap_or_default();
 
-        #[cfg(feature = "backward")]
-        let sd_alg_size = 1;
-        #[cfg(not(feature = "backward"))]
         let sd_alg_size = self.sd_alg.map(|_| 1).unwrap_or_default();
 
         let map_size = 2 + sd_alg_size + extras.len();
@@ -33,11 +30,7 @@ impl<Extra: CustomClaims> serde::Serialize for SdProtected<Extra> {
         let alg = (*self.alg).clone().to_cbor_value().map_err(|e| S::Error::custom(format!("Cannot set Alg: {e}")))?;
         map.serialize_entry(&CWT_CLAIM_ALG, &alg)?;
 
-        #[cfg(feature = "backward")]
-        map.serialize_entry(&COSE_HEADER_SD_ALG, &self.sd_alg())?;
-
         // absent means SHA-256, it is not added to keep the encoding signed by the Issuer
-        #[cfg(not(feature = "backward"))]
         if let Some(sd_alg) = &self.sd_alg {
             map.serialize_entry(&COSE_HEADER_SD_ALG, sd_alg)?;
         }
@@ -118,7 +111,6 @@ mod tests {
     use ciborium::cbor;
 
     #[test]
-    #[cfg(not(feature = "backward"))]
     fn should_default_sd_alg_to_sha256_when_absent() {
         let bytes = cbor!({ CWT_MEDIA_TYPE => MEDIA_TYPE_SD_CWT, CWT_CLAIM_ALG => -8 }).unwrap().to_cbor_bytes().unwrap();
         let protected = SdProtected::<NoClaims>::from_cbor_bytes(&bytes).unwrap();

@@ -511,10 +511,7 @@ mod tests {
     }
 
     fn digest(salted: &impl ToRedacted) -> Vec<u8> {
-        #[cfg(not(feature = "backward"))]
-        return salted.to_redacted::<sha2::Sha256>().unwrap().to_vec();
-        #[cfg(feature = "backward")]
-        return salted.old_to_redacted::<sha2::Sha256>().unwrap().to_vec();
+        salted.to_redacted::<sha2::Sha256>().unwrap().to_vec()
     }
 
     fn get_redacted_claim_keys<const N: usize>(payload: &Value) -> [Value; N] {
