@@ -24,8 +24,6 @@ impl<Extra: CustomClaims> serde::Serialize for SdUnprotected<Extra> {
         let mut map = serializer.serialize_map(Some(map_size))?;
 
         if let Some(sd_claims) = &self.sd_claims {
-            // previous versions' Verifiers only remove the undisclosed claims when 'sd_claims' is present, hence an empty one is produced for them
-            #[cfg(not(feature = "backward"))]
             if sd_claims.is_empty() {
                 return Err(S::Error::custom(crate::EsdicawtSpecError::EmptySdClaims));
             }
@@ -118,10 +116,7 @@ mod tests {
         // previous versions encoded an empty 'sd_claims': it is ignored
         #[cfg(feature = "backward")]
         assert_eq!(SdUnprotected::<NoClaims>::from_cbor_bytes(&empty).unwrap(), unprotected(None));
-        #[cfg(not(feature = "backward"))]
+        // an empty 'sd_claims' is never produced, even with the 'backward' feature
         assert!(unprotected(Some(SaltedArray::default())).to_cbor_bytes().is_err());
-        // previous versions' Verifiers expect an empty 'sd_claims' when nothing is disclosed
-        #[cfg(feature = "backward")]
-        assert_eq!(unprotected(Some(SaltedArray::default())).to_cbor_bytes().unwrap(), empty);
     }
 }
