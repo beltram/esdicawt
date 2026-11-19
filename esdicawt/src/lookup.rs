@@ -5,7 +5,7 @@ mod model;
 
 use crate::{
     spec::{CwtAny, EsdicawtSpecError, EsdicawtSpecResult, REDACTED_CLAIM_ELEMENT_TAG, blinded_claims::SaltedEntry, redacted_claims::RedactedClaimKeys},
-    verifier::walk::walk_payload,
+    verifier::walk::walk_nested,
 };
 use ciborium::Value;
 use esdicawt_spec::blinded_claims::SaltedArrayHashing;
@@ -88,7 +88,8 @@ fn query_inner(salted_array: &mut SaltedArrayHashing, payload: &Value, mut query
     };
     match &query[..] {
         [] => {
-            walk_payload::<EsdicawtSpecError>(hasher, &mut value, salted_array).map_err(|e| match e {
+            // the looked up value is never the payload root since the query is not empty
+            walk_nested::<EsdicawtSpecError>(hasher, &mut value, salted_array).map_err(|e| match e {
                 crate::SdCwtVerifierError::SpecError(e) => e,
                 crate::SdCwtVerifierError::CborValueError(e) => e.into(),
                 _ => EsdicawtSpecError::LookupError("Cannot apply the disclosures of the looked up claim"),
@@ -159,6 +160,45 @@ mod tests {
 
         test(cbor!({"a" => [{"b" => "c"}, {"b" => "d", "e" => "f"}], "b" => 1234}), &query, &expected, false, false);
         test(cbor!({"a" => [{"b" => "c"}, {sd!("b") => "d", "e" => "f"}], "b" => 1234}), &query, &expected, false, true);
+    }
+
+    #[test]
+    fn can_query_nested_map_with_redacted_registered_claim() {
+        let query = vec!["a".into()];
+        let expected = Some(cbor!({"c" => "d", 1 => "b"}).unwrap());
+
+        test(cbor!({"a" => {sd!(1) => "b", "c" => "d"}}), &query, &expected, false, true);
+        test(cbor!({sd!("a") => {sd!(1) => "b", "c" => "d"}}), &query, &expected, false, true);
+    }
+
+    /// The looked up entry is redacted, within a map within a map, and it is or it contains a redacted registered claim
+    #[test]
+    fn can_query_redacted_entry_in_nested_nested_map() {
+        // the looked up redacted entry is a registered claim
+        let query = vec!["a".into(), "b".into(), 1i64.into()];
+        let expected = Some("c".into());
+
+        test(cbor!({"a" => {"b" => {sd!(1) => "c", "d" => "e"}}}), &query, &expected, true, true);
+        test(cbor!({sd!("a") => {sd!("b") => {sd!(1) => "c", "d" => "e"}}}), &query, &expected, true, true);
+
+        // the looked up redacted entry is a map with a redacted registered claim
+        let query = vec!["a".into(), "b".into(), "c".into()];
+        let expected = Some(cbor!({"f" => "g", 1 => "e"}).unwrap());
+
+        test(
+            cbor!({"a" => {"b" => {sd!("c") => {sd!(1) => "e", "f" => "g"}, "d" => "h"}}}),
+            &query,
+            &expected,
+            false,
+            true,
+        );
+        test(
+            cbor!({sd!("a") => {sd!("b") => {sd!("c") => {sd!(1) => "e", "f" => "g"}, "d" => "h"}}}),
+            &query,
+            &expected,
+            false,
+            true,
+        );
     }
 
     /// * simple_matching: query is for a simple type (int, tstr etc...) and not an array or map

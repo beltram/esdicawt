@@ -94,8 +94,9 @@ where
     Ok(())
 }
 
+/// Puts back the disclosed claims in a value nested in the payload, hence not subject to the root-only restrictions
 // wrapping "_walk" is required for fallible recursion
-fn walk_nested<E>(hasher: Rc<dyn digest::DynDigest>, payload: &mut Value, disclosures: &mut SaltedArrayHashing) -> SdCwtVerifierResult<(), E>
+pub fn walk_nested<E>(hasher: Rc<dyn digest::DynDigest>, payload: &mut Value, disclosures: &mut SaltedArrayHashing) -> SdCwtVerifierResult<(), E>
 where
     E: core::error::Error + Send + Sync,
 {
