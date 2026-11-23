@@ -28,7 +28,7 @@ serde_bytes.workspace = true
 coset.workspace = true
 ciborium.workspace = true
 rand_core = { workspace = true, optional = true }
-rand = { workspace = true, optional = true, default-features = false }
+rand = { workspace = true, optional = true }
 
 [target.'cfg(all(target_arch = "wasm32", target_os = "unknown"))'.dependencies]
 js-sys = "0.3"
