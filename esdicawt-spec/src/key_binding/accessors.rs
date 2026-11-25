@@ -37,12 +37,27 @@ impl<
         Ok(sd_cwt?)
     }
 
-    /// Whether this SD-KBT comes from a draft-08 implementation, which computed the Redacted Claim Hashes over the raw
-    /// disclosure instead of wrapping it in a bstr. Since the whole SD-CWT uses the same one, only the first disclosure
-    /// is checked. `None` when there is no disclosure to tell.
+    /// Whether this SD-KBT comes from a draft-08 implementation, which either:
+    /// * wrapped the 'kcwt' in a bstr instead of inlining the SD-CWT
+    /// * or computed the Redacted Claim Hashes over the raw disclosure instead of wrapping it in a bstr. Since the whole
+    ///   SD-CWT uses the same one, only the first disclosure is checked.
+    ///
+    /// `None` when the 'kcwt' is inlined and there is no disclosure to tell.
     #[cfg(feature = "backward")]
     pub fn is_draft_08(&self) -> Option<bool> {
         use crate::{blinded_claims::SaltedEntry, redacted_claims::ToRedacted as _};
+
+        let kcwt_is_bstr = self
+            .protected
+            .upcast_value()
+            .ok()?
+            .into_map()
+            .ok()?
+            .into_iter()
+            .any(|(k, v)| matches!(k, Value::Integer(i) if i == COSE_HEADER_KCWT.into()) && v.is_bytes());
+        if kcwt_is_bstr {
+            return Some(true);
+        }
 
         let disclosures = self.disclosures().ok()??;
         let first = disclosures.iter().next().transpose().ok()??;

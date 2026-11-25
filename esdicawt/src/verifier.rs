@@ -1879,8 +1879,9 @@ mod backward {
             let sd_kbt = esdicawt_spec::key_binding::KbtCwt::<Value, sha2::Sha256>::from_cbor_bytes(&snapshot.sd_kbt()).unwrap();
             let expected = match snapshot {
                 SdKbtSnapshots::Full => Some(false),
-                SdKbtSnapshots::FullDraft08 => Some(true),
-                SdKbtSnapshots::None | SdKbtSnapshots::NoneDraft08 => None,
+                // the 'kcwt' wrapped in a bstr tells, even without any disclosure
+                SdKbtSnapshots::FullDraft08 | SdKbtSnapshots::NoneDraft08 => Some(true),
+                SdKbtSnapshots::None => None,
             };
             assert_eq!(sd_kbt.is_draft_08(), expected, "{snapshot:?}");
         }
